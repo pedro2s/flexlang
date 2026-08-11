@@ -1,212 +1,116 @@
 # FlexLang: A Nova Geração de Linguagem de Programação
 
-Criar uma nova linguagem de programação é um projeto ambicioso e emocionante! Comecei investigando o que cada uma das principais linguagens de programação oferece de melhor. Considerei aspectos como desempenho, simplicidade, segurança, comunidade, bibliotecas e frameworks, entre outros.
+Criar uma nova linguagem de programação é um projeto ambicioso e emocionante! A concepção da FlexLang nasce da análise minuciosa do que as principais linguagens de programação oferecem de melhor. O objetivo é absorver e fundir conceitos de desempenho, simplicidade, segurança e arquitetura em uma sintaxe expressiva e moderna.
 
-Aqui estão algumas das principais linguagens de programação e suas características notáveis:
+Aqui estão as inspirações que moldaram a visão da FlexLang:
 
-### 1. Python
-- Simplicidade e Leitura: Python é conhecido por sua sintaxe clara e fácil de ler.
-- Comunidade e Bibliotecas: Possui uma vasta gama de bibliotecas e uma comunidade ativa.
-- Aplicações: Muito usado em ciência de dados, aprendizado de máquina, desenvolvimento web e automação.
+### 1. Python & TypeScript
+- **Simplicidade e Expressividade:** A sintaxe clara e a experiência de desenvolvedor do Python aliada ao poder do ecossistema e tipagem estática do TypeScript.
+- **Ecossistema:** O ferramental moderno do Node.js, com execução via motores otimizados.
 
-### 2. JavaScript
-- Onipresença: JavaScript é a linguagem principal para desenvolvimento web, funcionando tanto no lado do cliente quanto no servidor (com Node.js).
-- Ecosistema de Frameworks: Frameworks como React, Angular e Vue.js são extremamente populares.
-- Interatividade: Excelente para criar interfaces de usuário dinâmicas e responsivas.
+### 2. Go
+- **Concorrência:** Suporte robusto a concorrência através de _goroutines_ e _channels_.
+- **Desempenho Eficiente:** Compilação rápida e execução paralela otimizada, perfeita para desenvolvimento de serviços e sistemas distribuídos.
 
-### 3. Java
-- Portabilidade: O mantra "escreva uma vez, execute em qualquer lugar" ainda é forte com Java, graças à JVM.
-- Robustez e Segurança: Java é conhecido por sua robustez e por seu gerenciamento de memória seguro.
-- Aplicações Corporativas: Muito usado em aplicações empresariais e Android.
+### 3. Rust & C++
+- **Desempenho e Segurança:** Controle fino sobre memória. A FlexLang busca trazer segurança de memória sem garbage collection tradicional, ou de forma altamente otimizada, inspirada no borrow checker do Rust.
 
-### 4. C++
-- Desempenho: Conhecido por ser uma das linguagens mais rápidas, com controle fino sobre recursos de hardware.
-- Controle e Flexibilidade: Oferece controle direto sobre memória e recursos do sistema.
-- Aplicações: Usado em sistemas operacionais, jogos, e aplicativos que exigem alto desempenho.
+### 4. Java & Kotlin
+- **Robustez Corporativa e Arquitetura:** Tipagem forte, frameworks baseados em reflexão e Injeção de Dependências (IoC), e o foco em design orientado a domínio (DDD).
 
-### 5. Go
-- Concorrência: Go é conhecido por seu suporte robusto a concorrência e goroutines.
-- Simplicidade: Sintaxe simples e clara, combinada com desempenho eficiente.
-- Desenvolvimento de Serviços: Muito utilizado em back-end e sistemas distribuídos.
+---
 
-### 6. Rust
-- Segurança de Memória: Rust oferece segurança de memória sem garbage collection, prevenindo muitos tipos de bugs.
-- Desempenho: Alta performance comparável ao C e C++.
-- Sistemas de Baixo Nível: Usado em desenvolvimento de sistemas, drivers e outras aplicações de baixo nível.
-
-### 7. Swift
-- Desempenho e Segurança: Combina desempenho com segurança de tipos.
-- Desenvolvimento iOS: Principal linguagem para desenvolvimento de aplicativos iOS e macOS.
-- Sintaxe Moderna: Sintaxe concisa e expressiva.
-
-### 8. Kotlin
-- Interoperabilidade com Java: Totalmente interoperável com Java, facilitando a migração e a coexistência de código.
-- Desenvolvimento Android: É a linguagem preferida para desenvolvimento de aplicativos Android.
-- Simplicidade e Segurança: Sintaxe concisa e recursos modernos que aumentam a segurança do código.
-
-## Proposta para uma Nova Linguagem
-Com base nessas características, aqui está uma proposta inicial para uma nova linguagem de programação:
+## A Proposta da FlexLang
 
 **Nome: FlexLang**
 
-**Objetivos:**
-- Sintaxe Simples e Legível: Inspirada no Python, para facilitar o aprendizado e a manutenção.
-- Alto Desempenho: Desempenho próximo ao de C++ e Rust.
-- Segurança de Memória: Segurança de memória sem necessidade de garbage collection, similar ao Rust.
-- Concorrência Efetiva: Suporte robusto a concorrência, inspirado no Go.
-- Interoperabilidade: Compatibilidade com bibliotecas Java e Python.
-- Ecosistema Moderno: Suporte a desenvolvimento web e mobile, com bibliotecas e frameworks modernos.
+**Objetivos Fundamentais:**
+- **Sintaxe Simples e Legível:** Curva de aprendizado rápida, com tipagem estática e inferência inteligente.
+- **Alta Escalabilidade (I/O e Concorrência):** Sistema nativo assíncrono para lidar com concorrência massiva de forma leve.
+- **Engenharia de Software Nativa:** Fornecer suporte em nível de linguagem (Decorators, Reflection) para a construção de arquiteturas limpas (Arquitetura Hexagonal/Ports and Adapters).
+- **Desenvolvimento Web e de APIs:** Foco direcionado na construção de APIs robustas com Injeção de Dependências nativa, isolamento de domínio e conectividade impecável com bancos relacionais (PostgreSQL).
 
-**Recursos:**
+### Exemplo de Sintaxe (Visão)
 
-- Tipagem Estática e Inferência de Tipos: Para combinar segurança e conveniência.
-- Suporte a Concorrência: Utilizando goroutines ou similar.
-- Sistema de Pacotes e Bibliotecas: Robusto e fácil de usar, com uma comunidade ativa.
-- Desenvolvimento Cross-Platform: Capacidade de compilar para diferentes plataformas com facilidade.
-
-Vou realizar uma pesquisa mais detalhada e desenvolver um documento técnico sobre as melhores práticas de cada uma dessas linguagens, que usarei como referência para projetar a FlexLang. **Colaborações são bem-vindas!** Se alguém tiver alguma característica específica ou funcionalidade que gostaria de incluir, por favor, me avise!
-
-Para desenvolver uma nova linguagem de programação, é preciso seguir várias etapas, desde a definição dos conceitos básicos até a implementação do compilador ou interpretador. Vou começar pelos conceitos fundamentais e progredir para a implementação.
-
-### Passo 1: Definir a Sintaxe e Semântica
-A sintaxe define como o código da linguagem é escrito, enquanto a semântica define o que o código significa.
-
-**1.1. Estrutura Básica**
-
-Vou criar uma sintaxe simples e legível, inspirada no Python, com tipagem estática como o Rust, e suporte a concorrência como o Go.
-
-**Exemplo de Sintaxe**
 ```flexlang
-// Comentário de linha única
-/*
-   Comentário de múltiplas linhas
-*/
+// Tipagem forte com inferência
+let max_connections = 100;
+let host: String = "localhost";
 
-// Declaração de variáveis
-let x: Int = 10;
-let y = 20; // Inferência de tipo
-
-// Função
-func add(a: Int, b: Int) -> Int {
-    return a + b;
+// Structs e encapsulamento de domínio
+struct User {
+    id: Int,
+    name: String,
 }
 
-// Controle de fluxo
-if x > y {
-    print("x é maior que y");
-} else {
-    print("x é menor ou igual a y");
+// Decorators nativos para Injeção de Dependência e Web Roteamento
+@Injectable()
+@Controller("/users")
+struct UserController {
+    // Injeção de repositórios diretamente via construtor/propriedade
+    userService: UserService;
+
+    @Get("/{id}")
+    func getUser(id: Int) -> User {
+        return self.userService.findById(id);
+    }
 }
 
-// Loop
-for i in 0..10 {
-    print(i);
-}
-
-// Concorrência
+// Concorrência nativa (goroutines)
 goroutine {
-    print("Concorrência em ação!");
+    print("Processando em background...");
 }
-
-// Estruturas de dados
-struct Point {
-    x: Int,
-    y: Int,
-}
-
-let p = Point { x: 10, y: 20 };
-print(p.x);
 ```
 
-### Passo 2: Definir o Léxico e a Gramática
-**2.1. Tokens**
+---
 
-Os tokens são as menores unidades de uma linguagem de programação, como palavras-chave, operadores e identificadores.
+## Roadmap de Engenharia
 
-**Palavras-chave**
-```
-let, func, if, else, for, in, return, struct, goroutine
-```
+Para chegarmos ao nível de construir APIs robustas com Injeção de Dependências, isolamento de domínio e a ergonomia de ferramentas avançadas do ecossistema Node, precisamos de um roteiro rigoroso. A construção de uma linguagem exige que cada camada seja uma fundação sólida para a próxima — não podemos construir o contêiner de injeção de dependências sem antes ter um sistema de tipos e uma árvore de sintaxe (AST) madura.
 
-**2.2. Gramática**
+Para o desenvolvimento inicial, o core da linguagem (Lexer, Parser e Interpretador/TypeChecker) está sendo construído em **TypeScript**.
 
-A gramática define as regras de como os tokens podem ser combinados para formar sentenças válidas na linguagem.
+Aqui está o roadmap de engenharia, ordenado do núcleo da linguagem até o ecossistema de alto nível:
 
-**Exemplo de Gramática Simplificada (usando Notação BNF)**
-```ebnf
-<program> ::= <statement>*
-<statement> ::= <variable-declaration> | <function-declaration> | <expression>
-<variable-declaration> ::= "let" <identifier> [":" <type>] "=" <expression> ";"
-<function-declaration> ::= "func" <identifier> "(" <parameters> ")" "->" <type> "{" <statement>* "}"
-<parameters> ::= (<identifier> ":" <type> ("," <identifier> ":" <type>)*)?
-<expression> ::= <literal> | <identifier> | <binary-operation> | <function-call>
-<binary-operation> ::= <expression> <operator> <expression>
-<function-call> ::= <identifier> "(" <arguments> ")"
-<arguments> ::= <expression> ("," <expression>)*
-<type> ::= "Int" | "Float" | "String" | "Bool" | <identifier>
-<identifier> ::= [a-zA-Z_][a-zA-Z0-9_]*
-<literal> ::= <integer> | <float> | <string> | <boolean>
-<integer> ::= [0-9]+
-<float> ::= [0-9]+"."[0-9]+
-<string> ::= "\"" .* "\""
-<boolean> ::= "true" | "false"
-<operator> ::= "+" | "-" | "*" | "/" | "==" | "!=" | "<" | ">"
-```
+### 1. Fundação Sintática e Execução Base
+**Foco atual:** Expandir o MVP.
+O objetivo aqui é fazer a linguagem entender lógica de programação básica e avançada, estruturando corretamente a AST.
+- **Controle de Fluxo:** Implementar blocos condicionais (`if`/`else`) e laços de repetição (`for`, `while`).
+- **Funções e Escopo:** Suporte a declaração de funções (`func`), passagem de parâmetros, retorno de valores e closures (isolamento de escopo na memória).
+- **Estruturas de Dados Básicas:** Arrays e Strings completas com métodos embutidos.
 
-### Passo 3: Implementar um Compilador ou Interpretador
-Vou optar por implementar um interpretador inicialmente, que pode ser escrito em uma linguagem de programação como Python para simplificar o desenvolvimento.
+### 2. Sistema de Tipos e Estruturas de Domínio
+Antes de avançarmos para regras de negócio, precisamos garantir a segurança estática e a capacidade de modelar entidades.
+- **Type Checker:** Um analisador semântico que roda antes da execução para validar se os tipos declarados batem com os valores atribuídos.
+- **Structs e Métodos:** Capacidade de criar tipos complexos (ex: `struct User`) e atrelar funções a eles, permitindo o encapsulamento de lógica.
+- **Módulos (Imports/Exports):** O sistema de resolução de dependências de arquivos para dividir o código em módulos estruturados.
 
-**3.1. Léxico (Lexer)**
+### 3. Motor Assíncrono e I/O
+Para competir em escalabilidade, a linguagem precisa se comunicar com o mundo externo sem bloquear a thread principal.
+- **Goroutines e Channels:** Implementar o scheduler nativo para concorrência e troca de mensagens entre processos leves.
+- **File System (FS):** Biblioteca padrão nativa para leitura e escrita de arquivos.
+- **Rede (TCP/HTTP):** Implementação de sockets TCP em baixo nível e o módulo `http` padrão para receber requisições e enviar respostas.
 
-O léxico é responsável por dividir o código-fonte em tokens.
+### 4. Metaprogramação e Inversão de Controle
+A base para frameworks declarativos. É aqui que a linguagem ganha a capacidade de suportar arquiteturas corporativas de forma elegante.
+- **Decorators:** Suporte nativo na gramática para anotações (ex: `@Injectable()`, `@Controller()`).
+- **Reflection API:** Capacidade do código ler seus próprios metadados em tempo de execução.
+- **IoC Container Nativo:** Um motor interno de Injeção de Dependências para instanciar repositórios e serviços de forma autônoma, garantindo o desacoplamento das camadas.
 
-**3.2. Analisador Sintático (Parser)**
+### 5. Persistência e Isolamento de Dados
+**Foco em Bancos Relacionais.** Uma API de alto nível precisa de comunicação impecável com o banco de dados.
+- **Drivers Nativos:** Conexão TCP direta com bancos robustos, começando pelo PostgreSQL.
+- **ORM e Query Builder Base:** Ferramental nativo usando as structs e decorators para mapear tabelas.
+- **Isolamento Nativo:** Preparar as APIs de banco para suportar padrões avançados de arquitetura direto na linguagem, como suporte facilitado a Row-Level Security (RLS) e estratégias de Multi-tenancy na camada de persistência.
 
-O analisador sintático é responsável por transformar tokens em uma árvore de sintaxe abstrata (AST - Abstract Syntax Tree).
+### 6. O Framework Oficial e Arquitetura
+O topo da pirâmide. Utilizando tudo o que foi construído, nasce o framework web padrão da linguagem.
+- **Roteamento e Middlewares:** Sistema de rotas baseado nos decorators e interceptadores de requisição.
+- **Validação Estática:** Uso do Type Checker da linguagem para validar payloads de entrada automaticamente.
+- **Design de Arquitetura:** Estruturar as CLI tools do framework para encorajar a separação em camadas desde a criação do projeto, favorecendo modelos como a Arquitetura Hexagonal (separando Ports e Adapters da lógica de domínio).
 
-**3.3. Interpretador**
+---
 
-O interpretador percorre a AST e executa o código.
+## Contribua!
 
-**3.4. Concorrência**
-
-Implementar suporte a goroutines ou similar para concorrência.
-
-### Iniciando o Lexer e o Parser em Python
-Vou criar um exemplo básico de um lexer e parser para começar.
-
-Isso é apenas o começo. Com base nisso, posso expandir o lexer e o parser para suportar toda a sintaxe e semântica da nossa nova linguagem.
-
-### Próximos Passos
-1. **Expandir o Lexer:** Suportar todas as construções da linguagem.
-2. **Implementar o Parser:** Construir a AST.
-3. **Desenvolver o Interpretador:** Executar a AST.
-4. **Adicionar Concorrência:** Implementar suporte a goroutines.
-5. **Desenvolver um Sistema de Pacotes:** Facilitar a gestão de bibliotecas e dependências.
-6. **Criar Documentação:** Detalhar a sintaxe, semântica e uso da linguagem.
-
-Estou pronto para prosseguir com o desenvolvimento do lexer, parser e interpretador para linguagem **FlexLang**!
-
-## Passo 1: Expansão do Lexer
-Vou expandir o lexer para suportar todas as construções básicas da nossa linguagem. O lexer irá converter o código-fonte em tokens que o parser pode usar.
-
-### 1.1. Definição Completa dos Tokens
-Vou definir tokens para identificadores, palavras-chave, operadores, delimitadores e literais.
-
-## Passo 2: Implementar o Parser
-O parser irá converter os tokens em uma Árvore de Sintaxe Abstrata (AST).
-
-### 2.1. Estrutura da AST
-Vou definir algumas classes básicas para representar a AST.
-
-### 2.2. Parser
-O parser irá construir a AST a partir dos tokens.
-
-## Passo 3: Implementar o Interpretador
-O interpretador irá percorrer a AST e executar o código.
-
-### 3.1. Implementação Básica do Interpretador
-Adicionando suporte para controle de fluxo (if, for), funções e estruturas de dados no interpretador.
-
-### 3.2. Controle de Fluxo
-Adicionar suporte para `if` e `for`.
+A **FlexLang** está no começo de uma jornada extraordinária. Pesquisas detalhadas, RFCs de sintaxe e implementações no AST são sempre bem-vindas. Se você tiver alguma ideia ou funcionalidade arquitetural inovadora, sinta-se à vontade para abrir uma issue!
