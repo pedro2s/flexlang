@@ -34,6 +34,13 @@ class ReturnException {
   constructor(public value: any) {}
 }
 
+class FlexFunction {
+  constructor(
+    public declaration: FunctionDeclaration,
+    public closure: Environment,
+  ) {}
+}
+
 export class Interpreter {
   // Ambiente para armazenar variáveis na memória
   private globalEnv = new Environment();
@@ -51,8 +58,9 @@ export class Interpreter {
         break;
 
       case "ImplDeclaration":
-        // Guardamos a lista de métodos atrelada ao nome da Struct na memória global
-        env.define(`impl_${stmt.structName}`, stmt.methods);
+        // Guardamos a lista de métodos como FlexFunctions atrelada ao nome da Struct na memória global
+        const flexMethods = stmt.methods.map(m => new FlexFunction(m, env));
+        env.define(`impl_${stmt.structName}`, flexMethods);
         break;
 
       case "StructDeclaration":
@@ -60,8 +68,9 @@ export class Interpreter {
         env.define(stmt.name, stmt);
         break;
       case "FunctionDeclaration":
-        // Guardamos a declaração inteira na memória com o nome da função
-        env.define(stmt.name, stmt);
+        // Guardamos a declaração envolta em uma closure (FlexFunction)
+        const flexFunc = new FlexFunction(stmt, env);
+        env.define(stmt.name, flexFunc);
         break;
       case "ReturnStmt":
         // Avalia o valor e lança a exceção controlada para interromper o fluxo
@@ -175,30 +184,32 @@ export class Interpreter {
 
           const structName = objInstance.get("__structName");
 
-          // Buscamos os métodos dessa struct no ambiente
-          const methods: FunctionDeclaration[] = env.get(`impl_${structName}`);
-          const methodDecl = methods.find((m) => m.name === methodName);
+          // 2. Buscamos a definição de método correspondente
+          const methods = this.globalEnv.get(`impl_${structName}`);
+          const methodFunc = methods.find(
+            (m: any) => m.declaration.name === methodName,
+          );
 
-          if (!methodDecl) {
+          if (!methodFunc) {
             throw new Error(
               `TypeError: Method '${methodName}' not found on struct '${structName}'`,
             );
           }
 
-          // 2. Preparamos os argumentos
+          // 3. Preparamos os argumentos
           const args = expr.args.map((arg) => this.evaluateExpr(arg, env));
 
-          // 3. O SEGREDO DO OOP: Criamos um escopo isolado e injetamos o objeto atual como 'self'
-          const methodEnv = new Environment(env);
+          // 4. O SEGREDO DO OOP: Criamos um escopo isolado baseado na closure do método e injetamos 'self'
+          const methodEnv = new Environment(methodFunc.closure);
           methodEnv.define("self", objInstance);
 
-          methodDecl.parameters.forEach((param, index) => {
+          methodFunc.declaration.parameters.forEach((param: any, index: number) => {
             methodEnv.define(param.name, args[index]);
           });
 
           // 4. Executamos
           try {
-            for (const blockStmt of methodDecl.body.body) {
+            for (const blockStmt of methodFunc.declaration.body.body) {
               this.evaluateStmt(blockStmt, methodEnv);
             }
           } catch (e) {
@@ -211,29 +222,29 @@ export class Interpreter {
         }
 
         // 1. Descobrimos qual função está sendo chamada
-        const funcDecl = this.evaluateExpr(
+        const func = this.evaluateExpr(
           expr.caller,
           env,
-        ) as FunctionDeclaration;
+        );
 
-        if (funcDecl.kind !== "FunctionDeclaration") {
+        if (!(func instanceof FlexFunction)) {
           throw new Error(`TypeError: Not a function`);
         }
 
         // 2. avaliamos os argumentos passados
         const args = expr.args.map((arg) => this.evaluateExpr(arg, env));
 
-        // 3. Criamos um NOVO escopo baseado no escopo onde a função foi DEFINIDA (Closure)
-        const functionEnv = new Environment(env);
+        // 3. Criamos um NOVO escopo baseado no escopo onde a função foi DEFINIDA (Closure) real
+        const functionEnv = new Environment(func.closure);
 
         // 4. Mapeamos os argumentos para os nomes dos parâmetros
-        funcDecl.parameters.forEach((param, index) => {
+        func.declaration.parameters.forEach((param, index) => {
           functionEnv.define(param.name, args[index]);
         });
 
         // 5. Executamos o corpo da função e capturamos o retorno
         try {
-          for (const blockStmt of funcDecl.body.body) {
+          for (const blockStmt of func.declaration.body.body) {
             this.evaluateStmt(blockStmt, functionEnv);
           }
         } catch (e) {
