@@ -11,6 +11,7 @@ import {
   type FunctionDeclaration,
   type ReturnStmt,
   type StructDeclaration,
+  type ImplDeclaration,
 } from "./ast";
 
 export class Parser {
@@ -43,7 +44,9 @@ export class Parser {
     const statements: Stmt[] = [];
 
     while (this.current().type !== TokenType.EOF) {
-      if (this.current().type === TokenType.Struct) {
+      if (this.current().type === TokenType.Impl) {
+        statements.push(this.parseImplDeclaration());
+      } else if (this.current().type === TokenType.Struct) {
         statements.push(this.parseStructDeclaration());
       } else if (this.current().type === TokenType.Let) {
         statements.push(this.parseVarDeclaration());
@@ -64,6 +67,58 @@ export class Parser {
       }
     }
     return statements;
+  }
+
+  private parseImplDeclaration(): ImplDeclaration {
+    this.consume(TokenType.Impl);
+    const structName = this.consume(TokenType.Identifier).value;
+
+    this.consume(TokenType.LBrace);
+    const methods: FunctionDeclaration[] = [];
+
+    while (
+      this.current().type !== TokenType.RBrace &&
+      this.current().type !== TokenType.EOF
+    ) {
+      methods.push(this.parseFunctionDeclaration());
+    }
+    this.consume(TokenType.RBrace);
+
+    return { kind: "ImplDeclaration", structName, methods };
+  }
+
+  private parseCallMemberExpr(): Expr {
+    let expr = this.parsePrimary(); // Pega a variável base (ex: 'p')
+
+    while (true) {
+      if (this.current().type === TokenType.Dot) {
+        this.consume(TokenType.Dot);
+        const propertyName = this.consume(TokenType.Identifier).value;
+        expr = { kind: "MemberExpr", object: expr, property: propertyName };
+      } else if (this.current().type === TokenType.LParen) {
+        // É uma chamada de função/método (ex: (...))
+        this.consume(TokenType.LParen);
+        const args = this.parseArguments();
+        this.consume(TokenType.RParen);
+        expr = { kind: "CallExpr", caller: expr, args };
+      } else {
+        break;
+      }
+    }
+    return expr;
+  }
+
+  private parseArguments(): Expr[] {
+    const args: Expr[] = [];
+    if (this.current().type !== TokenType.RParen) {
+      do {
+        args.push(this.parseExpression());
+      } while (
+        this.current().type === TokenType.Comma &&
+        this.consume(TokenType.Comma)
+      );
+    }
+    return args;
   }
 
   private parseStructDeclaration(): StructDeclaration {
@@ -252,7 +307,7 @@ export class Parser {
   // Precisamos criar um novo nível na nossa avaliação de expressões.
   private parseMemberExpr(): Expr {
     // Começa com o lado esquerdo (o objeto/variável)
-    let object = this.parsePrimary();
+    let object = this.parseCallMemberExpr();
 
     // Enquanto tiver ponto, continua acessando propriedades
     while (this.current().type === TokenType.Dot) {
@@ -279,26 +334,26 @@ export class Parser {
       this.consume(TokenType.Identifier);
 
       //   Se logo após o nome vier um '(', é uma chamada de função!
-      if (this.current().type === TokenType.LParen) {
-        this.consume(TokenType.LParen);
-        const args: Expr[] = [];
+      // if (this.current().type === TokenType.LParen) {
+      //   this.consume(TokenType.LParen);
+      //   const args: Expr[] = [];
 
-        while (
-          this.current().type !== TokenType.RParen &&
-          this.current().type !== TokenType.EOF
-        ) {
-          args.push(this.parseExpression());
-          if (this.current().type === TokenType.Comma) {
-            this.consume(TokenType.Comma);
-          }
-        }
-        this.consume(TokenType.RParen);
-        return {
-          kind: "CallExpr",
-          caller: { kind: "Identifier", symbol: token.value },
-          args,
-        };
-      }
+      //   while (
+      //     this.current().type !== TokenType.RParen &&
+      //     this.current().type !== TokenType.EOF
+      //   ) {
+      //     args.push(this.parseExpression());
+      //     if (this.current().type === TokenType.Comma) {
+      //       this.consume(TokenType.Comma);
+      //     }
+      //   }
+      //   this.consume(TokenType.RParen);
+      //   return {
+      //     kind: "CallExpr",
+      //     caller: { kind: "Identifier", symbol: token.value },
+      //     args,
+      //   };
+      // }
 
       // Se for Instanciação de Struct: Nome { prop: valor, ... }
       if (
@@ -328,6 +383,9 @@ export class Parser {
       }
 
       return { kind: "Identifier", symbol: token.value };
+    } else if (token.type === TokenType.Self) {
+      this.consume(TokenType.Self);
+      return { kind: "Identifier", symbol: "self" };
     } else {
       throw new Error(`SyntaxError: Invalid expression '${token.value}'`);
     }

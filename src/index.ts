@@ -34,6 +34,16 @@ let p2 = Point { x: 5, y: 15 };
 
 print(p1.x + p2.y);
 
+// Bloco de implementação de método para a Struct 'Point'
+impl Point {
+    func sum() -> Int {
+        return self.x + self.y;
+    }
+}
+
+let p = Point { x: 10, y: 20 };
+print(p.sum()); // Imprime 30
+
 `;
 
 console.log("Analisando código fonte da FlexLang...\n");

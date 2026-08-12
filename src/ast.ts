@@ -27,6 +27,8 @@ export enum TokenType {
   Arrow = "ARROW", // ->
   Struct = "STRUCT", // struct
   Dot = "DOT", // .
+  Impl = "IMPL",
+  Self = "SELF",
 }
 
 export interface Token {
@@ -44,7 +46,8 @@ export type Stmt =
   | BlockStmt
   | FunctionDeclaration
   | ReturnStmt
-  | StructDeclaration;
+  | StructDeclaration
+  | ImplDeclaration;
 export type Expr =
   | NumericLiteral
   | StringLiteral
@@ -53,6 +56,12 @@ export type Expr =
   | CallExpr
   | StructExpr
   | MemberExpr;
+
+export interface ImplDeclaration {
+  kind: "ImplDeclaration";
+  structName: string;
+  methods: FunctionDeclaration[];
+}
 
 export interface StructDeclaration {
   kind: "StructDeclaration";

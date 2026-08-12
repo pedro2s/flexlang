@@ -36,6 +36,11 @@ export class Interpreter {
 
   private evaluateStmt(stmt: Stmt, env: Environment): void {
     switch (stmt.kind) {
+      case "ImplDeclaration":
+        // Guardamos a lista de métodos atrelada ao nome da Struct na memória global
+        env.define(`impl_${stmt.structName}`, stmt.methods);
+        break;
+
       case "StructDeclaration":
         // Guardamos a definição da struct na memória (sem valor inicial, só o molde)
         env.define(stmt.name, stmt);
@@ -101,6 +106,9 @@ export class Interpreter {
 
         // 2. Criar a instância como um Mapa em memória
         const instance = new Map<string, any>();
+        // TRUQUE: Guardamos uma propriedade invisível com o nome da Struct
+        // para sabermos onde buscar os métodos dela depois
+        instance.set("__structName", expr.structName);
 
         for (const prop of expr.properties) {
           const evalValue = this.evaluateExpr(prop.value, env);
@@ -125,6 +133,53 @@ export class Interpreter {
         );
 
       case "CallExpr":
+        // 1. Verificamos se é a chamada de um MÉTODO (ex: p.sum())
+        if (expr.caller.kind === "MemberExpr") {
+          // 'p' (o objeto instanciado na memória)
+          const objInstance = this.evaluateExpr(expr.caller.object, env);
+          const methodName = expr.caller.property; // 'sum'
+
+          if (!(objInstance instanceof Map)) {
+            throw new Error("TypeError: Cannot call a method on a non-object.");
+          }
+
+          const structName = objInstance.get("__structName");
+
+          // Buscamos os métodos dessa struct no ambiente
+          const methods: FunctionDeclaration[] = env.get(`impl_${structName}`);
+          const methodDecl = methods.find((m) => m.name === methodName);
+
+          if (!methodDecl) {
+            throw new Error(
+              `TypeError: Method '${methodName}' not found on struct '${structName}'`,
+            );
+          }
+
+          // 2. Preparamos os argumentos
+          const args = expr.args.map((arg) => this.evaluateExpr(arg, env));
+
+          // 3. O SEGREDO DO OOP: Criamos um escopo isolado e injetamos o objeto atual como 'self'
+          const methodEnv = new Environment(env);
+          methodEnv.define("self", objInstance);
+
+          methodDecl.parameters.forEach((param, index) => {
+            methodEnv.define(param.name, args[index]);
+          });
+
+          // 4. Executamos
+          try {
+            for (const blockStmt of methodDecl.body.body) {
+              this.evaluateStmt(blockStmt, methodEnv);
+            }
+          } catch (e) {
+            if (e instanceof ReturnException) {
+              return e.value;
+            }
+            throw e;
+          }
+          return null;
+        }
+
         // 1. Descobrimos qual função está sendo chamada
         const funcDecl = this.evaluateExpr(
           expr.caller,

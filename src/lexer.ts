@@ -4,6 +4,8 @@ export class Lexer {
   private tokens: Token[] = [];
 
   private static readonly tokenSpec: Array<[TokenType, RegExp]> = [
+    [TokenType.Impl, /^impl\b/],
+    [TokenType.Self, /^self\b/],
     [TokenType.Struct, /^struct\b/],
     [TokenType.DotDot, /^\.\./],
     [TokenType.Dot, /^\./],
@@ -45,6 +47,13 @@ export class Lexer {
       if (/^\s+/.test(matchText)) {
         const spaces = matchText.match(/^\s+/)![0];
         cursor += spaces.length;
+        continue;
+      }
+
+      //   Pular comentários de linha (// ...)
+      if (/^\/\/.*?(\r?\n|$)/.test(matchText)) {
+        const comment = matchText.match(/^\/\/.*?(\r?\n|$)/)![0];
+        cursor += comment.length;
         continue;
       }
 
