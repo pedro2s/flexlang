@@ -20,15 +20,15 @@ export type FlexType =
 
 // --- Ambiente de Tipos (Environment para checagem estática) ---
 class TypeEnvironment {
-  private variables = new Map<string, { type: FlexType; isMut: boolean }>();
+  private variables = new Map<string, { type: FlexType; isMut: boolean; isMoved: boolean }>();
 
   constructor(private enclosing?: TypeEnvironment) {}
 
   define(name: string, type: FlexType, isMut: boolean): void {
-    this.variables.set(name, { type, isMut });
+    this.variables.set(name, { type, isMut, isMoved: false });
   }
 
-  get(name: string): { type: FlexType; isMut: boolean } | undefined {
+  get(name: string): { type: FlexType; isMut: boolean; isMoved: boolean } | undefined {
     if (this.variables.has(name)) {
       return this.variables.get(name)!;
     }
@@ -36,6 +36,14 @@ class TypeEnvironment {
       return this.enclosing.get(name);
     }
     return undefined;
+  }
+
+  markMoved(name: string): void {
+    if (this.variables.has(name)) {
+      this.variables.get(name)!.isMoved = true;
+    } else if (this.enclosing) {
+      this.enclosing.markMoved(name);
+    }
   }
 }
 
@@ -235,11 +243,14 @@ export class TypeChecker {
         return { kind: "String" };
         
       case "Identifier":
-        const varData = env.get(expr.symbol);
-        if (!varData) {
-          throw new Error(`ReferenceError: Variable '${expr.symbol}' not found`);
+        const varInfo = env.get(expr.symbol);
+        if (!varInfo) {
+          throw new Error(`ReferenceError: Identifier '${expr.symbol}' not found`);
         }
-        return varData.type;
+        if (varInfo.isMoved) {
+          throw new Error(`TypeError: Use-after-send of moved variable '${expr.symbol}'`);
+        }
+        return varInfo.type;
 
       case "BinaryExpr":
         const leftType = this.checkExpr(expr.left, env);
@@ -368,6 +379,33 @@ export class TypeChecker {
            }
            return { kind: "Void" };
         }
+        
+        if (expr.caller.kind === "MemberExpr") {
+            if (expr.caller.object.kind === "Identifier" && expr.caller.object.symbol === "Channel" && expr.caller.property === "new") {
+                return { kind: "Struct", name: "Channel", genericArgs: [{ kind: "Any" }] };
+            }
+            
+            const callerType = this.checkExpr(expr.caller.object, env);
+            if (callerType.kind === "Struct" && callerType.name === "Channel") {
+                if (expr.caller.property === "send") {
+                    if (expr.args.length !== 1) throw new Error("TypeError: Channel.send expects exactly 1 argument");
+                    const argExpr = expr.args[0];
+                    this.checkExpr(argExpr, env);
+                    
+                    if (argExpr.kind === "Identifier") {
+                        const vInfo = env.get(argExpr.symbol);
+                        if (vInfo && vInfo.isMut) {
+                            env.markMoved(argExpr.symbol);
+                        }
+                    }
+                    return { kind: "Void" };
+                } else if (expr.caller.property === "recv") {
+                    if (expr.args.length !== 0) throw new Error("TypeError: Channel.recv expects exactly 0 arguments");
+                    return callerType.genericArgs.length > 0 ? callerType.genericArgs[0] : { kind: "Any" };
+                }
+            }
+        }
+
         return { kind: "Any" };
 
       case "AssignmentExpr":

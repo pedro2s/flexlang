@@ -47,6 +47,36 @@ class FlexFunction {
   ) {}
 }
 
+class FlexChannel {
+  private queue: any[] = [];
+  private receivers: ((val: any) => void)[] = [];
+
+  public async send(val: any): Promise<void> {
+    if (this.receivers.length > 0) {
+      const resolve = this.receivers.shift()!;
+      resolve(val);
+      return;
+    }
+    
+    // Como é um channel capacity=0 (síncrono), temos que aguardar alguém ler!
+    return new Promise((resolve) => {
+      this.queue.push({ val, resolveSend: resolve });
+    });
+  }
+
+  public async recv(): Promise<any> {
+    if (this.queue.length > 0) {
+      const item = this.queue.shift()!;
+      item.resolveSend();
+      return item.val;
+    }
+    
+    return new Promise((resolve) => {
+      this.receivers.push(resolve);
+    });
+  }
+}
+
 export class Interpreter {
   // Ambiente para armazenar variáveis na memória
   private globalEnv = new Environment();
@@ -264,7 +294,22 @@ export class Interpreter {
       case "CallExpr":
         // 1. Verificamos se é a chamada de um MÉTODO (ex: p.sum())
         if (expr.caller.kind === "MemberExpr") {
+          
+          if (expr.caller.object.kind === "Identifier" && expr.caller.object.symbol === "Channel" && expr.caller.property === "new") {
+              return new FlexChannel();
+          }
+
           const objectInstanceCall = await this.evaluateExpr(expr.caller.object, env);
+          
+          if (objectInstanceCall instanceof FlexChannel) {
+              if (expr.caller.property === "send") {
+                  const val = await this.evaluateExpr(expr.args[0], env);
+                  await objectInstanceCall.send(val);
+                  return null;
+              } else if (expr.caller.property === "recv") {
+                  return await objectInstanceCall.recv();
+              }
+          }
           
           // Se for Enum, repassa para a lógica geral de Call abaixo que captura __isEnumConstructor
           if (typeof objectInstanceCall === "object" && objectInstanceCall !== null && objectInstanceCall.kind === "EnumDeclaration") {
