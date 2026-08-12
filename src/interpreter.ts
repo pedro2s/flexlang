@@ -18,6 +18,16 @@ class Environment {
       throw new Error(`ReferenceError: Identifier '${name}' is not defined`);
     }
   }
+
+  public assign(name: string, value: any): void {
+    if (this.variables.has(name)) {
+      this.variables.set(name, value);
+    } else if (this.parent) {
+      this.parent.assign(name, value);
+    } else {
+      throw new Error(`ReferenceError: Cannot assign to undefined variable '${name}'`);
+    }
+  }
 }
 
 class ReturnException {
@@ -36,6 +46,10 @@ export class Interpreter {
 
   private evaluateStmt(stmt: Stmt, env: Environment): void {
     switch (stmt.kind) {
+      case "ExpressionStatement":
+        this.evaluateExpr(stmt.expression, env);
+        break;
+
       case "ImplDeclaration":
         // Guardamos a lista de métodos atrelada ao nome da Struct na memória global
         env.define(`impl_${stmt.structName}`, stmt.methods);
@@ -95,6 +109,22 @@ export class Interpreter {
 
   private evaluateExpr(expr: Expr, env: Environment): any {
     switch (expr.kind) {
+      case "AssignmentExpr":
+        const assignValue = this.evaluateExpr(expr.value, env);
+        if (expr.assignee.kind === "Identifier") {
+          env.assign(expr.assignee.symbol, assignValue);
+          return assignValue;
+        } else if (expr.assignee.kind === "MemberExpr") {
+          const objectInstance = this.evaluateExpr(expr.assignee.object, env);
+          if (!(objectInstance instanceof Map)) {
+            throw new Error("TypeError: Cannot assign to property on non-object.");
+          }
+          objectInstance.set(expr.assignee.property, assignValue);
+          return assignValue;
+        } else {
+          throw new Error(`SyntaxError: Invalid assignment target`);
+        }
+
       case "StructExpr":
         // 1. Validar se o molde da Struct existe na memória (Type Checking em tempo de execução)
         const structBlueprint = env.get(expr.structName);

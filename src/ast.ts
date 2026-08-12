@@ -47,7 +47,8 @@ export type Stmt =
   | FunctionDeclaration
   | ReturnStmt
   | StructDeclaration
-  | ImplDeclaration;
+  | ImplDeclaration
+  | ExpressionStatement;
 export type Expr =
   | NumericLiteral
   | StringLiteral
@@ -55,7 +56,19 @@ export type Expr =
   | BinaryExpr
   | CallExpr
   | StructExpr
-  | MemberExpr;
+  | MemberExpr
+  | AssignmentExpr;
+
+export interface ExpressionStatement {
+  kind: "ExpressionStatement";
+  expression: Expr;
+}
+
+export interface AssignmentExpr {
+  kind: "AssignmentExpr";
+  assignee: Expr; // Target of the assignment (e.g., Identifier or MemberExpr)
+  value: Expr;
+}
 
 export interface ImplDeclaration {
   kind: "ImplDeclaration";

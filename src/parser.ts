@@ -44,29 +44,34 @@ export class Parser {
     const statements: Stmt[] = [];
 
     while (this.current().type !== TokenType.EOF) {
-      if (this.current().type === TokenType.Impl) {
-        statements.push(this.parseImplDeclaration());
-      } else if (this.current().type === TokenType.Struct) {
-        statements.push(this.parseStructDeclaration());
-      } else if (this.current().type === TokenType.Let) {
-        statements.push(this.parseVarDeclaration());
-      } else if (this.current().type === TokenType.Print) {
-        statements.push(this.parsePrintStatement());
-      } else if (this.current().type === TokenType.If) {
-        statements.push(this.parseIfStatement());
-      } else if (this.current().type === TokenType.For) {
-        statements.push(this.parseForStatement());
-      } else if (this.current().type === TokenType.Func) {
-        statements.push(this.parseFunctionDeclaration());
-      } else if (this.current().type === TokenType.Return) {
-        statements.push(this.parseReturnStatement());
-      } else {
-        throw new Error(
-          `SyntaxError: Unknown statemtent '${this.current().value}'`,
-        );
-      }
+      statements.push(this.parseStatement());
     }
     return statements;
+  }
+
+  private parseStatement(): Stmt {
+    if (this.current().type === TokenType.Impl) {
+      return this.parseImplDeclaration();
+    } else if (this.current().type === TokenType.Struct) {
+      return this.parseStructDeclaration();
+    } else if (this.current().type === TokenType.Let) {
+      return this.parseVarDeclaration();
+    } else if (this.current().type === TokenType.Print) {
+      return this.parsePrintStatement();
+    } else if (this.current().type === TokenType.If) {
+      return this.parseIfStatement();
+    } else if (this.current().type === TokenType.For) {
+      return this.parseForStatement();
+    } else if (this.current().type === TokenType.Func) {
+      return this.parseFunctionDeclaration();
+    } else if (this.current().type === TokenType.Return) {
+      return this.parseReturnStatement();
+    } else {
+      // Fallback: Se não é palavra-chave de controle, deve ser uma expressão
+      const expression = this.parseExpression();
+      this.consume(TokenType.Semi);
+      return { kind: "ExpressionStatement", expression };
+    }
   }
 
   private parseImplDeclaration(): ImplDeclaration {
@@ -201,25 +206,7 @@ export class Parser {
       this.current().type !== TokenType.RBrace &&
       this.current().type !== TokenType.EOF
     ) {
-      // Para simplificar, chamamos um método genérico que avalia o tipo de statement atual
-      // Aqui chamamos as lógicas de if, let, print, for de forma recursiva
-      if (this.current().type === TokenType.Let) {
-        body.push(this.parseVarDeclaration());
-      } else if (this.current().type === TokenType.Print) {
-        body.push(this.parsePrintStatement());
-      } else if (this.current().type === TokenType.If) {
-        body.push(this.parseIfStatement());
-      } else if (this.current().type === TokenType.For) {
-        body.push(this.parseForStatement());
-      } else if (this.current().type === TokenType.Func) {
-        body.push(this.parseFunctionDeclaration());
-      } else if (this.current().type === TokenType.Return) {
-        body.push(this.parseReturnStatement());
-      } else {
-        throw new Error(
-          `SyntaxError: Unknown statement '${this.current().value}' inside block`,
-        );
-      }
+      body.push(this.parseStatement());
     }
     this.consume(TokenType.RBrace);
     return { kind: "BlockStmt", body };
@@ -280,6 +267,22 @@ export class Parser {
   }
 
   private parseExpression(): Expr {
+    return this.parseAssignmentExpr();
+  }
+
+  private parseAssignmentExpr(): Expr {
+    const left = this.parseBinaryExpr();
+    
+    if (this.current().type === TokenType.Assign) {
+      this.consume(TokenType.Assign);
+      const value = this.parseAssignmentExpr();
+      return { kind: "AssignmentExpr", assignee: left, value };
+    }
+    
+    return left;
+  }
+
+  private parseBinaryExpr(): Expr {
     const left = this.parseMemberExpr();
 
     if (this.current().type === TokenType.Plus) {

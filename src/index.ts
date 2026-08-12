@@ -39,10 +39,17 @@ impl Point {
     func sum() -> Int {
         return self.x + self.y;
     }
+    
+    func set_x(new_x: Int) {
+        self.x = new_x;
+    }
 }
 
 let p = Point { x: 10, y: 20 };
 print(p.sum()); // Imprime 30
+
+p.set_x(100);
+print(p.x); // Imprime 100
 
 `;
 
