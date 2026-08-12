@@ -209,8 +209,8 @@ export class TypeChecker {
              for (const tMethod of trait.methods) {
                   const iMethod = stmt.methods.find(m => m.name === tMethod.name);
                   if (!iMethod) throw new Error(`TypeError: Struct '${stmt.structName}' does not implement method '${tMethod.name}' from trait '${stmt.traitName}'`);
-                  
-                  if (tMethod.parameters.length !== iMethod.parameters.length) {
+                  const iParams = iMethod.parameters.filter(p => p.name !== "self");
+                  if (tMethod.parameters.length !== iParams.length) {
                        throw new Error(`TypeError: Method '${tMethod.name}' in impl does not match trait signature for parameters count`);
                   }
              }

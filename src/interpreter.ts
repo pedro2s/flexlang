@@ -425,8 +425,15 @@ export class Interpreter {
               const methodEnv = new Environment(methodFunc.closure);
               methodEnv.define("self", objectInstanceCall);
 
+              let argOffset = 0;
+              if (methodFunc.declaration.parameters.length > 0 && methodFunc.declaration.parameters[0].name === "self") {
+                  argOffset = 1;
+              }
+
               methodFunc.declaration.parameters.forEach((param: any, index: number) => {
-                methodEnv.define(param.name, args[index]);
+                if (param.name !== "self") {
+                    methodEnv.define(param.name, args[index - argOffset]);
+                }
               });
 
               try {
