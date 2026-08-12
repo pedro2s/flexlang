@@ -8,6 +8,8 @@ export enum TokenType {
   Scope = "SCOPE",
   Spawn = "SPAWN",
   Trait = "TRAIT",
+  Import = "IMPORT",
+  From = "FROM",
   Print = "PRINT",
   If = "IF", // Novos tokens para controle de fluxo
   Else = "ELSE",
@@ -79,6 +81,7 @@ export type Stmt =
   | ScopeStmt
   | SpawnStmt
   | TraitDeclaration
+  | ImportDeclaration
   | ExpressionStatement;
 
 export type Expr =
@@ -182,6 +185,12 @@ export interface TraitDeclaration {
     parameters: Parameter[];
     returnType?: TypeNode;
   }[];
+}
+
+export interface ImportDeclaration {
+  kind: "ImportDeclaration";
+  moduleName: string;
+  imports: string[];
 }
 
 export interface ImplDeclaration {

@@ -7,6 +7,7 @@ import type {
   EnumDeclaration,
   TraitDeclaration,
   ImplDeclaration,
+  ImportDeclaration,
 } from "./ast";
 
 // --- Representação Interna de Tipos do TypeChecker ---
@@ -69,6 +70,14 @@ export class TypeChecker {
         this.enums.set(stmt.name, stmt);
       } else if (stmt.kind === "TraitDeclaration") {
         this.traits.set(stmt.name, stmt);
+      } else if (stmt.kind === "ImportDeclaration") {
+        if (stmt.moduleName === "net/http") {
+             this.structs.set("Server", { kind: "StructDeclaration", name: "Server", properties: [] });
+             this.structs.set("Request", { kind: "StructDeclaration", name: "Request", properties: [] });
+             this.structs.set("Response", { kind: "StructDeclaration", name: "Response", properties: [] });
+        } else {
+             throw new Error(`ImportError: Module '${stmt.moduleName}' not found`);
+        }
       }
     }
 
@@ -416,6 +425,11 @@ export class TypeChecker {
             if (expr.caller.object.kind === "Identifier" && expr.caller.object.symbol === "Channel" && expr.caller.property === "new") {
                 return { kind: "Struct", name: "Channel", genericArgs: [{ kind: "Any" }] };
             }
+            if (expr.caller.object.kind === "Identifier" && expr.caller.object.symbol === "Server" && expr.caller.property === "new") {
+                if (expr.args.length !== 1) throw new Error("TypeError: Server.new expects exactly 1 argument (address)");
+                this.checkExpr(expr.args[0], env);
+                return { kind: "Struct", name: "Server", genericArgs: [] };
+            }
             
             const callerType = this.checkExpr(expr.caller.object, env);
             if (callerType.kind === "Struct" && callerType.name === "Channel") {
@@ -434,6 +448,17 @@ export class TypeChecker {
                 } else if (expr.caller.property === "recv") {
                     if (expr.args.length !== 0) throw new Error("TypeError: Channel.recv expects exactly 0 arguments");
                     return callerType.genericArgs.length > 0 ? callerType.genericArgs[0] : { kind: "Any" };
+                }
+            }
+            if (callerType.kind === "Struct" && callerType.name === "Server") {
+                if (expr.caller.property === "route") {
+                    if (expr.args.length !== 2) throw new Error("TypeError: Server.route expects exactly 2 arguments");
+                    this.checkExpr(expr.args[0], env);
+                    this.checkExpr(expr.args[1], env);
+                    return { kind: "Void" };
+                } else if (expr.caller.property === "start") {
+                    if (expr.args.length !== 0) throw new Error("TypeError: Server.start expects exactly 0 arguments");
+                    return { kind: "Void" };
                 }
             }
         }

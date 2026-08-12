@@ -20,6 +20,7 @@ import {
   type ScopeStmt,
   type SpawnStmt,
   type TraitDeclaration,
+  type ImportDeclaration,
 } from "./ast";
 import { Lexer } from "./lexer";
 
@@ -72,6 +73,8 @@ export class Parser {
         return this.parseSpawnStmt();
       case TokenType.Trait:
         return this.parseTraitDeclaration();
+      case TokenType.Import:
+        return this.parseImportDeclaration();
       case TokenType.Struct:
         return this.parseStructDeclaration();
       case TokenType.Let:
@@ -126,6 +129,27 @@ export class Parser {
     }
     this.consume(TokenType.RBrace);
     return { kind: "TraitDeclaration", name, methods };
+  }
+
+  private parseImportDeclaration(): ImportDeclaration {
+    this.consume(TokenType.Import);
+    const imports: string[] = [];
+
+    // Verificamos se estamos importando algo especifico: import { A, B } from "module";
+    if (this.current().type === TokenType.LBrace) {
+         this.consume(TokenType.LBrace);
+         do {
+             imports.push(this.consume(TokenType.Identifier).value);
+         } while (this.match(TokenType.Comma));
+         this.consume(TokenType.RBrace);
+         this.consume(TokenType.From);
+    }
+    
+    // Se não tiver LBrace, podemos assumir import "module" (sem destructuring por agora)
+    const moduleName = this.consume(TokenType.StringLiteral).value;
+    this.consume(TokenType.Semi);
+    
+    return { kind: "ImportDeclaration", moduleName, imports };
   }
 
   private parseImplDeclaration(): ImplDeclaration {
