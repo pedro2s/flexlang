@@ -21,6 +21,10 @@ export enum TokenType {
   LBrace = "LBRACE", // Chaves { }
   RBrace = "RBRACE",
   EOF = "EOF",
+  Func = "FUNC",
+  Return = "RETURN",
+  Comma = "COMMA", // Vírgula
+  Arrow = "ARROW", // ->
 }
 
 export interface Token {
@@ -30,8 +34,44 @@ export interface Token {
 
 // --- Definição da AST (Discriminated Unions) ---
 
-export type Stmt = VarDeclaration | PrintStmt | IfStmt | ForStmt | BlockStmt;
-export type Expr = NumericLiteral | StringLiteral | Identifier | BinaryExpr;
+export type Stmt =
+  | VarDeclaration
+  | PrintStmt
+  | IfStmt
+  | ForStmt
+  | BlockStmt
+  | FunctionDeclaration
+  | ReturnStmt;
+export type Expr =
+  | NumericLiteral
+  | StringLiteral
+  | Identifier
+  | BinaryExpr
+  | CallExpr;
+
+export interface Parameter {
+  name: string;
+  typeAnnotation: string;
+}
+
+export interface FunctionDeclaration {
+  kind: "FunctionDeclaration";
+  name: string;
+  parameters: Parameter[];
+  returnType?: string | undefined;
+  body: BlockStmt;
+}
+
+export interface ReturnStmt {
+  kind: "ReturnStmt";
+  value?: Expr | undefined;
+}
+
+export interface CallExpr {
+  kind: "CallExpr";
+  caller: Expr; // Geralmente Identifier para funções
+  args: Expr[];
+}
 
 export interface BlockStmt {
   kind: "BlockStmt";
@@ -86,4 +126,3 @@ export interface Identifier {
   kind: "Identifier";
   symbol: string;
 }
-

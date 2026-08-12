@@ -1,173 +1,259 @@
 import {
-	TokenType,
-	type Token,
-	type Stmt,
-	type Expr,
-	type VarDeclaration,
-	type PrintStmt,
-	type BlockStmt,
-	type StringLiteral,
+  TokenType,
+  type Token,
+  type Stmt,
+  type Expr,
+  type VarDeclaration,
+  type PrintStmt,
+  type BlockStmt,
+  type StringLiteral,
+  type Parameter,
+  type FunctionDeclaration,
+  type ReturnStmt,
 } from "./ast";
 
 export class Parser {
-	private pos = 0;
+  private pos = 0;
 
-	constructor(private tokens: Token[]) {}
+  constructor(private tokens: Token[]) {}
 
-	private current(): Token {
-		const token = this.tokens[this.pos];
-		if (!token) throw new Error("Unexpected end of tokens");
-		return token;
-	}
+  private current(): Token {
+    const token = this.tokens[this.pos];
+    if (!token) throw new Error("Unexpected end of tokens");
+    return token;
+  }
 
-	private consume(expected: TokenType): Token {
-		const token = this.current();
-		if (token.type === expected) {
-			this.pos++;
-			return token;
-		}
-		throw new Error(
-			`SyntaxError: Expected token ${expected}, got ${token.type} ('${token.value}') at position ${this.pos}`,
-		);
-	}
+  private consume(expected: TokenType): Token {
+    const token = this.current();
+    if (token.type === expected) {
+      this.pos++;
+      return token;
+    }
+    throw new Error(
+      `SyntaxError: Expected token ${expected}, got ${token.type} ('${token.value}') at position ${this.pos}`,
+    );
+  }
 
-	public parse(): Stmt[] {
-		const statements: Stmt[] = [];
+  public parse(): Stmt[] {
+    const statements: Stmt[] = [];
 
-		while (this.current().type !== TokenType.EOF) {
-			if (this.current().type === TokenType.Let) {
-				statements.push(this.parseVarDeclaration());
-			} else if (this.current().type === TokenType.Print) {
-				statements.push(this.parsePrintStatement());
-			} else if (this.current().type === TokenType.If) {
-				statements.push(this.parseIfStatement());
-			} else if (this.current().type === TokenType.For) {
-				statements.push(this.parseForStatement());
-			} else {
-				throw new Error(
-					`SyntaxError: Unknown statemtent '${this.current().value}'`,
-				);
-			}
-		}
-		return statements;
-	}
+    while (this.current().type !== TokenType.EOF) {
+      if (this.current().type === TokenType.Let) {
+        statements.push(this.parseVarDeclaration());
+      } else if (this.current().type === TokenType.Print) {
+        statements.push(this.parsePrintStatement());
+      } else if (this.current().type === TokenType.If) {
+        statements.push(this.parseIfStatement());
+      } else if (this.current().type === TokenType.For) {
+        statements.push(this.parseForStatement());
+      } else if (this.current().type === TokenType.Func) {
+        statements.push(this.parseFunctionDeclaration());
+      } else if (this.current().type === TokenType.Return) {
+        statements.push(this.parseReturnStatement());
+      } else {
+        throw new Error(
+          `SyntaxError: Unknown statemtent '${this.current().value}'`,
+        );
+      }
+    }
+    return statements;
+  }
 
-	private parseBlock(): BlockStmt {
-		this.consume(TokenType.LBrace);
-		const body: Stmt[] = [];
-		while (
-			this.current().type !== TokenType.RBrace &&
-			this.current().type !== TokenType.EOF
-		) {
-			// Para simplificar, chamamos um método genérico que avalia o tipo de statement atual
-			// Aqui chamamos as lógicas de if, let, print, for de forma recursiva
-			if (this.current().type === TokenType.Let) {
-				body.push(this.parseVarDeclaration());
-			} else if (this.current().type === TokenType.Print) {
-				body.push(this.parsePrintStatement());
-			} else if (this.current().type === TokenType.If) {
-				body.push(this.parseIfStatement());
-			} else if (this.current().type === TokenType.For) {
-				body.push(this.parseForStatement());
-			}
-		}
-		this.consume(TokenType.RBrace);
-		return { kind: "BlockStmt", body };
-	}
+  private parseFunctionDeclaration(): FunctionDeclaration {
+    this.consume(TokenType.Func);
+    const name = this.consume(TokenType.Identifier).value;
 
-	private parseIfStatement(): Stmt {
-		this.consume(TokenType.If);
-		const condition = this.parseExpression();
-		const consequent = this.parseBlock();
+    this.consume(TokenType.LParen);
+    const parameters: Parameter[] = [];
 
-		let alternate: BlockStmt | undefined = undefined;
-		if (this.current().type === TokenType.Else) {
-			this.consume(TokenType.Else);
-			alternate = this.parseBlock();
-		}
+    // Analisa os parâmetros: (a: Int, b: Int)
+    while (
+      this.current().type !== TokenType.RParen &&
+      this.current().type != TokenType.EOF
+    ) {
+      const paramName = this.consume(TokenType.Identifier).value;
+      this.consume(TokenType.Colon);
+      const typeAnnotation = this.consume(TokenType.Identifier).value;
+      parameters.push({ name: paramName, typeAnnotation });
 
-		return { kind: "IfStmt", condition, consequent, alternate };
-	}
+      if (this.current().type === TokenType.Comma) {
+        this.consume(TokenType.Comma);
+      }
+    }
+    this.consume(TokenType.RParen);
 
-	private parseForStatement(): Stmt {
-		this.consume(TokenType.For);
-		const iteratorName = this.consume(TokenType.Identifier).value;
-		this.consume(TokenType.In);
+    let returnType: string | undefined = undefined;
+    if (this.current().type === TokenType.Arrow) {
+      this.consume(TokenType.Arrow);
+      returnType = this.consume(TokenType.Identifier).value;
+    }
 
-		const start = this.parseExpression(); // Ex: 0
-		this.consume(TokenType.DotDot);
-		const end = this.parseExpression(); // Ex: 10
+    const body = this.parseBlock();
 
-		const body = this.parseBlock();
+    return { kind: "FunctionDeclaration", name, parameters, returnType, body };
+  }
 
-		return { kind: "ForStmt", iteratorName, start, end, body };
-	}
+  private parseReturnStatement(): ReturnStmt {
+    this.consume(TokenType.Return);
 
-	private parseVarDeclaration(): VarDeclaration {
-		this.consume(TokenType.Let);
-		const name = this.consume(TokenType.Identifier).value;
+    // Se for só "return;", o valor é undefined. Se tiver algo depois, parseia como expressão
+    let value: Expr | undefined = undefined;
+    if (this.current().type !== TokenType.Semi) {
+      value = this.parseExpression();
+    }
 
-		let typeAnnotation: string | undefined = undefined;
-		if (this.current().type === TokenType.Colon) {
-			this.consume(TokenType.Colon);
-			typeAnnotation = this.consume(TokenType.Identifier).value;
-		}
+    this.consume(TokenType.Semi);
+    return { kind: "ReturnStmt", value };
+  }
 
-		this.consume(TokenType.Assign);
-		const value = this.parseExpression();
-		this.consume(TokenType.Semi);
+  private parseBlock(): BlockStmt {
+    this.consume(TokenType.LBrace);
+    const body: Stmt[] = [];
+    while (
+      this.current().type !== TokenType.RBrace &&
+      this.current().type !== TokenType.EOF
+    ) {
+      // Para simplificar, chamamos um método genérico que avalia o tipo de statement atual
+      // Aqui chamamos as lógicas de if, let, print, for de forma recursiva
+      if (this.current().type === TokenType.Let) {
+        body.push(this.parseVarDeclaration());
+      } else if (this.current().type === TokenType.Print) {
+        body.push(this.parsePrintStatement());
+      } else if (this.current().type === TokenType.If) {
+        body.push(this.parseIfStatement());
+      } else if (this.current().type === TokenType.For) {
+        body.push(this.parseForStatement());
+      } else if (this.current().type === TokenType.Func) {
+        body.push(this.parseFunctionDeclaration());
+      } else if (this.current().type === TokenType.Return) {
+        body.push(this.parseReturnStatement());
+      } else {
+        throw new Error(
+          `SyntaxError: Unknown statement '${this.current().value}' inside block`,
+        );
+      }
+    }
+    this.consume(TokenType.RBrace);
+    return { kind: "BlockStmt", body };
+  }
 
-		return { kind: "VarDeclaration", name, typeAnnotation, value };
-	}
+  private parseIfStatement(): Stmt {
+    this.consume(TokenType.If);
+    const condition = this.parseExpression();
+    const consequent = this.parseBlock();
 
-	private parsePrintStatement(): PrintStmt {
-		this.consume(TokenType.Print);
-		this.consume(TokenType.LParen);
-		const value = this.parseExpression();
-		this.consume(TokenType.RParen);
-		this.consume(TokenType.Semi);
-		return { kind: "PrintStmt", value };
-	}
+    let alternate: BlockStmt | undefined = undefined;
+    if (this.current().type === TokenType.Else) {
+      this.consume(TokenType.Else);
+      alternate = this.parseBlock();
+    }
 
-	private parseExpression(): Expr {
-		const left = this.parsePrimary();
+    return { kind: "IfStmt", condition, consequent, alternate };
+  }
 
-		if (this.current().type === TokenType.Plus) {
-			const operator = this.consume(TokenType.Plus).value;
-			const right = this.parsePrimary();
-			return { kind: "BinaryExpr", left, operator, right };
-		} else if (this.current().type === TokenType.EqEq) {
-			const operator = this.consume(TokenType.EqEq).value;
-			const right = this.parsePrimary();
-			return { kind: "BinaryExpr", left, operator, right };
-		} else if (this.current().type === TokenType.Gt) {
-			const operator = this.consume(TokenType.Gt).value;
-			const right = this.parsePrimary();
-			return { kind: "BinaryExpr", left, operator, right };
-		} else if (this.current().type === TokenType.Lt) {
-			const operator = this.consume(TokenType.Lt).value;
-			const right = this.parsePrimary();
-			return { kind: "BinaryExpr", left, operator, right };
-		}
+  private parseForStatement(): Stmt {
+    this.consume(TokenType.For);
+    const iteratorName = this.consume(TokenType.Identifier).value;
+    this.consume(TokenType.In);
 
-		return left;
-	}
+    const start = this.parseExpression(); // Ex: 0
+    this.consume(TokenType.DotDot);
+    const end = this.parseExpression(); // Ex: 10
 
-	private parsePrimary(): Expr {
-		const token = this.current();
-		if (token.type === TokenType.Number) {
-			this.consume(TokenType.Number);
-			return { kind: "NumericLiteral", value: parseFloat(token.value) };
-		} else if (token.type === TokenType.String) {
-			this.consume(TokenType.String);
-			// Remove as aspas duplas ao redor da string
-			const cleanValue = token.value.slice(1, -1);
-			return { kind: "StringLiteral", value: cleanValue };
-		} else if (token.type === TokenType.Identifier) {
-			this.consume(TokenType.Identifier);
-			return { kind: "Identifier", symbol: token.value };
-		} else {
-			throw new Error(`SyntaxError: Invalid expression '${token.value}'`);
-		}
-	}
+    const body = this.parseBlock();
+
+    return { kind: "ForStmt", iteratorName, start, end, body };
+  }
+
+  private parseVarDeclaration(): VarDeclaration {
+    this.consume(TokenType.Let);
+    const name = this.consume(TokenType.Identifier).value;
+
+    let typeAnnotation: string | undefined = undefined;
+    if (this.current().type === TokenType.Colon) {
+      this.consume(TokenType.Colon);
+      typeAnnotation = this.consume(TokenType.Identifier).value;
+    }
+
+    this.consume(TokenType.Assign);
+    const value = this.parseExpression();
+    this.consume(TokenType.Semi);
+
+    return { kind: "VarDeclaration", name, typeAnnotation, value };
+  }
+
+  private parsePrintStatement(): PrintStmt {
+    this.consume(TokenType.Print);
+    this.consume(TokenType.LParen);
+    const value = this.parseExpression();
+    this.consume(TokenType.RParen);
+    this.consume(TokenType.Semi);
+    return { kind: "PrintStmt", value };
+  }
+
+  private parseExpression(): Expr {
+    const left = this.parsePrimary();
+
+    if (this.current().type === TokenType.Plus) {
+      const operator = this.consume(TokenType.Plus).value;
+      const right = this.parsePrimary();
+      return { kind: "BinaryExpr", left, operator, right };
+    } else if (this.current().type === TokenType.EqEq) {
+      const operator = this.consume(TokenType.EqEq).value;
+      const right = this.parsePrimary();
+      return { kind: "BinaryExpr", left, operator, right };
+    } else if (this.current().type === TokenType.Gt) {
+      const operator = this.consume(TokenType.Gt).value;
+      const right = this.parsePrimary();
+      return { kind: "BinaryExpr", left, operator, right };
+    } else if (this.current().type === TokenType.Lt) {
+      const operator = this.consume(TokenType.Lt).value;
+      const right = this.parsePrimary();
+      return { kind: "BinaryExpr", left, operator, right };
+    }
+
+    return left;
+  }
+
+  private parsePrimary(): Expr {
+    const token = this.current();
+
+    if (token.type === TokenType.Number) {
+      this.consume(TokenType.Number);
+      return { kind: "NumericLiteral", value: parseFloat(token.value) };
+    } else if (token.type === TokenType.String) {
+      this.consume(TokenType.String);
+      // Remove as aspas duplas ao redor da string
+      const cleanValue = token.value.slice(1, -1);
+      return { kind: "StringLiteral", value: cleanValue };
+    } else if (token.type === TokenType.Identifier) {
+      this.consume(TokenType.Identifier);
+
+      //   Se logo após o nome vier um '(', é uma chamada de função!
+      if (this.current().type === TokenType.LParen) {
+        this.consume(TokenType.LParen);
+        const args: Expr[] = [];
+
+        while (
+          this.current().type !== TokenType.RParen &&
+          this.current().type !== TokenType.EOF
+        ) {
+          args.push(this.parseExpression());
+          if (this.current().type === TokenType.Comma) {
+            this.consume(TokenType.Comma);
+          }
+        }
+        this.consume(TokenType.RParen);
+        return {
+          kind: "CallExpr",
+          caller: { kind: "Identifier", symbol: token.value },
+          args,
+        };
+      }
+
+      return { kind: "Identifier", symbol: token.value };
+    } else {
+      throw new Error(`SyntaxError: Invalid expression '${token.value}'`);
+    }
+  }
 }

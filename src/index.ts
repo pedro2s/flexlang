@@ -3,9 +3,14 @@ import { Parser } from "./parser";
 import { Interpreter } from "./interpreter";
 
 const sourceCode = `
+func add(a: Int, b: Int) -> Int {
+ return a + b;
+}
+
 let x: Int = 10;
 let y = 20;
-print(x + y);
+let resultado = add(x, y);
+print(resultado);
 
 let limite = 3;
 
