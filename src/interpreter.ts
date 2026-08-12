@@ -113,6 +113,12 @@ export class Interpreter {
           this.evaluateStmt(stmt.body, loopEnv);
         }
         break;
+      case "WhileStmt":
+        while (this.evaluateExpr(stmt.condition, env)) {
+          const loopEnv = new Environment(env);
+          this.evaluateStmt(stmt.body, loopEnv);
+        }
+        break;
       default:
         // O TS garante que tratamos todos os "kinds" de Stmt aqui
         throw new Error(`Statement not implemented in the interpreter`);
@@ -132,6 +138,14 @@ export class Interpreter {
             throw new Error("TypeError: Cannot assign to property on non-object.");
           }
           objectInstance.set(expr.assignee.property, assignValue);
+          return assignValue;
+        } else if (expr.assignee.kind === "IndexExpr") {
+          const arrayInstance = this.evaluateExpr(expr.assignee.object, env);
+          if (!Array.isArray(arrayInstance)) {
+            throw new Error("TypeError: Cannot index into a non-array.");
+          }
+          const indexValue = this.evaluateExpr(expr.assignee.index, env);
+          arrayInstance[indexValue] = assignValue;
           return assignValue;
         } else {
           throw new Error(`SyntaxError: Invalid assignment target`);
@@ -259,8 +273,15 @@ export class Interpreter {
         return null; // Caso a função não tenha return
       case "NumericLiteral":
         return expr.value;
+      case "BooleanLiteral":
+        return expr.value;
       case "StringLiteral":
         return expr.value;
+      case "StringInterpolationExpr":
+        return expr.parts.map(p => {
+          if (typeof p === "string") return p;
+          return String(this.evaluateExpr(p, env));
+        }).join("");
       case "Identifier":
         const value = env.get(expr.symbol);
         if (value === undefined) {
@@ -269,6 +290,31 @@ export class Interpreter {
           );
         }
         return value;
+      case "LogicalExpr":
+        const leftVal = this.evaluateExpr(expr.left, env);
+        if (expr.operator === "&&") {
+          if (!leftVal) return leftVal;
+          return this.evaluateExpr(expr.right, env);
+        } else if (expr.operator === "||") {
+          if (leftVal) return leftVal;
+          return this.evaluateExpr(expr.right, env);
+        }
+        throw new Error(`Unknown logical operator: ${expr.operator}`);
+      case "UnaryExpr":
+        const arg = this.evaluateExpr(expr.argument, env);
+        if (expr.operator === "-") return -arg;
+        if (expr.operator === "!") return !arg;
+        throw new Error(`Unknown unary operator: ${expr.operator}`);
+      case "ArrayLiteral":
+        return expr.elements.map(e => this.evaluateExpr(e, env));
+      case "IndexExpr":
+        const obj = this.evaluateExpr(expr.object, env);
+        const idx = this.evaluateExpr(expr.index, env);
+        if (Array.isArray(obj)) {
+          return obj[idx];
+        } else {
+          throw new Error("TypeError: Indexing is only supported on arrays.");
+        }
       case "BinaryExpr":
         const left = this.evaluateExpr(expr.left, env);
         const right = this.evaluateExpr(expr.right, env);
@@ -281,6 +327,8 @@ export class Interpreter {
             return left * right;
           case "/":
             return left / right;
+          case "%":
+            return left % right;
           case "==":
             return left === right;
           case "!=":

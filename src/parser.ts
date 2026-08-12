@@ -13,6 +13,7 @@ import {
   type StructDeclaration,
   type ImplDeclaration,
 } from "./ast";
+import { Lexer } from "./lexer";
 
 export class Parser {
   private pos = 0;
@@ -50,27 +51,29 @@ export class Parser {
   }
 
   private parseStatement(): Stmt {
-    if (this.current().type === TokenType.Impl) {
-      return this.parseImplDeclaration();
-    } else if (this.current().type === TokenType.Struct) {
-      return this.parseStructDeclaration();
-    } else if (this.current().type === TokenType.Let) {
-      return this.parseVarDeclaration();
-    } else if (this.current().type === TokenType.Print) {
-      return this.parsePrintStatement();
-    } else if (this.current().type === TokenType.If) {
-      return this.parseIfStatement();
-    } else if (this.current().type === TokenType.For) {
-      return this.parseForStatement();
-    } else if (this.current().type === TokenType.Func) {
-      return this.parseFunctionDeclaration();
-    } else if (this.current().type === TokenType.Return) {
-      return this.parseReturnStatement();
-    } else {
-      // Fallback: Se não é palavra-chave de controle, deve ser uma expressão
-      const expression = this.parseExpression();
-      this.consume(TokenType.Semi);
-      return { kind: "ExpressionStatement", expression };
+    switch (this.current().type) {
+      case TokenType.Impl:
+        return this.parseImplDeclaration();
+      case TokenType.Struct:
+        return this.parseStructDeclaration();
+      case TokenType.Let:
+        return this.parseVarDeclaration();
+      case TokenType.Print:
+        return this.parsePrintStatement();
+      case TokenType.If:
+        return this.parseIfStatement();
+      case TokenType.For:
+        return this.parseForStatement();
+      case TokenType.While:
+        return this.parseWhileStmt();
+      case TokenType.Func:
+        return this.parseFunctionDeclaration();
+      case TokenType.Return:
+        return this.parseReturnStatement();
+      default:
+        const expression = this.parseExpression();
+        this.consume(TokenType.Semi);
+        return { kind: "ExpressionStatement", expression };
     }
   }
 
@@ -93,7 +96,7 @@ export class Parser {
   }
 
   private parseCallMemberExpr(): Expr {
-    let expr = this.parsePrimary(); // Pega a variável base (ex: 'p')
+    let expr = this.parsePrimary();
 
     while (true) {
       if (this.current().type === TokenType.Dot) {
@@ -101,11 +104,15 @@ export class Parser {
         const propertyName = this.consume(TokenType.Identifier).value;
         expr = { kind: "MemberExpr", object: expr, property: propertyName };
       } else if (this.current().type === TokenType.LParen) {
-        // É uma chamada de função/método (ex: (...))
         this.consume(TokenType.LParen);
         const args = this.parseArguments();
         this.consume(TokenType.RParen);
         expr = { kind: "CallExpr", caller: expr, args };
+      } else if (this.current().type === TokenType.LBracket) {
+        this.consume(TokenType.LBracket);
+        const index = this.parseExpression();
+        this.consume(TokenType.RBracket);
+        expr = { kind: "IndexExpr", object: expr, index };
       } else {
         break;
       }
@@ -142,7 +149,6 @@ export class Parser {
 
       properties.push({ name: propertyName, typeAnnotation });
 
-      // Consumir a vírgula (que pode ser opcional no último item, como no Rust)
       if (this.current().type === TokenType.Comma) {
         this.consume(TokenType.Comma);
       }
@@ -159,7 +165,6 @@ export class Parser {
     this.consume(TokenType.LParen);
     const parameters: Parameter[] = [];
 
-    // Analisa os parâmetros: (a: Int, b: Int)
     while (
       this.current().type !== TokenType.RParen &&
       this.current().type != TokenType.EOF
@@ -189,7 +194,6 @@ export class Parser {
   private parseReturnStatement(): ReturnStmt {
     this.consume(TokenType.Return);
 
-    // Se for só "return;", o valor é undefined. Se tiver algo depois, parseia como expressão
     let value: Expr | undefined = undefined;
     if (this.current().type !== TokenType.Semi) {
       value = this.parseExpression();
@@ -231,13 +235,20 @@ export class Parser {
     const iteratorName = this.consume(TokenType.Identifier).value;
     this.consume(TokenType.In);
 
-    const start = this.parseExpression(); // Ex: 0
+    const start = this.parseExpression();
     this.consume(TokenType.DotDot);
-    const end = this.parseExpression(); // Ex: 10
+    const end = this.parseExpression();
 
     const body = this.parseBlock();
 
     return { kind: "ForStmt", iteratorName, start, end, body };
+  }
+
+  private parseWhileStmt(): Stmt {
+    this.consume(TokenType.While);
+    const condition = this.parseExpression();
+    const body = this.parseBlock();
+    return { kind: "WhileStmt", condition, body };
   }
 
   private parseVarDeclaration(): VarDeclaration {
@@ -283,7 +294,27 @@ export class Parser {
   }
 
   private parseBinaryExpr(): Expr {
-    return this.parseEquality();
+    return this.parseLogicalOr();
+  }
+
+  private parseLogicalOr(): Expr {
+    let left = this.parseLogicalAnd();
+    while (this.current().type === TokenType.Or) {
+      const operator = this.consume(TokenType.Or).value;
+      const right = this.parseLogicalAnd();
+      left = { kind: "LogicalExpr", left, operator, right };
+    }
+    return left;
+  }
+
+  private parseLogicalAnd(): Expr {
+    let left = this.parseEquality();
+    while (this.current().type === TokenType.And) {
+      const operator = this.consume(TokenType.And).value;
+      const right = this.parseEquality();
+      left = { kind: "LogicalExpr", left, operator, right };
+    }
+    return left;
   }
 
   private parseEquality(): Expr {
@@ -328,16 +359,26 @@ export class Parser {
   }
 
   private parseMultiplicative(): Expr {
-    let left = this.parseMemberExpr();
+    let left = this.parseUnary();
     while (
       this.current().type === TokenType.Star ||
-      this.current().type === TokenType.Slash
+      this.current().type === TokenType.Slash ||
+      this.current().type === TokenType.Modulo
     ) {
       const operator = this.consume(this.current().type).value;
-      const right = this.parseMemberExpr();
+      const right = this.parseUnary();
       left = { kind: "BinaryExpr", left, operator, right };
     }
     return left;
+  }
+
+  private parseUnary(): Expr {
+    if (this.current().type === TokenType.Bang || this.current().type === TokenType.Minus) {
+      const operator = this.consume(this.current().type).value;
+      const argument = this.parseUnary(); // recursivo para lidar com !!true ou --5
+      return { kind: "UnaryExpr", operator, argument };
+    }
+    return this.parseMemberExpr();
   }
 
   // ATENÇÂO: Acesso a propriedades (p.x) tem a precedência mais alta.
@@ -346,11 +387,18 @@ export class Parser {
     // Começa com o lado esquerdo (o objeto/variável)
     let object = this.parseCallMemberExpr();
 
-    // Enquanto tiver ponto, continua acessando propriedades
-    while (this.current().type === TokenType.Dot) {
-      this.consume(TokenType.Dot);
-      const propertyName = this.consume(TokenType.Identifier).value;
-      object = { kind: "MemberExpr", object, property: propertyName };
+    // Enquanto tiver ponto ou colchetes, continua acessando propriedades
+    while (this.current().type === TokenType.Dot || this.current().type === TokenType.LBracket) {
+      if (this.current().type === TokenType.Dot) {
+        this.consume(TokenType.Dot);
+        const propertyName = this.consume(TokenType.Identifier).value;
+        object = { kind: "MemberExpr", object, property: propertyName };
+      } else if (this.current().type === TokenType.LBracket) {
+        this.consume(TokenType.LBracket);
+        const index = this.parseExpression();
+        this.consume(TokenType.RBracket);
+        object = { kind: "IndexExpr", object, index };
+      }
     }
 
     return object;
@@ -364,9 +412,62 @@ export class Parser {
       return { kind: "NumericLiteral", value: parseFloat(token.value) };
     } else if (token.type === TokenType.String) {
       this.consume(TokenType.String);
-      // Remove as aspas duplas ao redor da string
-      const cleanValue = token.value.slice(1, -1);
-      return { kind: "StringLiteral", value: cleanValue };
+      const content = token.value.slice(1, -1);
+      
+      const parts: (string | Expr)[] = [];
+      let currentStr = "";
+      let i = 0;
+      
+      while (i < content.length) {
+        if (content[i] === '$' && content[i+1] === '{') {
+          if (currentStr) parts.push(currentStr);
+          currentStr = "";
+          i += 2;
+          
+          let exprStr = "";
+          let braceDepth = 1;
+          while (i < content.length && braceDepth > 0) {
+            if (content[i] === '{') braceDepth++;
+            if (content[i] === '}') braceDepth--;
+            if (braceDepth > 0) exprStr += content[i];
+            i++;
+          }
+          
+          // Lexer sub-chamada para interpolação
+          const subLexer = new Lexer(exprStr);
+          const subParser = new Parser(subLexer.tokenize());
+          parts.push(subParser.parseExpression());
+          
+        } else {
+          currentStr += content[i];
+          i++;
+        }
+      }
+      
+      if (currentStr) parts.push(currentStr);
+      
+      if (parts.every(p => typeof p === "string")) {
+        return { kind: "StringLiteral", value: content };
+      }
+      
+      return { kind: "StringInterpolationExpr", parts };
+    } else if (token.type === TokenType.True) {
+      this.consume(TokenType.True);
+      return { kind: "BooleanLiteral", value: true };
+    } else if (token.type === TokenType.False) {
+      this.consume(TokenType.False);
+      return { kind: "BooleanLiteral", value: false };
+    } else if (token.type === TokenType.LBracket) {
+      this.consume(TokenType.LBracket);
+      const elements: Expr[] = [];
+      while (this.current().type !== TokenType.RBracket && this.current().type !== TokenType.EOF) {
+        elements.push(this.parseExpression());
+        if (this.current().type === TokenType.Comma) {
+          this.consume(TokenType.Comma);
+        }
+      }
+      this.consume(TokenType.RBracket);
+      return { kind: "ArrayLiteral", elements };
     } else if (token.type === TokenType.Identifier) {
       this.consume(TokenType.Identifier);
 

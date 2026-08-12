@@ -35,6 +35,15 @@ export enum TokenType {
   NotEq = "NOTEQ", // !=
   LtEq = "LTEQ", // <=
   GtEq = "GTEQ", // >=
+  And = "AND", // &&
+  Or = "OR", // ||
+  Bang = "BANG", // !
+  Modulo = "MODULO", // %
+  While = "WHILE",
+  LBracket = "LBRACKET", // [
+  RBracket = "RBRACKET", // ]
+  True = "TRUE", // true
+  False = "FALSE", // false
 }
 
 export interface Token {
@@ -51,21 +60,34 @@ export type Stmt =
   | PrintStmt
   | IfStmt
   | ForStmt
+  | WhileStmt
   | BlockStmt
   | FunctionDeclaration
   | ReturnStmt
   | StructDeclaration
   | ImplDeclaration
   | ExpressionStatement;
+
 export type Expr =
   | NumericLiteral
+  | BooleanLiteral
   | StringLiteral
+  | StringInterpolationExpr
   | Identifier
   | BinaryExpr
+  | LogicalExpr
+  | UnaryExpr
   | CallExpr
   | StructExpr
   | MemberExpr
+  | ArrayLiteral
+  | IndexExpr
   | AssignmentExpr;
+
+export interface BooleanLiteral {
+  kind: "BooleanLiteral";
+  value: boolean;
+}
 
 export interface ExpressionStatement {
   kind: "ExpressionStatement";
@@ -74,8 +96,43 @@ export interface ExpressionStatement {
 
 export interface AssignmentExpr {
   kind: "AssignmentExpr";
-  assignee: Expr; // Target of the assignment (e.g., Identifier or MemberExpr)
+  assignee: Identifier | MemberExpr | IndexExpr; // Target of the assignment (e.g., Identifier or MemberExpr)
   value: Expr;
+}
+
+export interface StringInterpolationExpr {
+  kind: "StringInterpolationExpr";
+  parts: (string | Expr)[];
+}
+
+export interface LogicalExpr {
+  kind: "LogicalExpr";
+  left: Expr;
+  operator: string;
+  right: Expr;
+}
+
+export interface UnaryExpr {
+  kind: "UnaryExpr";
+  operator: string;
+  argument: Expr;
+}
+
+export interface WhileStmt {
+  kind: "WhileStmt";
+  condition: Expr;
+  body: BlockStmt;
+}
+
+export interface ArrayLiteral {
+  kind: "ArrayLiteral";
+  elements: Expr[];
+}
+
+export interface IndexExpr {
+  kind: "IndexExpr";
+  object: Expr;
+  index: Expr;
 }
 
 export interface ImplDeclaration {
