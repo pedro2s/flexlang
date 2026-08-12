@@ -45,6 +45,8 @@ export class Interpreter {
   // Ambiente para armazenar variáveis na memória
   private globalEnv = new Environment();
 
+  constructor(private stdout: (msg: string) => void = console.log) {}
+
   public run(program: Stmt[]) {
     for (const stmt of program) {
       this.evaluateStmt(stmt, this.globalEnv);
@@ -83,7 +85,8 @@ export class Interpreter {
         env.define(stmt.name, value);
         break;
       case "PrintStmt":
-        console.log(this.evaluateExpr(stmt.value, env));
+        const output = this.evaluateExpr(stmt.value, env);
+        this.stdout(String(output));
         break;
       case "BlockStmt":
         // Cria um NOVO escopo isolado que herda do ambiente pai
