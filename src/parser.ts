@@ -255,6 +255,11 @@ export class Parser {
 
   private parseVarDeclaration(): VarDeclaration {
     this.consume(TokenType.Let);
+    let isMut = false;
+    if (this.current().type === TokenType.Mut) {
+        this.consume(TokenType.Mut);
+        isMut = true;
+    }
     const name = this.consume(TokenType.Identifier).value;
 
     let typeAnnotation: TypeNode | undefined = undefined;
@@ -267,7 +272,7 @@ export class Parser {
     const value = this.parseExpression();
     this.consume(TokenType.Semi);
 
-    return { kind: "VarDeclaration", name, typeAnnotation, value };
+    return { kind: "VarDeclaration", name, typeAnnotation, value, isMut };
   }
 
   // =========== PARSER DE TIPOS ===========

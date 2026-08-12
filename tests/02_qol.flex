@@ -1,7 +1,7 @@
 // Teste 02: Melhorias Básicas (Fase 0.5)
 
 // 1. Arrays e Indexação
-let arr = [10, 20, 30];
+let mut arr = [10, 20, 30];
 print(arr[1]); // 20
 arr[1] = 99;
 print(arr[1]); // 99
@@ -24,7 +24,7 @@ print(c); // true
   Este é um comentário
   multilinha
 */
-let count = 0;
+let mut count = 0;
 while count < 5 {
     if count % 2 == 0 {
         print(count); // 0, 2, 4

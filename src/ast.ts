@@ -2,6 +2,7 @@ export enum TokenType {
   Number = "NUMBER",
   String = "STRING",
   Let = "LET",
+  Mut = "MUT",
   Print = "PRINT",
   If = "IF", // Novos tokens para controle de fluxo
   Else = "ELSE",
@@ -233,6 +234,7 @@ export interface VarDeclaration {
   name: string;
   value: Expr;
   typeAnnotation?: TypeNode | undefined;
+  isMut: boolean;
 }
 
 export interface PrintStmt {

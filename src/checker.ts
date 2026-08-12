@@ -18,15 +18,15 @@ export type FlexType =
 
 // --- Ambiente de Tipos (Environment para checagem estática) ---
 class TypeEnvironment {
-  private variables = new Map<string, FlexType>();
+  private variables = new Map<string, { type: FlexType; isMut: boolean }>();
 
   constructor(private enclosing?: TypeEnvironment) {}
 
-  define(name: string, type: FlexType): void {
-    this.variables.set(name, type);
+  define(name: string, type: FlexType, isMut: boolean): void {
+    this.variables.set(name, { type, isMut });
   }
 
-  get(name: string): FlexType | undefined {
+  get(name: string): { type: FlexType; isMut: boolean } | undefined {
     if (this.variables.has(name)) {
       return this.variables.get(name)!;
     }
@@ -79,7 +79,7 @@ export class TypeChecker {
           // Inferência Local
           declaredType = valueType;
         }
-        env.define(stmt.name, declaredType);
+        env.define(stmt.name, declaredType, stmt.isMut);
         break;
 
       case "ExpressionStatement":
@@ -123,7 +123,7 @@ export class TypeChecker {
           throw new Error("TypeError: For loop bounds must be Int");
         }
         const forEnv = new TypeEnvironment(env);
-        forEnv.define(stmt.iteratorName, { kind: "Int" });
+        forEnv.define(stmt.iteratorName, { kind: "Int" }, false);
         this.checkStmt(stmt.body, forEnv);
         break;
 
@@ -133,7 +133,7 @@ export class TypeChecker {
         
         const funcEnv = new TypeEnvironment(env);
         for (const param of stmt.parameters) {
-          funcEnv.define(param.name, this.resolveTypeNode(param.typeAnnotation));
+          funcEnv.define(param.name, this.resolveTypeNode(param.typeAnnotation), false);
         }
         this.checkStmt(stmt.body, funcEnv);
         break;
@@ -164,11 +164,11 @@ export class TypeChecker {
         return { kind: "String" };
         
       case "Identifier":
-        const type = env.get(expr.symbol);
-        if (!type) {
+        const varData = env.get(expr.symbol);
+        if (!varData) {
           throw new Error(`ReferenceError: Variable '${expr.symbol}' not found`);
         }
-        return type;
+        return varData.type;
 
       case "BinaryExpr":
         const leftType = this.checkExpr(expr.left, env);
@@ -269,8 +269,22 @@ export class TypeChecker {
         let assigneeType: FlexType = { kind: "Any" };
         
         if (expr.assignee.kind === "Identifier") {
+            const varData = env.get(expr.assignee.symbol);
+            if (varData && !varData.isMut) {
+                 throw new Error(`TypeError: Cannot assign twice to immutable variable '${expr.assignee.symbol}'`);
+            }
             assigneeType = this.checkExpr(expr.assignee, env);
         } else if (expr.assignee.kind === "IndexExpr" || expr.assignee.kind === "MemberExpr") {
+            let root = expr.assignee;
+            while (root.kind === "MemberExpr" || root.kind === "IndexExpr") {
+                root = root.object as any;
+            }
+            if (root.kind === "Identifier") {
+                const rootData = env.get(root.symbol);
+                if (rootData && !rootData.isMut) {
+                    throw new Error(`TypeError: Cannot mutate property of immutable variable '${root.symbol}'`);
+                }
+            }
             assigneeType = this.checkExpr(expr.assignee, env);
         }
 

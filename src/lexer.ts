@@ -19,6 +19,7 @@ export class Lexer {
     [TokenType.While, /^while\b/],
     [TokenType.In, /^in\b/],
     [TokenType.Let, /^let\b/],
+    [TokenType.Mut, /^mut\b/],
     [TokenType.Print, /^print\b/],
     [TokenType.True, /^true\b/],
     [TokenType.False, /^false\b/],
