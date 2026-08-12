@@ -51,6 +51,11 @@ print(p.sum()); // Imprime 30
 p.set_x(100);
 print(p.x); // Imprime 100
 
+print(10 + 2 * 5); // 20 (Testando precedência: multiplicação antes da soma)
+print((10 + 2) * 5); // 60
+print(10 != 5); // true
+print(10 <= 10); // true
+
 `;
 
 console.log("Analisando código fonte da FlexLang...\n");

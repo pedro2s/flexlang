@@ -283,26 +283,60 @@ export class Parser {
   }
 
   private parseBinaryExpr(): Expr {
-    const left = this.parseMemberExpr();
+    return this.parseEquality();
+  }
 
-    if (this.current().type === TokenType.Plus) {
-      const operator = this.consume(TokenType.Plus).value;
-      const right = this.parseMemberExpr();
-      return { kind: "BinaryExpr", left, operator, right };
-    } else if (this.current().type === TokenType.EqEq) {
-      const operator = this.consume(TokenType.EqEq).value;
-      const right = this.parseMemberExpr();
-      return { kind: "BinaryExpr", left, operator, right };
-    } else if (this.current().type === TokenType.Gt) {
-      const operator = this.consume(TokenType.Gt).value;
-      const right = this.parseMemberExpr();
-      return { kind: "BinaryExpr", left, operator, right };
-    } else if (this.current().type === TokenType.Lt) {
-      const operator = this.consume(TokenType.Lt).value;
-      const right = this.parseMemberExpr();
-      return { kind: "BinaryExpr", left, operator, right };
+  private parseEquality(): Expr {
+    let left = this.parseRelational();
+    while (
+      this.current().type === TokenType.EqEq ||
+      this.current().type === TokenType.NotEq
+    ) {
+      const operator = this.consume(this.current().type).value;
+      const right = this.parseRelational();
+      left = { kind: "BinaryExpr", left, operator, right };
     }
+    return left;
+  }
 
+  private parseRelational(): Expr {
+    let left = this.parseAdditive();
+    while (
+      this.current().type === TokenType.Gt ||
+      this.current().type === TokenType.Lt ||
+      this.current().type === TokenType.GtEq ||
+      this.current().type === TokenType.LtEq
+    ) {
+      const operator = this.consume(this.current().type).value;
+      const right = this.parseAdditive();
+      left = { kind: "BinaryExpr", left, operator, right };
+    }
+    return left;
+  }
+
+  private parseAdditive(): Expr {
+    let left = this.parseMultiplicative();
+    while (
+      this.current().type === TokenType.Plus ||
+      this.current().type === TokenType.Minus
+    ) {
+      const operator = this.consume(this.current().type).value;
+      const right = this.parseMultiplicative();
+      left = { kind: "BinaryExpr", left, operator, right };
+    }
+    return left;
+  }
+
+  private parseMultiplicative(): Expr {
+    let left = this.parseMemberExpr();
+    while (
+      this.current().type === TokenType.Star ||
+      this.current().type === TokenType.Slash
+    ) {
+      const operator = this.consume(this.current().type).value;
+      const right = this.parseMemberExpr();
+      left = { kind: "BinaryExpr", left, operator, right };
+    }
     return left;
   }
 
@@ -389,6 +423,11 @@ export class Parser {
     } else if (token.type === TokenType.Self) {
       this.consume(TokenType.Self);
       return { kind: "Identifier", symbol: "self" };
+    } else if (token.type === TokenType.LParen) {
+      this.consume(TokenType.LParen);
+      const expr = this.parseExpression();
+      this.consume(TokenType.RParen);
+      return expr;
     } else {
       throw new Error(`SyntaxError: Invalid expression '${token.value}'`);
     }

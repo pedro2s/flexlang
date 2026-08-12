@@ -269,19 +269,30 @@ export class Interpreter {
       case "BinaryExpr":
         const left = this.evaluateExpr(expr.left, env);
         const right = this.evaluateExpr(expr.right, env);
-        if (expr.operator === "+") {
-          return left + right;
+        switch (expr.operator) {
+          case "+":
+            return left + right;
+          case "-":
+            return left - right;
+          case "*":
+            return left * right;
+          case "/":
+            return left / right;
+          case "==":
+            return left === right;
+          case "!=":
+            return left !== right;
+          case ">":
+            return left > right;
+          case "<":
+            return left < right;
+          case ">=":
+            return left >= right;
+          case "<=":
+            return left <= right;
+          default:
+            throw new Error(`Unknown operator ${expr.operator}`);
         }
-        if (expr.operator === ">") {
-          return left > right;
-        }
-        if (expr.operator === "<") {
-          return left < right;
-        }
-        if (expr.operator === "==") {
-          return left === right;
-        }
-        throw new Error(`Unknown binary operator: ${expr.operator}`);
       default:
         throw new Error(`Expression not implemented in the interpreter`);
     }

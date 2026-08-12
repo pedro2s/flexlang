@@ -29,11 +29,19 @@ export enum TokenType {
   Dot = "DOT", // .
   Impl = "IMPL",
   Self = "SELF",
+  Minus = "MINUS", // -
+  Star = "STAR", // *
+  Slash = "SLASH", // /
+  NotEq = "NOTEQ", // !=
+  LtEq = "LTEQ", // <=
+  GtEq = "GTEQ", // >=
 }
 
 export interface Token {
   type: TokenType;
   value: string;
+  line: number;
+  column: number;
 }
 
 // --- Definição da AST (Discriminated Unions) ---
