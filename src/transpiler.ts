@@ -3,6 +3,7 @@ import type { Stmt, Expr, TypeNode } from "./ast";
 export class GoTranspiler {
   private out: string = "";
   private indentLevel: number = 0;
+  private importedModules = new Set<string>();
 
   constructor() {}
 
@@ -12,7 +13,9 @@ export class GoTranspiler {
 
     // Separa declaracoes de escopo global (structs, funcs) do corpo do programa
     for (const stmt of program) {
-      if (
+      if (stmt.kind === "ImportDeclaration") {
+        this.importedModules.add(stmt.moduleName);
+      } else if (
         stmt.kind === "StructDeclaration" ||
         stmt.kind === "FunctionDeclaration" ||
         stmt.kind === "EnumDeclaration" ||
@@ -29,6 +32,27 @@ export class GoTranspiler {
     this.emitLine("");
     this.emitLine('import "fmt"');
     this.emitLine('import "sync"'); // Para o motor de scope/spawn
+    
+    if (this.importedModules.has("\"net/http\"")) {
+         this.emitLine('import "net/http"');
+         this.emitLine('import "encoding/json"');
+         this.emitLine("");
+         this.emitLine("// --- FlexLang HTTP Boilerplate ---");
+         this.emitLine("type Request struct { Raw *http.Request }");
+         this.emitLine("type Response struct { Raw http.ResponseWriter }");
+         this.emitLine("func (r Response) json(data any) {");
+         this.emitLine("    r.Raw.Header().Set(\"Content-Type\", \"application/json\")");
+         this.emitLine("    json.NewEncoder(r.Raw).Encode(data)");
+         this.emitLine("}");
+         this.emitLine("type Server struct { Addr string; Mux *http.ServeMux }");
+         this.emitLine("func NewServer(addr string) *Server { return &Server{Addr: addr, Mux: http.NewServeMux()} }");
+         this.emitLine("func (s *Server) route(path string, handler func(req Request, res Response)) {");
+         this.emitLine("    s.Mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) { handler(Request{Raw: r}, Response{Raw: w}) })");
+         this.emitLine("}");
+         this.emitLine("func (s *Server) start() { http.ListenAndServe(s.Addr, s.Mux) }");
+         this.emitLine("// ---------------------------------");
+    }
+
     this.emitLine("");
 
     for (const decl of declarations) {
@@ -201,6 +225,14 @@ export class GoTranspiler {
         this.emitLine(`}`);
         break;
 
+      case "StructDeclaration":
+      case "ImplDeclaration":
+      case "ImportDeclaration":
+      case "FunctionDeclaration":
+      case "TraitDeclaration":
+        // Tratados no top-level iterador, não emitem nada aqui
+        break;
+
       default:
         this.emitLine(`// TODO: transpile ${stmt.kind}`);
         break;
@@ -232,8 +264,8 @@ export class GoTranspiler {
       case "CallExpr":
         if (expr.caller.kind === "MemberExpr") {
             const member = expr.caller;
-            if (member.object.kind === "Identifier" && member.object.symbol === "Channel" && member.property === "new") {
-                  return `make(chan any)`; // Pode ser refinado usando Types depois
+            if (member.object.kind === "Identifier" && member.object.symbol === "Server" && member.property === "new") {
+                  return `NewServer(${this.transpileExpr(expr.args[0])})`; 
             }
             
             // Translate Channel method calls to Go operators

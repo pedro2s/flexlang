@@ -71,7 +71,7 @@ export class TypeChecker {
       } else if (stmt.kind === "TraitDeclaration") {
         this.traits.set(stmt.name, stmt);
       } else if (stmt.kind === "ImportDeclaration") {
-        if (stmt.moduleName === "net/http") {
+        if (stmt.moduleName === "\"net/http\"") {
              this.structs.set("Server", { kind: "StructDeclaration", name: "Server", properties: [] });
              this.structs.set("Request", { kind: "StructDeclaration", name: "Request", properties: [] });
              this.structs.set("Response", { kind: "StructDeclaration", name: "Response", properties: [] });

@@ -50,6 +50,14 @@ export class Parser {
     );
   }
 
+  private match(type: TokenType): boolean {
+    if (this.current().type === type) {
+      this.consume(type);
+      return true;
+    }
+    return false;
+  }
+
   public parse(): Stmt[] {
     const statements: Stmt[] = [];
 
@@ -146,7 +154,7 @@ export class Parser {
     }
     
     // Se não tiver LBrace, podemos assumir import "module" (sem destructuring por agora)
-    const moduleName = this.consume(TokenType.StringLiteral).value;
+    const moduleName = this.consume(TokenType.String).value;
     this.consume(TokenType.Semi);
     
     return { kind: "ImportDeclaration", moduleName, imports };
@@ -157,8 +165,8 @@ export class Parser {
     let traitName: string | undefined = undefined;
     let structName = this.consume(TokenType.Identifier).value;
     
-    if (this.current().type === TokenType.Identifier && this.current().value === "for") {
-         this.consume(TokenType.Identifier);
+    if (this.current().type === TokenType.For) {
+         this.consume(TokenType.For);
          traitName = structName;
          structName = this.consume(TokenType.Identifier).value;
     }

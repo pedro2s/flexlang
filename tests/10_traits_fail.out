@@ -1,1 +1,1 @@
-this.match is not a function
+TypeError: Struct 'Dog' does not implement method 'speak' from trait 'Animal'

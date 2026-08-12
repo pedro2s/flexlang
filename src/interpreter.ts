@@ -77,6 +77,60 @@ class FlexChannel {
   }
 }
 
+class FlexServer {
+    private mux = new Map<string, any>(); // path -> FlexFunction
+    private server: http.Server;
+    private interpreter: Interpreter;
+    private env: Environment;
+    
+    constructor(private addr: string, interpreter: Interpreter, env: Environment) {
+        this.interpreter = interpreter;
+        this.env = env;
+        
+        this.server = http.createServer((req, res) => {
+            const path = req.url || "/";
+            const handler = this.mux.get(path);
+            if (handler) {
+                 const reqObj = new Map<string, any>();
+                 const resObj = new Map<string, any>();
+                 resObj.set("json", (data: any) => {
+                     res.setHeader("Content-Type", "application/json");
+                     // Handle FlexLang Map objects inside JSON!
+                     res.end(JSON.stringify(data, (k, v) => (v instanceof Map ? Object.fromEntries(v) : v)));
+                 });
+                 
+                 // Run handler asynchronously
+                 const mEnv = new Environment(handler.closure);
+                 handler.declaration.parameters.forEach((param: any, i: number) => {
+                     mEnv.define(param.name, i === 0 ? reqObj : resObj);
+                 });
+                 
+                 (async () => {
+                     try {
+                         for (const stmt of handler.declaration.body.body) {
+                             await this.interpreter.evaluateStmt(stmt, mEnv);
+                         }
+                     } catch (e) {
+                         if (!(e instanceof ReturnException)) console.error("Error in handler:", e);
+                     }
+                 })();
+            } else {
+                res.writeHead(404);
+                res.end("Not found");
+            }
+        });
+    }
+    
+    public route(path: string, handler: any) {
+        this.mux.set(path, handler);
+    }
+    
+    public start() {
+        const port = parseInt(this.addr.replace(":", ""));
+        this.server.listen(port, () => console.log(`[FlexLang] Server listening on ${this.addr}`));
+    }
+}
+
 export class Interpreter {
   // Ambiente para armazenar variáveis na memória
   private globalEnv = new Environment();
@@ -169,8 +223,11 @@ export class Interpreter {
         break;
 
       case "StructDeclaration":
-        // Guardamos a definição da struct na memória (sem valor inicial, só o molde)
         env.define(stmt.name, stmt);
+        break;
+      case "TraitDeclaration":
+      case "ImportDeclaration":
+        // Apenas definições
         break;
       case "FunctionDeclaration":
         // Guardamos a declaração envolta em uma closure (FlexFunction)
@@ -298,6 +355,10 @@ export class Interpreter {
           if (expr.caller.object.kind === "Identifier" && expr.caller.object.symbol === "Channel" && expr.caller.property === "new") {
               return new FlexChannel();
           }
+          if (expr.caller.object.kind === "Identifier" && expr.caller.object.symbol === "Server" && expr.caller.property === "new") {
+              const addr = await this.evaluateExpr(expr.args[0], env);
+              return new FlexServer(addr, this, env);
+          }
 
           const objectInstanceCall = await this.evaluateExpr(expr.caller.object, env);
           
@@ -308,6 +369,31 @@ export class Interpreter {
                   return null;
               } else if (expr.caller.property === "recv") {
                   return await objectInstanceCall.recv();
+              }
+          }
+          if (objectInstanceCall instanceof FlexServer) {
+              if (expr.caller.property === "route") {
+                  const path = await this.evaluateExpr(expr.args[0], env);
+                  const handlerName = (expr.args[1] as any).symbol; // assumes Identifier
+                  const handler = env.get(handlerName);
+                  objectInstanceCall.route(path, handler);
+                  return null;
+              } else if (expr.caller.property === "start") {
+                  objectInstanceCall.start();
+                  // We can await a never-resolving promise to keep the interpreter alive!
+                  return new Promise(() => {});
+              }
+          }
+          
+          // Tratamento de metodos dinâmicos (como res.json)
+          if (objectInstanceCall instanceof Map && objectInstanceCall.has(expr.caller.property)) {
+              const dynMethod = objectInstanceCall.get(expr.caller.property);
+              if (typeof dynMethod === "function") {
+                  const args = [];
+                  for (const arg of expr.args) {
+                      args.push(await this.evaluateExpr(arg, env));
+                  }
+                  return dynMethod(...args);
               }
           }
           
