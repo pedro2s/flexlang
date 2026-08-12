@@ -94,6 +94,31 @@ export interface ExpressionStatement {
   expression: Expr;
 }
 
+// --- Definição dos Nós de Tipagem ---
+
+export type TypeNode =
+  | NamedTypeNode
+  | GenericTypeNode
+  | ArrayTypeNode;
+
+export interface NamedTypeNode {
+  kind: "NamedTypeNode";
+  name: string; // ex: "Int", "String"
+}
+
+export interface GenericTypeNode {
+  kind: "GenericTypeNode";
+  name: string; // ex: "Result"
+  typeArguments: TypeNode[]; // ex: [NamedTypeNode("Int")]
+}
+
+export interface ArrayTypeNode {
+  kind: "ArrayTypeNode";
+  elementType: TypeNode; // ex: [Int] (Array de Int)
+}
+
+// --- Fim Tipagem ---
+
 export interface AssignmentExpr {
   kind: "AssignmentExpr";
   assignee: Identifier | MemberExpr | IndexExpr; // Target of the assignment (e.g., Identifier or MemberExpr)
@@ -144,7 +169,7 @@ export interface ImplDeclaration {
 export interface StructDeclaration {
   kind: "StructDeclaration";
   name: string;
-  properties: { name: string; typeAnnotation: string }[];
+  properties: { name: string; typeAnnotation: TypeNode }[];
 }
 
 export interface StructExpr {
@@ -161,14 +186,14 @@ export interface MemberExpr {
 
 export interface Parameter {
   name: string;
-  typeAnnotation: string;
+  typeAnnotation: TypeNode;
 }
 
 export interface FunctionDeclaration {
   kind: "FunctionDeclaration";
   name: string;
   parameters: Parameter[];
-  returnType?: string | undefined;
+  returnType?: TypeNode | undefined;
   body: BlockStmt;
 }
 
@@ -207,7 +232,7 @@ export interface VarDeclaration {
   kind: "VarDeclaration";
   name: string;
   value: Expr;
-  typeAnnotation?: string | undefined;
+  typeAnnotation?: TypeNode | undefined;
 }
 
 export interface PrintStmt {

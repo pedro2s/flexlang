@@ -1,0 +1,1 @@
+TypeError: Cannot assign value of type 'Int' to variable 'bad' of type 'String'

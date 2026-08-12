@@ -12,6 +12,7 @@ import {
   type ReturnStmt,
   type StructDeclaration,
   type ImplDeclaration,
+  type TypeNode,
 } from "./ast";
 import { Lexer } from "./lexer";
 
@@ -84,7 +85,7 @@ export class Parser {
     this.consume(TokenType.LBrace);
     const methods: FunctionDeclaration[] = [];
 
-    while (
+    while(
       this.current().type !== TokenType.RBrace &&
       this.current().type !== TokenType.EOF
     ) {
@@ -138,14 +139,14 @@ export class Parser {
     const name = this.consume(TokenType.Identifier).value;
 
     this.consume(TokenType.LBrace);
-    const properties: { name: string; typeAnnotation: string }[] = [];
+    const properties: { name: string; typeAnnotation: TypeNode }[] = [];
     while (
       this.current().type !== TokenType.RBrace &&
       this.current().type !== TokenType.EOF
     ) {
       const propertyName = this.consume(TokenType.Identifier).value;
       this.consume(TokenType.Colon);
-      const typeAnnotation = this.consume(TokenType.Identifier).value;
+      const typeAnnotation = this.parseTypeAnnotation();
 
       properties.push({ name: propertyName, typeAnnotation });
 
@@ -171,7 +172,8 @@ export class Parser {
     ) {
       const paramName = this.consume(TokenType.Identifier).value;
       this.consume(TokenType.Colon);
-      const typeAnnotation = this.consume(TokenType.Identifier).value;
+      const typeAnnotation = this.parseTypeAnnotation();
+
       parameters.push({ name: paramName, typeAnnotation });
 
       if (this.current().type === TokenType.Comma) {
@@ -180,10 +182,10 @@ export class Parser {
     }
     this.consume(TokenType.RParen);
 
-    let returnType: string | undefined = undefined;
+    let returnType: TypeNode | undefined = undefined;
     if (this.current().type === TokenType.Arrow) {
       this.consume(TokenType.Arrow);
-      returnType = this.consume(TokenType.Identifier).value;
+      returnType = this.parseTypeAnnotation();
     }
 
     const body = this.parseBlock();
@@ -255,10 +257,10 @@ export class Parser {
     this.consume(TokenType.Let);
     const name = this.consume(TokenType.Identifier).value;
 
-    let typeAnnotation: string | undefined = undefined;
+    let typeAnnotation: TypeNode | undefined = undefined;
     if (this.current().type === TokenType.Colon) {
       this.consume(TokenType.Colon);
-      typeAnnotation = this.consume(TokenType.Identifier).value;
+      typeAnnotation = this.parseTypeAnnotation();
     }
 
     this.consume(TokenType.Assign);
@@ -266,6 +268,33 @@ export class Parser {
     this.consume(TokenType.Semi);
 
     return { kind: "VarDeclaration", name, typeAnnotation, value };
+  }
+
+  // =========== PARSER DE TIPOS ===========
+  private parseTypeAnnotation(): TypeNode {
+    if (this.current().type === TokenType.LBracket) {
+      this.consume(TokenType.LBracket);
+      const elementType = this.parseTypeAnnotation();
+      this.consume(TokenType.RBracket);
+      return { kind: "ArrayTypeNode", elementType };
+    }
+
+    const typeName = this.consume(TokenType.Identifier).value;
+
+    if (this.current().type === TokenType.Lt) {
+      this.consume(TokenType.Lt);
+      const typeArguments: TypeNode[] = [];
+      while (this.current().type !== TokenType.Gt && this.current().type !== TokenType.EOF) {
+        typeArguments.push(this.parseTypeAnnotation());
+        if (this.current().type === TokenType.Comma) {
+          this.consume(TokenType.Comma);
+        }
+      }
+      this.consume(TokenType.Gt);
+      return { kind: "GenericTypeNode", name: typeName, typeArguments };
+    }
+
+    return { kind: "NamedTypeNode", name: typeName };
   }
 
   private parsePrintStatement(): PrintStmt {

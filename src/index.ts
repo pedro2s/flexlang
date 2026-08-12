@@ -1,5 +1,6 @@
 import { Lexer } from "./lexer";
 import { Parser } from "./parser";
+import { TypeChecker } from "./checker";
 import { Interpreter } from "./interpreter";
 
 const sourceCode = `
@@ -70,7 +71,11 @@ const ast = parser.parse();
 console.log("\nAnalisando AST...");
 console.log(ast);
 
-const interpreter = new Interpreter();
+console.log("\nExecutando TypeChecker estático...");
+const typeChecker = new TypeChecker();
+typeChecker.check(ast);
+console.log("Tipos validados com sucesso!");
 
+const interpreter = new Interpreter();
 console.log("\nInterpretando...");
 interpreter.run(ast);

@@ -3,6 +3,7 @@ import * as path from "path";
 import { Lexer } from "../src/lexer";
 import { Parser } from "../src/parser";
 import { Interpreter } from "../src/interpreter";
+import { TypeChecker } from "../src/checker";
 
 const testsDir = path.join(process.cwd(), "tests");
 
@@ -32,6 +33,9 @@ function runTests() {
       const parser = new Parser(tokens);
       const ast = parser.parse();
       
+      const typeChecker = new TypeChecker();
+      typeChecker.check(ast);
+
       const interpreter = new Interpreter(stdout);
       interpreter.run(ast);
     } catch (e: any) {
