@@ -29,7 +29,6 @@ export class Lexer {
     [TokenType.Number, /^\d+(\.\d+)?/],
     // A captura de string pura por regex foi removida. Faremos o parsing manual no laço!
     [TokenType.FatArrow, /^=>/],
-    [TokenType.DoubleColon, /^::/],
     [TokenType.EqEq, /^==/],
     [TokenType.Question, /^\?/],
     [TokenType.NotEq, /^!=/],

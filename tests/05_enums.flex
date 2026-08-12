@@ -6,21 +6,21 @@ enum Status {
     Pendente
 }
 
-let s1 = Status::Sucesso("Arquivo baixado com sucesso!");
-let s2 = Status::Erro(404, "Nao encontrado");
-let s3 = Status::Pendente;
+let s1 = Status.Sucesso("Arquivo baixado com sucesso!");
+let s2 = Status.Erro(404, "Nao encontrado");
+let s3 = Status.Pendente;
 
 func handle_status(s: Status) -> Void {
     match s {
-        Status::Sucesso(msg) => {
+        Status.Sucesso(msg) => {
             print(msg);
         },
-        Status::Erro(codigo, msgErro) => {
+        Status.Erro(codigo, msgErro) => {
             print("Ocorreu um erro: ");
             print(codigo);
             print(msgErro);
         },
-        Status::Pendente => {
+        Status.Pendente => {
             print("Aguardando...");
         }
     }

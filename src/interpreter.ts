@@ -73,7 +73,8 @@ export class Interpreter {
         throw new Error("RuntimeError: Cannot match on non-enum value");
         
       case "EnumDeclaration":
-        // Não fazemos nada em tempo de execução
+        // Guardamos a declaracao para acesso em MemberExpr
+        env.define(stmt.name, stmt);
         break;
         
       case "ExpressionStatement":
@@ -194,104 +195,101 @@ export class Interpreter {
         return instance;
 
       case "MemberExpr":
-        // 1. Avalia quem é o objeto (ex: descobre que 'p' é um Map)
         const objectInstance = this.evaluateExpr(expr.object, env);
-
-        // 2. Busca o valor da propriedade
-        if (
-          objectInstance instanceof Map &&
-          objectInstance.has(expr.property)
-        ) {
-          return objectInstance.get(expr.property);
+        if (typeof objectInstance === "object" && objectInstance !== null && objectInstance.kind === "EnumDeclaration") {
+             // Retorna um construtor parcial de variante ou a própria variante vazia
+             const variantName = expr.property;
+             const variant = objectInstance.variants.find((v: any) => v.name === variantName);
+             if (variant && (!variant.payload || variant.payload.length === 0)) {
+                 return { kind: "EnumVariant", enumName: objectInstance.name, variantName, payload: [] };
+             }
+             return { __isEnumConstructor: true, enumName: objectInstance.name, variantName };
         }
-
-        throw new Error(
-          `ReferenceError: Property '${expr.property}' does not exist`,
-        );
+        if (!(objectInstance instanceof Map)) {
+          throw new Error("TypeError: Cannot access property on non-object.");
+        }
+        return objectInstance.get(expr.property);
 
       case "CallExpr":
         // 1. Verificamos se é a chamada de um MÉTODO (ex: p.sum())
         if (expr.caller.kind === "MemberExpr") {
-          // 'p' (o objeto instanciado na memória)
-          const objInstance = this.evaluateExpr(expr.caller.object, env);
-          const methodName = expr.caller.property; // 'sum'
+          const objectInstance = this.evaluateExpr(expr.caller.object, env);
+          
+          // Se for Enum, repassa para a lógica geral de Call abaixo que captura __isEnumConstructor
+          if (typeof objectInstance === "object" && objectInstance !== null && objectInstance.kind === "EnumDeclaration") {
+              // Pula o bloco if de método.
+          } else {
+              if (!(objectInstance instanceof Map)) {
+                throw new Error("TypeError: Cannot call a method on a non-object.");
+              }
 
-          if (!(objInstance instanceof Map)) {
-            throw new Error("TypeError: Cannot call a method on a non-object.");
+              // Lógica original de chamada de método...
+              const structName = objectInstance.get("__structName");
+              const methodMap = this.globalEnv.get(`impl_${structName}`);
+              if (!methodMap) {
+                throw new Error(`TypeError: No impl block found for ${structName}`);
+              }
+              const methodFunc = methodMap.find((m: any) => m.declaration.name === expr.caller.property);
+              if (!methodFunc) {
+                throw new Error(`TypeError: Method '${expr.caller.property}' not found`);
+              }
+
+              const args = expr.args.map((arg) => this.evaluateExpr(arg, env));
+              const methodEnv = new Environment(methodFunc.closure);
+              methodEnv.define("self", objectInstance);
+
+              methodFunc.declaration.parameters.forEach((param: any, index: number) => {
+                methodEnv.define(param.name, args[index]);
+              });
+
+              try {
+                for (const blockStmt of methodFunc.declaration.body.body) {
+                  this.evaluateStmt(blockStmt, methodEnv);
+                }
+              } catch (e) {
+                if (e instanceof ReturnException) {
+                  return e.value;
+                }
+                throw e;
+              }
+              return null;
           }
+        }
 
-          const structName = objInstance.get("__structName");
+        const func = this.evaluateExpr(expr.caller, env);
 
-          // 2. Buscamos a definição de método correspondente
-          const methods = this.globalEnv.get(`impl_${structName}`);
-          const methodFunc = methods.find(
-            (m: any) => m.declaration.name === methodName,
-          );
+        if (func && func.__isEnumConstructor) {
+             const args = expr.args.map((arg) => this.evaluateExpr(arg, env));
+             return { kind: "EnumVariant", enumName: func.enumName, variantName: func.variantName, payload: args };
+        }
 
-          if (!methodFunc) {
-            throw new Error(
-              `TypeError: Method '${methodName}' not found on struct '${structName}'`,
-            );
-          }
+        if (func instanceof FlexFunction) {
+            // 2. avaliamos os argumentos passados
+            const args = expr.args.map((arg) => this.evaluateExpr(arg, env));
 
-          // 3. Preparamos os argumentos
-          const args = expr.args.map((arg) => this.evaluateExpr(arg, env));
+            // 3. Criamos um NOVO escopo baseado no escopo onde a função foi DEFINIDA (Closure) real
+            const functionEnv = new Environment(func.closure);
 
-          // 4. O SEGREDO DO OOP: Criamos um escopo isolado baseado na closure do método e injetamos 'self'
-          const methodEnv = new Environment(methodFunc.closure);
-          methodEnv.define("self", objInstance);
+            // 4. Mapeamos os argumentos para os nomes dos parâmetros
+            func.declaration.parameters.forEach((param, index) => {
+              functionEnv.define(param.name, args[index]);
+            });
 
-          methodFunc.declaration.parameters.forEach((param: any, index: number) => {
-            methodEnv.define(param.name, args[index]);
-          });
-
-          // 4. Executamos
-          try {
-            for (const blockStmt of methodFunc.declaration.body.body) {
-              this.evaluateStmt(blockStmt, methodEnv);
+            // 5. Executamos o corpo da função e capturamos o retorno
+            try {
+              for (const blockStmt of func.declaration.body.body) {
+                this.evaluateStmt(blockStmt, functionEnv);
+              }
+            } catch (e) {
+              if (e instanceof ReturnException) {
+                return e.value; // Pega o valor e devolve para quem chamou!
+              }
+              throw e; // Se for um erro real, lança adiante!
             }
-          } catch (e) {
-            if (e instanceof ReturnException) {
-              return e.value;
-            }
-            throw e;
-          }
-          return null;
+            return null; // Caso a função não tenha return
         }
+        throw new Error(`TypeError: Not a function`);
 
-        // 1. Descobrimos qual função está sendo chamada
-        const func = this.evaluateExpr(
-          expr.caller,
-          env,
-        );
-
-        if (!(func instanceof FlexFunction)) {
-          throw new Error(`TypeError: Not a function`);
-        }
-
-        // 2. avaliamos os argumentos passados
-        const args = expr.args.map((arg) => this.evaluateExpr(arg, env));
-
-        // 3. Criamos um NOVO escopo baseado no escopo onde a função foi DEFINIDA (Closure) real
-        const functionEnv = new Environment(func.closure);
-
-        // 4. Mapeamos os argumentos para os nomes dos parâmetros
-        func.declaration.parameters.forEach((param, index) => {
-          functionEnv.define(param.name, args[index]);
-        });
-
-        // 5. Executamos o corpo da função e capturamos o retorno
-        try {
-          for (const blockStmt of func.declaration.body.body) {
-            this.evaluateStmt(blockStmt, functionEnv);
-          }
-        } catch (e) {
-          if (e instanceof ReturnException) {
-            return e.value; // Pega o valor e devolve para quem chamou!
-          }
-          throw e; // Se for um erro real, lança adiante!
-        }
-        return null; // Caso a função não tenha return
       case "NumericLiteral":
         return expr.value;
       case "BooleanLiteral":
@@ -303,10 +301,6 @@ export class Interpreter {
           if (typeof p === "string") return p;
           return String(this.evaluateExpr(p, env));
         }).join("");
-      case "EnumVariantExpr": {
-        const args = expr.args.map((a) => this.evaluateExpr(a, env));
-        return { kind: "EnumVariant", enumName: expr.enumName, variantName: expr.variantName, payload: args };
-      }
 
       case "TryExpr":
         const tryValue = this.evaluateExpr(expr.expression, env);

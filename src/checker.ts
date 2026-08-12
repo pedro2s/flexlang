@@ -231,7 +231,7 @@ export class TypeChecker {
         }
         
         // Matemático
-        if (leftType.kind !== "Int" || rightType.kind !== "Int") {
+        if ((leftType.kind !== "Int" && leftType.kind !== "Any") || (rightType.kind !== "Int" && rightType.kind !== "Any")) {
           throw new Error(`TypeError: Operator ${expr.operator} requires Ints, got ${this.typeToString(leftType)} and ${this.typeToString(rightType)}`);
         }
         return { kind: "Int" };
@@ -276,31 +276,46 @@ export class TypeChecker {
         // Checagem básica
         return { kind: "Struct", name: expr.structName, genericArgs: [] };
 
-      case "EnumVariantExpr":
-        const enumDecl = this.enums.get(expr.enumName);
-        if (!enumDecl) throw new Error(`ReferenceError: Enum '${expr.enumName}' not found`);
-        const variant = enumDecl.variants.find(v => v.name === expr.variantName);
-        if (!variant) throw new Error(`ReferenceError: Variant '${expr.variantName}' not found in enum '${expr.enumName}'`);
-        
-        const payloadTypes = variant.payload || [];
-        if (payloadTypes.length !== expr.args.length) {
-            throw new Error(`TypeError: Variant '${expr.variantName}' expects ${payloadTypes.length} arguments, got ${expr.args.length}`);
-        }
-        
-        for (let i = 0; i < expr.args.length; i++) {
-            const argType = this.checkExpr(expr.args[i], env);
-            const expectedType = this.resolveTypeNode(payloadTypes[i]);
-            if (!this.isTypeAssignable(expectedType, argType)) {
-                 throw new Error(`TypeError: Argument ${i+1} of variant '${expr.variantName}' must be ${this.typeToString(expectedType)}, got ${this.typeToString(argType)}`);
-            }
-        }
-        return { kind: "Enum", name: expr.enumName, genericArgs: [] };
-
       case "MemberExpr":
+        if (expr.object.kind === "Identifier" && this.enums.has(expr.object.symbol)) {
+             const enumName = expr.object.symbol;
+             const variantName = expr.property;
+             const enumDecl = this.enums.get(enumName)!;
+             const variant = enumDecl.variants.find(v => v.name === variantName);
+             if (!variant) throw new Error(`ReferenceError: Variant '${variantName}' not found in enum '${enumName}'`);
+             
+             if (variant.payload && variant.payload.length > 0) {
+                 throw new Error(`TypeError: Variant '${variantName}' expects ${variant.payload.length} arguments, got 0`);
+             }
+             return { kind: "Enum", name: enumName, genericArgs: [] };
+        }
         // Pula checagem complexa por enquanto
         return { kind: "Any" };
 
       case "CallExpr":
+        if (expr.caller.kind === "MemberExpr" && expr.caller.object.kind === "Identifier" && this.enums.has(expr.caller.object.symbol)) {
+             const enumName = expr.caller.object.symbol;
+             const variantName = expr.caller.property;
+             
+             const enumDecl = this.enums.get(enumName)!;
+             const variant = enumDecl.variants.find(v => v.name === variantName);
+             if (!variant) throw new Error(`ReferenceError: Variant '${variantName}' not found in enum '${enumName}'`);
+             
+             const payloadTypes = variant.payload || [];
+             if (payloadTypes.length !== expr.args.length) {
+                 throw new Error(`TypeError: Variant '${variantName}' expects ${payloadTypes.length} arguments, got ${expr.args.length}`);
+             }
+             
+             for (let i = 0; i < expr.args.length; i++) {
+                 const argType = this.checkExpr(expr.args[i], env);
+                 const expectedType = this.resolveTypeNode(payloadTypes[i]);
+                 if (!this.isTypeAssignable(expectedType, argType)) {
+                      throw new Error(`TypeError: Argument ${i+1} of variant '${variantName}' must be ${this.typeToString(expectedType)}, got ${this.typeToString(argType)}`);
+                 }
+             }
+             return { kind: "Enum", name: enumName, genericArgs: [] };
+        }
+        
         if (expr.caller.kind === "Identifier") {
            const func = this.functions.get(expr.caller.symbol);
            if (!func) {

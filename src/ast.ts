@@ -18,7 +18,6 @@ export enum TokenType {
   Lt = "LT",
   DotDot = "DOTDOT", // Operador de range (..)
   Colon = "COLON",
-  DoubleColon = "DOUBLE_COLON", // ::
   FatArrow = "FAT_ARROW", // =>
   Question = "QUESTION", // ?
   Semi = "SEMI",
@@ -90,7 +89,6 @@ export type Expr =
   | MemberExpr
   | ArrayLiteral
   | IndexExpr
-  | EnumVariantExpr
   | TryExpr
   | AssignmentExpr;
 
@@ -284,13 +282,6 @@ export interface EnumDeclaration {
   kind: "EnumDeclaration";
   name: string;
   variants: EnumVariantDecl[];
-}
-
-export interface EnumVariantExpr {
-  kind: "EnumVariantExpr";
-  enumName: string;
-  variantName: string;
-  args: Expr[];
 }
 
 export interface MatchArm {

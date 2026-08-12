@@ -17,7 +17,6 @@ import {
   type MatchStmt,
   type MatchArm,
   type EnumVariantDecl,
-  type EnumVariantExpr,
   type TryExpr,
 } from "./ast";
 import { Lexer } from "./lexer";
@@ -299,7 +298,7 @@ export class Parser {
     
     while (this.current().type !== TokenType.RBrace && this.current().type !== TokenType.EOF) {
         const enumName = this.consume(TokenType.Identifier).value;
-        this.consume(TokenType.DoubleColon);
+        this.consume(TokenType.Dot);
         const variantName = this.consume(TokenType.Identifier).value;
         
         const binders: string[] = [];
@@ -640,24 +639,6 @@ export class Parser {
 
         this.consume(TokenType.RBrace);
         return { kind: "StructExpr", structName: token.value, properties };
-      }
-
-      // Se for Enum Variante: Result::Ok(10)
-      if (this.current().type === TokenType.DoubleColon) {
-        this.consume(TokenType.DoubleColon);
-        const variantName = this.consume(TokenType.Identifier).value;
-        const args: Expr[] = [];
-        if (this.current().type === TokenType.LParen) {
-            this.consume(TokenType.LParen);
-            while (this.current().type !== TokenType.RParen && this.current().type !== TokenType.EOF) {
-                args.push(this.parseExpression());
-                if (this.current().type === TokenType.Comma) {
-                    this.consume(TokenType.Comma);
-                }
-            }
-            this.consume(TokenType.RParen);
-        }
-        return { kind: "EnumVariantExpr", enumName: token.value, variantName, args };
       }
 
       return { kind: "Identifier", symbol: token.value };
