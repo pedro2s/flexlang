@@ -24,6 +24,7 @@ export class Lexer {
     [TokenType.Match, /^match\b/],
     [TokenType.Scope, /^scope\b/],
     [TokenType.Spawn, /^spawn\b/],
+    [TokenType.Trait, /^trait\b/],
     [TokenType.Print, /^print\b/],
     [TokenType.True, /^true\b/],
     [TokenType.False, /^false\b/],

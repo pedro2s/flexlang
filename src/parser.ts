@@ -19,6 +19,7 @@ import {
   type TryExpr,
   type ScopeStmt,
   type SpawnStmt,
+  type TraitDeclaration,
 } from "./ast";
 import { Lexer } from "./lexer";
 
@@ -69,6 +70,8 @@ export class Parser {
         return this.parseScopeStmt();
       case TokenType.Spawn:
         return this.parseSpawnStmt();
+      case TokenType.Trait:
+        return this.parseTraitDeclaration();
       case TokenType.Struct:
         return this.parseStructDeclaration();
       case TokenType.Let:
@@ -92,9 +95,49 @@ export class Parser {
     }
   }
 
+  private parseTraitDeclaration(): TraitDeclaration {
+    this.consume(TokenType.Trait);
+    const name = this.consume(TokenType.Identifier).value;
+    this.consume(TokenType.LBrace);
+
+    const methods = [];
+    while (this.current().type !== TokenType.RBrace && this.current().type !== TokenType.EOF) {
+        this.consume(TokenType.Func);
+        const methodName = this.consume(TokenType.Identifier).value;
+        this.consume(TokenType.LParen);
+        const parameters = [];
+        if (this.current().type !== TokenType.RParen) {
+            do {
+                const paramName = this.consume(TokenType.Identifier).value;
+                this.consume(TokenType.Colon);
+                const paramType = this.parseTypeAnnotation();
+                parameters.push({ name: paramName, typeAnnotation: paramType });
+            } while (this.match(TokenType.Comma));
+        }
+        this.consume(TokenType.RParen);
+        
+        let returnType = undefined;
+        if (this.match(TokenType.Arrow)) {
+            returnType = this.parseTypeAnnotation();
+        }
+        
+        this.consume(TokenType.Semi);
+        methods.push({ name: methodName, parameters, returnType });
+    }
+    this.consume(TokenType.RBrace);
+    return { kind: "TraitDeclaration", name, methods };
+  }
+
   private parseImplDeclaration(): ImplDeclaration {
     this.consume(TokenType.Impl);
-    const structName = this.consume(TokenType.Identifier).value;
+    let traitName: string | undefined = undefined;
+    let structName = this.consume(TokenType.Identifier).value;
+    
+    if (this.current().type === TokenType.Identifier && this.current().value === "for") {
+         this.consume(TokenType.Identifier);
+         traitName = structName;
+         structName = this.consume(TokenType.Identifier).value;
+    }
 
     this.consume(TokenType.LBrace);
     const methods: FunctionDeclaration[] = [];
@@ -106,8 +149,7 @@ export class Parser {
       methods.push(this.parseFunctionDeclaration());
     }
     this.consume(TokenType.RBrace);
-
-    return { kind: "ImplDeclaration", structName, methods };
+    return { kind: "ImplDeclaration", structName, traitName, methods };
   }
 
   private parseCallMemberExpr(): Expr {

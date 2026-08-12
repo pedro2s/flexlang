@@ -5,6 +5,8 @@ import type {
   StructDeclaration,
   FunctionDeclaration,
   EnumDeclaration,
+  TraitDeclaration,
+  ImplDeclaration,
 } from "./ast";
 
 // --- Representação Interna de Tipos do TypeChecker ---
@@ -53,6 +55,7 @@ export class TypeChecker {
   private structs: Map<string, StructDeclaration> = new Map();
   private functions: Map<string, FunctionDeclaration> = new Map();
   private enums: Map<string, EnumDeclaration> = new Map();
+  private traits: Map<string, TraitDeclaration> = new Map();
   private inScopeContext: number = 0;
 
   public check(stmts: Stmt[]): void {
@@ -64,6 +67,8 @@ export class TypeChecker {
         this.functions.set(stmt.name, stmt);
       } else if (stmt.kind === "EnumDeclaration") {
         this.enums.set(stmt.name, stmt);
+      } else if (stmt.kind === "TraitDeclaration") {
+        this.traits.set(stmt.name, stmt);
       }
     }
 
@@ -181,9 +186,36 @@ export class TypeChecker {
         break;
 
       case "StructDeclaration":
-      case "ImplDeclaration":
       case "EnumDeclaration":
-        // Já hookado no Pass 1, ou faremos checkMethods aqui
+      case "TraitDeclaration":
+        // Hookados no Pass 1
+        break;
+        
+      case "ImplDeclaration":
+        if (stmt.traitName) {
+             const trait = this.traits.get(stmt.traitName);
+             if (!trait) throw new Error(`ReferenceError: Trait '${stmt.traitName}' not found`);
+             
+             // Validação da interface
+             for (const tMethod of trait.methods) {
+                  const iMethod = stmt.methods.find(m => m.name === tMethod.name);
+                  if (!iMethod) throw new Error(`TypeError: Struct '${stmt.structName}' does not implement method '${tMethod.name}' from trait '${stmt.traitName}'`);
+                  
+                  if (tMethod.parameters.length !== iMethod.parameters.length) {
+                       throw new Error(`TypeError: Method '${tMethod.name}' in impl does not match trait signature for parameters count`);
+                  }
+             }
+        }
+        
+        // Avaliar corpo dos metodos do Impl
+        for (const m of stmt.methods) {
+             const mEnv = new TypeEnvironment(env);
+             mEnv.define("self", { kind: "Struct", name: stmt.structName, genericArgs: [] }, true);
+             for (const param of m.parameters) {
+                 mEnv.define(param.name, this.resolveTypeNode(param.typeAnnotation), false);
+             }
+             this.checkStmt(m.body, mEnv);
+        }
         break;
 
       case "MatchStmt":

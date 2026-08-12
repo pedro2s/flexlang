@@ -7,6 +7,7 @@ export enum TokenType {
   Match = "MATCH",
   Scope = "SCOPE",
   Spawn = "SPAWN",
+  Trait = "TRAIT",
   Print = "PRINT",
   If = "IF", // Novos tokens para controle de fluxo
   Else = "ELSE",
@@ -77,6 +78,7 @@ export type Stmt =
   | MatchStmt
   | ScopeStmt
   | SpawnStmt
+  | TraitDeclaration
   | ExpressionStatement;
 
 export type Expr =
@@ -172,9 +174,20 @@ export interface IndexExpr {
   index: Expr;
 }
 
+export interface TraitDeclaration {
+  kind: "TraitDeclaration";
+  name: string;
+  methods: {
+    name: string;
+    parameters: Parameter[];
+    returnType?: TypeNode;
+  }[];
+}
+
 export interface ImplDeclaration {
   kind: "ImplDeclaration";
   structName: string;
+  traitName?: string; // Opcional: só preenchido se for `impl Trait for Struct`
   methods: FunctionDeclaration[];
 }
 
