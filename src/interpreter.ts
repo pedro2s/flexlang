@@ -1,4 +1,5 @@
 import type { Stmt, Expr, FunctionDeclaration } from "./ast";
+import * as http from "http";
 
 class Environment {
   private variables: Map<string, any> = new Map();

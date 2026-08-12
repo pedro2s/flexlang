@@ -183,7 +183,7 @@ export class TypeChecker {
         funcEnv.define("__RETURN_TYPE__", retType, false);
         
         for (const param of stmt.parameters) {
-          funcEnv.define(param.name, this.resolveTypeNode(param.typeAnnotation), false);
+          funcEnv.define(param.name, this.resolveTypeNode(param.typeAnnotation), !!param.isMut);
         }
         this.checkStmt(stmt.body, funcEnv);
         break;
@@ -221,7 +221,7 @@ export class TypeChecker {
              const mEnv = new TypeEnvironment(env);
              mEnv.define("self", { kind: "Struct", name: stmt.structName, genericArgs: [] }, true);
              for (const param of m.parameters) {
-                 mEnv.define(param.name, this.resolveTypeNode(param.typeAnnotation), false);
+                 mEnv.define(param.name, this.resolveTypeNode(param.typeAnnotation), !!param.isMut);
              }
              this.checkStmt(m.body, mEnv);
         }
@@ -285,13 +285,18 @@ export class TypeChecker {
         
       case "Identifier":
         const varInfo = env.get(expr.symbol);
-        if (!varInfo) {
-          throw new Error(`ReferenceError: Identifier '${expr.symbol}' not found`);
+        if (varInfo) {
+            if (varInfo.isMoved) {
+                throw new Error(`TypeError: Use-after-send of moved variable '${expr.symbol}'`);
+            }
+            return varInfo.type;
         }
-        if (varInfo.isMoved) {
-          throw new Error(`TypeError: Use-after-send of moved variable '${expr.symbol}'`);
+        
+        if (this.functions.has(expr.symbol)) {
+            return { kind: "Any" };
         }
-        return varInfo.type;
+        
+        throw new Error(`ReferenceError: Identifier '${expr.symbol}' not found`);
 
       case "BinaryExpr":
         const leftType = this.checkExpr(expr.left, env);

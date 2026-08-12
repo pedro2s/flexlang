@@ -221,6 +221,7 @@ export interface MemberExpr {
 export interface Parameter {
   name: string;
   typeAnnotation: TypeNode;
+  isMut?: boolean;
 }
 
 export interface FunctionDeclaration {

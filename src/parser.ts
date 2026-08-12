@@ -119,10 +119,11 @@ export class Parser {
         const parameters = [];
         if (this.current().type !== TokenType.RParen) {
             do {
+                const isMut = this.match(TokenType.Mut);
                 const paramName = this.consume(TokenType.Identifier).value;
                 this.consume(TokenType.Colon);
                 const paramType = this.parseTypeAnnotation();
-                parameters.push({ name: paramName, typeAnnotation: paramType });
+                parameters.push({ name: paramName, typeAnnotation: paramType, isMut });
             } while (this.match(TokenType.Comma));
         }
         this.consume(TokenType.RParen);
@@ -292,11 +293,12 @@ export class Parser {
       this.current().type !== TokenType.RParen &&
       this.current().type != TokenType.EOF
     ) {
+      const isMut = this.match(TokenType.Mut);
       const paramName = this.consume(TokenType.Identifier).value;
       this.consume(TokenType.Colon);
       const typeAnnotation = this.parseTypeAnnotation();
 
-      parameters.push({ name: paramName, typeAnnotation });
+      parameters.push({ name: paramName, typeAnnotation, isMut });
 
       if (this.current().type === TokenType.Comma) {
         this.consume(TokenType.Comma);
