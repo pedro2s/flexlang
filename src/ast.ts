@@ -25,6 +25,8 @@ export enum TokenType {
   Return = "RETURN",
   Comma = "COMMA", // Vírgula
   Arrow = "ARROW", // ->
+  Struct = "STRUCT", // struct
+  Dot = "DOT", // .
 }
 
 export interface Token {
@@ -41,13 +43,34 @@ export type Stmt =
   | ForStmt
   | BlockStmt
   | FunctionDeclaration
-  | ReturnStmt;
+  | ReturnStmt
+  | StructDeclaration;
 export type Expr =
   | NumericLiteral
   | StringLiteral
   | Identifier
   | BinaryExpr
-  | CallExpr;
+  | CallExpr
+  | StructExpr
+  | MemberExpr;
+
+export interface StructDeclaration {
+  kind: "StructDeclaration";
+  name: string;
+  properties: { name: string; typeAnnotation: string }[];
+}
+
+export interface StructExpr {
+  kind: "StructExpr";
+  structName: string;
+  properties: { name: string; value: Expr }[];
+}
+
+export interface MemberExpr {
+  kind: "MemberExpr";
+  object: Expr; // A variável que guarda a struct (ex: p)
+  property: string; // O nome da propriedade (ex: x)
+}
 
 export interface Parameter {
   name: string;

@@ -4,6 +4,9 @@ export class Lexer {
   private tokens: Token[] = [];
 
   private static readonly tokenSpec: Array<[TokenType, RegExp]> = [
+    [TokenType.Struct, /^struct\b/],
+    [TokenType.DotDot, /^\.\./],
+    [TokenType.Dot, /^\./],
     [TokenType.Func, /^func\b/],
     [TokenType.Return, /^return\b/],
     [TokenType.Arrow, /^->/], // Atenção: tem que vir antes de subtrações (-) se houver
@@ -22,7 +25,6 @@ export class Lexer {
     [TokenType.Plus, /^\+/],
     [TokenType.Gt, /^>/],
     [TokenType.Lt, /^</],
-    [TokenType.DotDot, /^\.\./],
     [TokenType.Colon, /^:/],
     [TokenType.Semi, /^;/],
     [TokenType.LParen, /^\(/],

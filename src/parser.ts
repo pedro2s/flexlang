@@ -10,6 +10,7 @@ import {
   type Parameter,
   type FunctionDeclaration,
   type ReturnStmt,
+  type StructDeclaration,
 } from "./ast";
 
 export class Parser {
@@ -21,6 +22,10 @@ export class Parser {
     const token = this.tokens[this.pos];
     if (!token) throw new Error("Unexpected end of tokens");
     return token;
+  }
+
+  private peek(offset = 1): Token | undefined {
+    return this.tokens[this.pos + offset];
   }
 
   private consume(expected: TokenType): Token {
@@ -38,7 +43,9 @@ export class Parser {
     const statements: Stmt[] = [];
 
     while (this.current().type !== TokenType.EOF) {
-      if (this.current().type === TokenType.Let) {
+      if (this.current().type === TokenType.Struct) {
+        statements.push(this.parseStructDeclaration());
+      } else if (this.current().type === TokenType.Let) {
         statements.push(this.parseVarDeclaration());
       } else if (this.current().type === TokenType.Print) {
         statements.push(this.parsePrintStatement());
@@ -57,6 +64,32 @@ export class Parser {
       }
     }
     return statements;
+  }
+
+  private parseStructDeclaration(): StructDeclaration {
+    this.consume(TokenType.Struct);
+    const name = this.consume(TokenType.Identifier).value;
+
+    this.consume(TokenType.LBrace);
+    const properties: { name: string; typeAnnotation: string }[] = [];
+    while (
+      this.current().type !== TokenType.RBrace &&
+      this.current().type !== TokenType.EOF
+    ) {
+      const propertyName = this.consume(TokenType.Identifier).value;
+      this.consume(TokenType.Colon);
+      const typeAnnotation = this.consume(TokenType.Identifier).value;
+
+      properties.push({ name: propertyName, typeAnnotation });
+
+      // Consumir a vírgula (que pode ser opcional no último item, como no Rust)
+      if (this.current().type === TokenType.Comma) {
+        this.consume(TokenType.Comma);
+      }
+    }
+
+    this.consume(TokenType.RBrace);
+    return { kind: "StructDeclaration", name, properties };
   }
 
   private parseFunctionDeclaration(): FunctionDeclaration {
@@ -192,27 +225,43 @@ export class Parser {
   }
 
   private parseExpression(): Expr {
-    const left = this.parsePrimary();
+    const left = this.parseMemberExpr();
 
     if (this.current().type === TokenType.Plus) {
       const operator = this.consume(TokenType.Plus).value;
-      const right = this.parsePrimary();
+      const right = this.parseMemberExpr();
       return { kind: "BinaryExpr", left, operator, right };
     } else if (this.current().type === TokenType.EqEq) {
       const operator = this.consume(TokenType.EqEq).value;
-      const right = this.parsePrimary();
+      const right = this.parseMemberExpr();
       return { kind: "BinaryExpr", left, operator, right };
     } else if (this.current().type === TokenType.Gt) {
       const operator = this.consume(TokenType.Gt).value;
-      const right = this.parsePrimary();
+      const right = this.parseMemberExpr();
       return { kind: "BinaryExpr", left, operator, right };
     } else if (this.current().type === TokenType.Lt) {
       const operator = this.consume(TokenType.Lt).value;
-      const right = this.parsePrimary();
+      const right = this.parseMemberExpr();
       return { kind: "BinaryExpr", left, operator, right };
     }
 
     return left;
+  }
+
+  // ATENÇÂO: Acesso a propriedades (p.x) tem a precedência mais alta.
+  // Precisamos criar um novo nível na nossa avaliação de expressões.
+  private parseMemberExpr(): Expr {
+    // Começa com o lado esquerdo (o objeto/variável)
+    let object = this.parsePrimary();
+
+    // Enquanto tiver ponto, continua acessando propriedades
+    while (this.current().type === TokenType.Dot) {
+      this.consume(TokenType.Dot);
+      const propertyName = this.consume(TokenType.Identifier).value;
+      object = { kind: "MemberExpr", object, property: propertyName };
+    }
+
+    return object;
   }
 
   private parsePrimary(): Expr {
@@ -249,6 +298,33 @@ export class Parser {
           caller: { kind: "Identifier", symbol: token.value },
           args,
         };
+      }
+
+      // Se for Instanciação de Struct: Nome { prop: valor, ... }
+      if (
+        this.current().type === TokenType.LBrace &&
+        this.peek(1)?.type === TokenType.Identifier &&
+        this.peek(2)?.type === TokenType.Colon
+      ) {
+        this.consume(TokenType.LBrace);
+        const properties: { name: string; value: Expr }[] = [];
+
+        while (
+          this.current().type !== TokenType.RBrace &&
+          this.current().type !== TokenType.EOF
+        ) {
+          const propertyName = this.consume(TokenType.Identifier).value;
+          this.consume(TokenType.Colon);
+          const propertyValue = this.parseExpression();
+          properties.push({ name: propertyName, value: propertyValue });
+
+          if (this.current().type === TokenType.Comma) {
+            this.consume(TokenType.Comma);
+          }
+        }
+
+        this.consume(TokenType.RBrace);
+        return { kind: "StructExpr", structName: token.value, properties };
       }
 
       return { kind: "Identifier", symbol: token.value };

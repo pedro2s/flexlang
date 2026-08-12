@@ -36,6 +36,10 @@ export class Interpreter {
 
   private evaluateStmt(stmt: Stmt, env: Environment): void {
     switch (stmt.kind) {
+      case "StructDeclaration":
+        // Guardamos a definição da struct na memória (sem valor inicial, só o molde)
+        env.define(stmt.name, stmt);
+        break;
       case "FunctionDeclaration":
         // Guardamos a declaração inteira na memória com o nome da função
         env.define(stmt.name, stmt);
@@ -86,6 +90,40 @@ export class Interpreter {
 
   private evaluateExpr(expr: Expr, env: Environment): any {
     switch (expr.kind) {
+      case "StructExpr":
+        // 1. Validar se o molde da Struct existe na memória (Type Checking em tempo de execução)
+        const structBlueprint = env.get(expr.structName);
+        if (!structBlueprint || structBlueprint.kind !== "StructDeclaration") {
+          throw new Error(
+            `TypeError: Struct '${expr.structName}' not declared`,
+          );
+        }
+
+        // 2. Criar a instância como um Mapa em memória
+        const instance = new Map<string, any>();
+
+        for (const prop of expr.properties) {
+          const evalValue = this.evaluateExpr(prop.value, env);
+          instance.set(prop.name, evalValue);
+        }
+        return instance;
+
+      case "MemberExpr":
+        // 1. Avalia quem é o objeto (ex: descobre que 'p' é um Map)
+        const objectInstance = this.evaluateExpr(expr.object, env);
+
+        // 2. Busca o valor da propriedade
+        if (
+          objectInstance instanceof Map &&
+          objectInstance.has(expr.property)
+        ) {
+          return objectInstance.get(expr.property);
+        }
+
+        throw new Error(
+          `ReferenceError: Property '${expr.property}' does not exist`,
+        );
+
       case "CallExpr":
         // 1. Descobrimos qual função está sendo chamada
         const funcDecl = this.evaluateExpr(
