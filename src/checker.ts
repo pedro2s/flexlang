@@ -4,6 +4,7 @@ import type {
   TypeNode,
   StructDeclaration,
   FunctionDeclaration,
+  EnumDeclaration,
 } from "./ast";
 
 // --- Representação Interna de Tipos do TypeChecker ---
@@ -13,6 +14,7 @@ export type FlexType =
   | { kind: "Bool" }
   | { kind: "Array"; elementType: FlexType }
   | { kind: "Struct"; name: string; genericArgs: FlexType[] }
+  | { kind: "Enum"; name: string; genericArgs: FlexType[] }
   | { kind: "Void" }
   | { kind: "Any" }; // Usado quando falha a inferência para evitar de dar 'cascade' de erros
 
@@ -43,6 +45,7 @@ export class TypeChecker {
   // Globais como Structs e Functions para checagem de tipos
   private structs = new Map<string, StructDeclaration>();
   private functions = new Map<string, FunctionDeclaration>();
+  private enums = new Map<string, EnumDeclaration>();
 
   public check(stmts: Stmt[]): void {
     // Primeira Passagem (Pass 1): Registrar declarações (Hoisting de Structs e Funcs)
@@ -51,6 +54,8 @@ export class TypeChecker {
         this.structs.set(stmt.name, stmt);
       } else if (stmt.kind === "FunctionDeclaration") {
         this.functions.set(stmt.name, stmt);
+      } else if (stmt.kind === "EnumDeclaration") {
+        this.enums.set(stmt.name, stmt);
       }
     }
 
@@ -146,7 +151,50 @@ export class TypeChecker {
 
       case "StructDeclaration":
       case "ImplDeclaration":
+      case "EnumDeclaration":
         // Já hookado no Pass 1, ou faremos checkMethods aqui
+        break;
+
+      case "MatchStmt":
+        const matchValueType = this.checkExpr(stmt.value, env);
+        if (matchValueType.kind !== "Enum" && matchValueType.kind !== "Any") {
+            throw new Error(`TypeError: match expression must be an Enum, got ${this.typeToString(matchValueType)}`);
+        }
+        
+        const enumDeclMatch = matchValueType.kind === "Enum" ? this.enums.get(matchValueType.name) : undefined;
+        const matchedVariants = new Set<string>();
+
+        for (const arm of stmt.arms) {
+            if (enumDeclMatch && arm.enumName !== enumDeclMatch.name) {
+                 throw new Error(`TypeError: match arm is for enum '${arm.enumName}', but matching on '${enumDeclMatch.name}'`);
+            }
+            const eDecl = this.enums.get(arm.enumName);
+            if (!eDecl) throw new Error(`ReferenceError: Enum '${arm.enumName}' not found`);
+            const variant = eDecl.variants.find(v => v.name === arm.variantName);
+            if (!variant) throw new Error(`ReferenceError: Variant '${arm.variantName}' not found`);
+            
+            const payloadTypes = variant.payload || [];
+            if (payloadTypes.length !== arm.binders.length) {
+                 throw new Error(`TypeError: Match arm binds ${arm.binders.length} variables, but variant '${arm.variantName}' has ${payloadTypes.length} fields`);
+            }
+            
+            const armEnv = new TypeEnvironment(env);
+            for (let i = 0; i < arm.binders.length; i++) {
+                 armEnv.define(arm.binders[i], this.resolveTypeNode(payloadTypes[i]), false);
+            }
+            
+            this.checkStmt(arm.body, armEnv);
+            matchedVariants.add(arm.variantName);
+        }
+
+        // Checagem de exhaustiveness
+        if (enumDeclMatch) {
+            for (const v of enumDeclMatch.variants) {
+                if (!matchedVariants.has(v.name)) {
+                     throw new Error(`TypeError: match is not exhaustive, missing variant '${v.name}'`);
+                }
+            }
+        }
         break;
     }
   }
@@ -224,6 +272,26 @@ export class TypeChecker {
       case "StructExpr":
         // Checagem básica
         return { kind: "Struct", name: expr.structName, genericArgs: [] };
+
+      case "EnumVariantExpr":
+        const enumDecl = this.enums.get(expr.enumName);
+        if (!enumDecl) throw new Error(`ReferenceError: Enum '${expr.enumName}' not found`);
+        const variant = enumDecl.variants.find(v => v.name === expr.variantName);
+        if (!variant) throw new Error(`ReferenceError: Variant '${expr.variantName}' not found in enum '${expr.enumName}'`);
+        
+        const payloadTypes = variant.payload || [];
+        if (payloadTypes.length !== expr.args.length) {
+            throw new Error(`TypeError: Variant '${expr.variantName}' expects ${payloadTypes.length} arguments, got ${expr.args.length}`);
+        }
+        
+        for (let i = 0; i < expr.args.length; i++) {
+            const argType = this.checkExpr(expr.args[i], env);
+            const expectedType = this.resolveTypeNode(payloadTypes[i]);
+            if (!this.isTypeAssignable(expectedType, argType)) {
+                 throw new Error(`TypeError: Argument ${i+1} of variant '${expr.variantName}' must be ${this.typeToString(expectedType)}, got ${this.typeToString(argType)}`);
+            }
+        }
+        return { kind: "Enum", name: expr.enumName, genericArgs: [] };
 
       case "MemberExpr":
         // Pula checagem complexa por enquanto
@@ -306,6 +374,7 @@ export class TypeChecker {
         if (node.name === "Int") return { kind: "Int" };
         if (node.name === "String") return { kind: "String" };
         if (node.name === "Bool") return { kind: "Bool" };
+        if (this.enums.has(node.name)) return { kind: "Enum", name: node.name, genericArgs: [] };
         return { kind: "Struct", name: node.name, genericArgs: [] };
 
       case "ArrayTypeNode":
@@ -330,6 +399,9 @@ export class TypeChecker {
     if (target.kind === "Struct" && source.kind === "Struct") {
       return target.name === source.name;
     }
+    if (target.kind === "Enum" && source.kind === "Enum") {
+      return target.name === source.name;
+    }
     return true;
   }
 
@@ -342,6 +414,11 @@ export class TypeChecker {
       case "Void": return "Void";
       case "Array": return `[${this.typeToString(type.elementType)}]`;
       case "Struct":
+        if (type.genericArgs.length > 0) {
+           return `${type.name}<${type.genericArgs.map(t => this.typeToString(t)).join(", ")}>`;
+        }
+        return type.name;
+      case "Enum":
         if (type.genericArgs.length > 0) {
            return `${type.name}<${type.genericArgs.map(t => this.typeToString(t)).join(", ")}>`;
         }

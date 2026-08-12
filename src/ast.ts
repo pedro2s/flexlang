@@ -3,6 +3,8 @@ export enum TokenType {
   String = "STRING",
   Let = "LET",
   Mut = "MUT",
+  Enum = "ENUM",
+  Match = "MATCH",
   Print = "PRINT",
   If = "IF", // Novos tokens para controle de fluxo
   Else = "ELSE",
@@ -16,6 +18,8 @@ export enum TokenType {
   Lt = "LT",
   DotDot = "DOTDOT", // Operador de range (..)
   Colon = "COLON",
+  DoubleColon = "DOUBLE_COLON", // ::
+  FatArrow = "FAT_ARROW", // =>
   Semi = "SEMI",
   LParen = "LPAREN",
   RParen = "RPAREN",
@@ -67,6 +71,8 @@ export type Stmt =
   | ReturnStmt
   | StructDeclaration
   | ImplDeclaration
+  | EnumDeclaration
+  | MatchStmt
   | ExpressionStatement;
 
 export type Expr =
@@ -83,6 +89,7 @@ export type Expr =
   | MemberExpr
   | ArrayLiteral
   | IndexExpr
+  | EnumVariantExpr
   | AssignmentExpr;
 
 export interface BooleanLiteral {
@@ -262,4 +269,37 @@ export interface StringLiteral {
 export interface Identifier {
   kind: "Identifier";
   symbol: string;
+}
+
+// --- Enum e Pattern Matching ---
+
+export interface EnumVariantDecl {
+  name: string;
+  payload?: TypeNode[];
+}
+
+export interface EnumDeclaration {
+  kind: "EnumDeclaration";
+  name: string;
+  variants: EnumVariantDecl[];
+}
+
+export interface EnumVariantExpr {
+  kind: "EnumVariantExpr";
+  enumName: string;
+  variantName: string;
+  args: Expr[];
+}
+
+export interface MatchArm {
+  enumName: string;
+  variantName: string;
+  binders: string[]; // Variáveis para mapear o payload (ex: v em Ok(v))
+  body: BlockStmt;
+}
+
+export interface MatchStmt {
+  kind: "MatchStmt";
+  value: Expr;
+  arms: MatchArm[];
 }

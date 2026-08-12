@@ -13,6 +13,11 @@ import {
   type StructDeclaration,
   type ImplDeclaration,
   type TypeNode,
+  type EnumDeclaration,
+  type MatchStmt,
+  type MatchArm,
+  type EnumVariantDecl,
+  type EnumVariantExpr,
 } from "./ast";
 import { Lexer } from "./lexer";
 
@@ -55,6 +60,10 @@ export class Parser {
     switch (this.current().type) {
       case TokenType.Impl:
         return this.parseImplDeclaration();
+      case TokenType.Enum:
+        return this.parseEnumDeclaration();
+      case TokenType.Match:
+        return this.parseMatchStmt();
       case TokenType.Struct:
         return this.parseStructDeclaration();
       case TokenType.Let:
@@ -132,6 +141,40 @@ export class Parser {
       );
     }
     return args;
+  }
+
+  private parseEnumDeclaration(): EnumDeclaration {
+    this.consume(TokenType.Enum);
+    const name = this.consume(TokenType.Identifier).value;
+    
+    this.consume(TokenType.LBrace);
+    const variants: EnumVariantDecl[] = [];
+    
+    while (this.current().type !== TokenType.RBrace && this.current().type !== TokenType.EOF) {
+        const variantName = this.consume(TokenType.Identifier).value;
+        let payload: TypeNode[] | undefined = undefined;
+        
+        if (this.current().type === TokenType.LParen) {
+            this.consume(TokenType.LParen);
+            payload = [];
+            while (this.current().type !== TokenType.RParen && this.current().type !== TokenType.EOF) {
+                payload.push(this.parseTypeAnnotation());
+                if (this.current().type === TokenType.Comma) {
+                    this.consume(TokenType.Comma);
+                }
+            }
+            this.consume(TokenType.RParen);
+        }
+        
+        variants.push({ name: variantName, payload });
+        
+        if (this.current().type === TokenType.Comma) {
+            this.consume(TokenType.Comma);
+        }
+    }
+    
+    this.consume(TokenType.RBrace);
+    return { kind: "EnumDeclaration", name, variants };
   }
 
   private parseStructDeclaration(): StructDeclaration {
@@ -244,6 +287,43 @@ export class Parser {
     const body = this.parseBlock();
 
     return { kind: "ForStmt", iteratorName, start, end, body };
+  }
+
+  private parseMatchStmt(): MatchStmt {
+    this.consume(TokenType.Match);
+    const value = this.parseExpression();
+    
+    this.consume(TokenType.LBrace);
+    const arms: MatchArm[] = [];
+    
+    while (this.current().type !== TokenType.RBrace && this.current().type !== TokenType.EOF) {
+        const enumName = this.consume(TokenType.Identifier).value;
+        this.consume(TokenType.DoubleColon);
+        const variantName = this.consume(TokenType.Identifier).value;
+        
+        const binders: string[] = [];
+        if (this.current().type === TokenType.LParen) {
+            this.consume(TokenType.LParen);
+            while (this.current().type !== TokenType.RParen && this.current().type !== TokenType.EOF) {
+                binders.push(this.consume(TokenType.Identifier).value);
+                if (this.current().type === TokenType.Comma) {
+                    this.consume(TokenType.Comma);
+                }
+            }
+            this.consume(TokenType.RParen);
+        }
+        
+        this.consume(TokenType.FatArrow);
+        const body = this.parseBlock();
+        arms.push({ enumName, variantName, binders, body });
+        
+        if (this.current().type === TokenType.Comma) {
+            this.consume(TokenType.Comma);
+        }
+    }
+    
+    this.consume(TokenType.RBrace);
+    return { kind: "MatchStmt", value, arms };
   }
 
   private parseWhileStmt(): Stmt {
@@ -552,6 +632,24 @@ export class Parser {
 
         this.consume(TokenType.RBrace);
         return { kind: "StructExpr", structName: token.value, properties };
+      }
+
+      // Se for Enum Variante: Result::Ok(10)
+      if (this.current().type === TokenType.DoubleColon) {
+        this.consume(TokenType.DoubleColon);
+        const variantName = this.consume(TokenType.Identifier).value;
+        const args: Expr[] = [];
+        if (this.current().type === TokenType.LParen) {
+            this.consume(TokenType.LParen);
+            while (this.current().type !== TokenType.RParen && this.current().type !== TokenType.EOF) {
+                args.push(this.parseExpression());
+                if (this.current().type === TokenType.Comma) {
+                    this.consume(TokenType.Comma);
+                }
+            }
+            this.consume(TokenType.RParen);
+        }
+        return { kind: "EnumVariantExpr", enumName: token.value, variantName, args };
       }
 
       return { kind: "Identifier", symbol: token.value };

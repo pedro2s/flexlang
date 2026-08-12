@@ -55,6 +55,27 @@ export class Interpreter {
 
   private evaluateStmt(stmt: Stmt, env: Environment): void {
     switch (stmt.kind) {
+      case "MatchStmt":
+        const matchValue = this.evaluateExpr(stmt.value, env);
+        if (typeof matchValue === "object" && matchValue !== null && matchValue.kind === "EnumVariant") {
+            for (const arm of stmt.arms) {
+                if (arm.enumName === matchValue.enumName && arm.variantName === matchValue.variantName) {
+                    const armEnv = new Environment(env);
+                    for (let i = 0; i < arm.binders.length; i++) {
+                        armEnv.define(arm.binders[i], matchValue.payload[i]);
+                    }
+                    this.evaluateStmt(arm.body, armEnv);
+                    return;
+                }
+            }
+            throw new Error(`RuntimeError: No match arm found for ${matchValue.enumName}::${matchValue.variantName}`);
+        }
+        throw new Error("RuntimeError: Cannot match on non-enum value");
+        
+      case "EnumDeclaration":
+        // Não fazemos nada em tempo de execução
+        break;
+        
       case "ExpressionStatement":
         this.evaluateExpr(stmt.expression, env);
         break;
@@ -282,6 +303,11 @@ export class Interpreter {
           if (typeof p === "string") return p;
           return String(this.evaluateExpr(p, env));
         }).join("");
+      case "EnumVariantExpr": {
+        const args = expr.args.map((a) => this.evaluateExpr(a, env));
+        return { kind: "EnumVariant", enumName: expr.enumName, variantName: expr.variantName, payload: args };
+      }
+
       case "Identifier":
         const value = env.get(expr.symbol);
         if (value === undefined) {
