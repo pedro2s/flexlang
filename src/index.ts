@@ -6,6 +6,18 @@ const sourceCode = `
 let x: Int = 10;
 let y = 20;
 print(x + y);
+
+let limite = 3;
+
+if limite > 2 {
+    print("Limite é maior que 2");
+} else {
+    print("Limite pequeno");
+}
+
+for i in 0..limite {
+    print(i);
+}
 `;
 
 console.log("Analisando código fonte da FlexLang...\n");
