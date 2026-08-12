@@ -18,6 +18,7 @@ import {
   type MatchArm,
   type EnumVariantDecl,
   type EnumVariantExpr,
+  type TryExpr,
 } from "./ast";
 import { Lexer } from "./lexer";
 
@@ -501,9 +502,16 @@ export class Parser {
     // Começa com o lado esquerdo (o objeto/variável)
     let object = this.parseCallMemberExpr();
 
-    // Enquanto tiver ponto ou colchetes, continua acessando propriedades
-    while (this.current().type === TokenType.Dot || this.current().type === TokenType.LBracket) {
-      if (this.current().type === TokenType.Dot) {
+    // Enquanto tiver ponto, colchetes ou interrogação, continua expandindo a expressão
+    while (
+      this.current().type === TokenType.Dot || 
+      this.current().type === TokenType.LBracket || 
+      this.current().type === TokenType.Question
+    ) {
+      if (this.current().type === TokenType.Question) {
+        this.consume(TokenType.Question);
+        object = { kind: "TryExpr", expression: object };
+      } else if (this.current().type === TokenType.Dot) {
         this.consume(TokenType.Dot);
         const propertyName = this.consume(TokenType.Identifier).value;
         object = { kind: "MemberExpr", object, property: propertyName };

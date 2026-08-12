@@ -20,6 +20,7 @@ export enum TokenType {
   Colon = "COLON",
   DoubleColon = "DOUBLE_COLON", // ::
   FatArrow = "FAT_ARROW", // =>
+  Question = "QUESTION", // ?
   Semi = "SEMI",
   LParen = "LPAREN",
   RParen = "RPAREN",
@@ -90,6 +91,7 @@ export type Expr =
   | ArrayLiteral
   | IndexExpr
   | EnumVariantExpr
+  | TryExpr
   | AssignmentExpr;
 
 export interface BooleanLiteral {
@@ -302,4 +304,9 @@ export interface MatchStmt {
   kind: "MatchStmt";
   value: Expr;
   arms: MatchArm[];
+}
+
+export interface TryExpr {
+  kind: "TryExpr";
+  expression: Expr;
 }

@@ -137,6 +137,9 @@ export class TypeChecker {
         this.functions.set(stmt.name, stmt);
         
         const funcEnv = new TypeEnvironment(env);
+        const retType = stmt.returnType ? this.resolveTypeNode(stmt.returnType) : { kind: "Void" } as FlexType;
+        funcEnv.define("__RETURN_TYPE__", retType, false);
+        
         for (const param of stmt.parameters) {
           funcEnv.define(param.name, this.resolveTypeNode(param.typeAnnotation), false);
         }
@@ -361,6 +364,30 @@ export class TypeChecker {
         }
         return assignValueType;
         
+      case "TryExpr":
+        const tryType = this.checkExpr(expr.expression, env);
+        if (tryType.kind !== "Enum" && tryType.kind !== "Any") {
+            throw new Error(`TypeError: ? operator can only be applied to Enums (like Result or Option), got ${this.typeToString(tryType)}`);
+        }
+        
+        const currentReturn = env.get("__RETURN_TYPE__");
+        if (currentReturn && tryType.kind === "Enum") {
+            if (currentReturn.type.kind !== "Enum" && currentReturn.type.kind !== "Any") {
+                throw new Error(`TypeError: Cannot use ? operator in a function that returns ${this.typeToString(currentReturn.type)}`);
+            }
+        }
+        
+        if (tryType.kind === "Enum") {
+            const eDecl = this.enums.get(tryType.name);
+            if (eDecl) {
+                const okVariant = eDecl.variants.find(v => v.name === "Ok" || v.name === "Some" || v.name === "Sucesso");
+                if (okVariant && okVariant.payload && okVariant.payload.length > 0) {
+                     return this.resolveTypeNode(okVariant.payload[0]);
+                }
+            }
+        }
+        return { kind: "Any" };
+
       default:
         return { kind: "Any" };
     }

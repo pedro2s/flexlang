@@ -31,6 +31,7 @@ export class Lexer {
     [TokenType.FatArrow, /^=>/],
     [TokenType.DoubleColon, /^::/],
     [TokenType.EqEq, /^==/],
+    [TokenType.Question, /^\?/],
     [TokenType.NotEq, /^!=/],
     [TokenType.GtEq, /^>=/],
     [TokenType.LtEq, /^<=/],

@@ -308,6 +308,18 @@ export class Interpreter {
         return { kind: "EnumVariant", enumName: expr.enumName, variantName: expr.variantName, payload: args };
       }
 
+      case "TryExpr":
+        const tryValue = this.evaluateExpr(expr.expression, env);
+        if (typeof tryValue === "object" && tryValue !== null && tryValue.kind === "EnumVariant") {
+            if (tryValue.variantName === "Ok" || tryValue.variantName === "Some" || tryValue.variantName === "Sucesso") {
+                return tryValue.payload.length > 0 ? tryValue.payload[0] : null;
+            } else {
+                // Propaga o erro retornado
+                throw new ReturnException(tryValue);
+            }
+        }
+        throw new Error("RuntimeError: Cannot apply ? operator to non-enum value");
+
       case "Identifier":
         const value = env.get(expr.symbol);
         if (value === undefined) {
