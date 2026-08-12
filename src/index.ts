@@ -78,4 +78,4 @@ console.log("Tipos validados com sucesso!");
 
 const interpreter = new Interpreter();
 console.log("\nInterpretando...");
-interpreter.run(ast);
+await interpreter.run(ast);

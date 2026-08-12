@@ -14,10 +14,11 @@ import {
   type ImplDeclaration,
   type TypeNode,
   type EnumDeclaration,
-  type MatchStmt,
   type MatchArm,
   type EnumVariantDecl,
   type TryExpr,
+  type ScopeStmt,
+  type SpawnStmt,
 } from "./ast";
 import { Lexer } from "./lexer";
 
@@ -64,6 +65,10 @@ export class Parser {
         return this.parseEnumDeclaration();
       case TokenType.Match:
         return this.parseMatchStmt();
+      case TokenType.Scope:
+        return this.parseScopeStmt();
+      case TokenType.Spawn:
+        return this.parseSpawnStmt();
       case TokenType.Struct:
         return this.parseStructDeclaration();
       case TokenType.Let:
@@ -324,6 +329,27 @@ export class Parser {
     
     this.consume(TokenType.RBrace);
     return { kind: "MatchStmt", value, arms };
+  }
+
+  private parseScopeStmt(): ScopeStmt {
+    this.consume(TokenType.Scope);
+    let deadline: Expr | undefined = undefined;
+    
+    // Suporta scope (expr) { ... }
+    if (this.current().type === TokenType.LParen) {
+        this.consume(TokenType.LParen);
+        deadline = this.parseExpression();
+        this.consume(TokenType.RParen);
+    }
+    
+    const body = this.parseBlock();
+    return { kind: "ScopeStmt", deadline, body };
+  }
+
+  private parseSpawnStmt(): SpawnStmt {
+    this.consume(TokenType.Spawn);
+    const body = this.parseBlock();
+    return { kind: "SpawnStmt", body };
   }
 
   private parseWhileStmt(): Stmt {

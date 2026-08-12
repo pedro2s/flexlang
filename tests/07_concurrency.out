@@ -1,0 +1,8 @@
+1. Antes do scope
+2. Dentro do scope, iniciando filhos
+3. Filhos despachados (o pai deve esperar antes de seguir)
+ -> Filho 1 finalizou seu trabalho
+ -> Filho 2 finalizou seu trabalho
+4. Fora do scope, todos os filhos terminaram
+Valor final:
+20

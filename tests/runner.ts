@@ -7,7 +7,7 @@ import { TypeChecker } from "../src/checker";
 
 const testsDir = path.join(process.cwd(), "tests");
 
-function runTests() {
+async function runTests() {
   const files = fs.readdirSync(testsDir);
   const flexFiles = files.filter(f => f.endsWith(".flex"));
   
@@ -37,7 +37,7 @@ function runTests() {
       typeChecker.check(ast);
 
       const interpreter = new Interpreter(stdout);
-      interpreter.run(ast);
+      await interpreter.run(ast);
     } catch (e: any) {
       // Capture errors in output as well!
       capturedOutput += e.message + "\n";

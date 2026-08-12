@@ -19,6 +19,12 @@ class Environment {
     }
   }
 
+  public has(name: string): boolean {
+    if (this.variables.has(name)) return true;
+    if (this.parent) return this.parent.has(name);
+    return false;
+  }
+
   public assign(name: string, value: any): void {
     if (this.variables.has(name)) {
       this.variables.set(name, value);
@@ -47,16 +53,61 @@ export class Interpreter {
 
   constructor(private stdout: (msg: string) => void = console.log) {}
 
-  public run(program: Stmt[]) {
+  public async run(program: Stmt[]) {
     for (const stmt of program) {
-      this.evaluateStmt(stmt, this.globalEnv);
+      await this.evaluateStmt(stmt, this.globalEnv);
     }
   }
 
-  private evaluateStmt(stmt: Stmt, env: Environment): void {
+  private async evaluateStmt(stmt: Stmt, env: Environment): Promise<void> {
     switch (stmt.kind) {
+      case "ScopeStmt":
+        const scopeEnv = new Environment(env);
+        // Lista de promessas onde as "green threads" (spawns) vão se registrar
+        const spawnPromises: Promise<void>[] = [];
+        scopeEnv.define("__scope_promises__", spawnPromises);
+
+        // Executa o corpo síncrono/assíncrono do escopo (que pode disparar os spawns)
+        await this.evaluateStmt(stmt.body, scopeEnv);
+
+        // Aguarda todos os filhos terminarem. Se houver deadline, cria uma corrida (race)
+        if (stmt.deadline) {
+          const deadlineValue = await this.evaluateExpr(stmt.deadline, env);
+          const timeoutPromise = new Promise<void>((_, reject) => 
+              setTimeout(() => reject(new Error("TimeoutError: Scope deadline exceeded")), deadlineValue)
+          );
+          await Promise.race([Promise.all(spawnPromises), timeoutPromise]);
+        } else {
+          await Promise.all(spawnPromises);
+        }
+        break;
+
+      case "SpawnStmt":
+        // Busca a lista de promessas do escopo mais próximo
+        let currentEnv: Environment | undefined = env;
+        let promisesList: Promise<void>[] | null = null;
+        while (currentEnv) {
+          if (currentEnv.has("__scope_promises__")) {
+             promisesList = currentEnv.get("__scope_promises__");
+             break;
+          }
+          currentEnv = currentEnv.parent;
+        }
+
+        if (!promisesList) {
+          throw new Error("RuntimeError: spawn called outside of a scope block");
+        }
+
+        const spawnEnv = new Environment(env);
+        // Dispara a rotina assincronamente e não aguarda aqui! (Goroutine style)
+        const task = (async () => {
+             await this.evaluateStmt(stmt.body, spawnEnv);
+        })();
+        promisesList.push(task);
+        break;
+
       case "MatchStmt":
-        const matchValue = this.evaluateExpr(stmt.value, env);
+        const matchValue = await this.evaluateExpr(stmt.value, env);
         if (typeof matchValue === "object" && matchValue !== null && matchValue.kind === "EnumVariant") {
             for (const arm of stmt.arms) {
                 if (arm.enumName === matchValue.enumName && arm.variantName === matchValue.variantName) {
@@ -64,11 +115,11 @@ export class Interpreter {
                     for (let i = 0; i < arm.binders.length; i++) {
                         armEnv.define(arm.binders[i], matchValue.payload[i]);
                     }
-                    this.evaluateStmt(arm.body, armEnv);
+                    await this.evaluateStmt(arm.body, armEnv);
                     return;
                 }
             }
-            throw new Error(`RuntimeError: No match arm found for ${matchValue.enumName}::${matchValue.variantName}`);
+            throw new Error(`RuntimeError: No match arm found for ${matchValue.enumName}.${matchValue.variantName}`);
         }
         throw new Error("RuntimeError: Cannot match on non-enum value");
         
@@ -78,7 +129,7 @@ export class Interpreter {
         break;
         
       case "ExpressionStatement":
-        this.evaluateExpr(stmt.expression, env);
+        await this.evaluateExpr(stmt.expression, env);
         break;
 
       case "ImplDeclaration":
@@ -99,46 +150,46 @@ export class Interpreter {
       case "ReturnStmt":
         // Avalia o valor e lança a exceção controlada para interromper o fluxo
         const returnValue = stmt.value
-          ? this.evaluateExpr(stmt.value, env)
+          ? await this.evaluateExpr(stmt.value, env)
           : null;
         throw new ReturnException(returnValue);
       case "VarDeclaration":
-        const value = this.evaluateExpr(stmt.value, env);
+        const value = await this.evaluateExpr(stmt.value, env);
         env.define(stmt.name, value);
         break;
       case "PrintStmt":
-        const output = this.evaluateExpr(stmt.value, env);
+        const output = await this.evaluateExpr(stmt.value, env);
         this.stdout(String(output));
         break;
       case "BlockStmt":
         // Cria um NOVO escopo isolado que herda do ambiente pai
         const blockEnv = new Environment(env);
         for (const blockStmt of stmt.body) {
-          this.evaluateStmt(blockStmt, blockEnv);
+          await this.evaluateStmt(blockStmt, blockEnv);
         }
         break;
       case "IfStmt":
-        const conditionValue = this.evaluateExpr(stmt.condition, env);
+        const conditionValue = await this.evaluateExpr(stmt.condition, env);
         if (conditionValue) {
-          this.evaluateStmt(stmt.consequent, env);
+          await this.evaluateStmt(stmt.consequent, env);
         } else if (stmt.alternate) {
-          this.evaluateStmt(stmt.alternate, env);
+          await this.evaluateStmt(stmt.alternate, env);
         }
         break;
       case "ForStmt":
-        const startValue = this.evaluateExpr(stmt.start, env);
-        const endValue = this.evaluateExpr(stmt.end, env);
+        const startValue = await this.evaluateExpr(stmt.start, env);
+        const endValue = await this.evaluateExpr(stmt.end, env);
         for (let i = startValue; i < endValue; i++) {
           // A cada iteração do loop, criamos um escopo limpo para não misturar os dados
           const loopEnv = new Environment(env);
           loopEnv.define(stmt.iteratorName, i);
-          this.evaluateStmt(stmt.body, loopEnv);
+          await this.evaluateStmt(stmt.body, loopEnv);
         }
         break;
       case "WhileStmt":
-        while (this.evaluateExpr(stmt.condition, env)) {
+        while (await this.evaluateExpr(stmt.condition, env)) {
           const loopEnv = new Environment(env);
-          this.evaluateStmt(stmt.body, loopEnv);
+          await this.evaluateStmt(stmt.body, loopEnv);
         }
         break;
       default:
@@ -147,26 +198,26 @@ export class Interpreter {
     }
   }
 
-  private evaluateExpr(expr: Expr, env: Environment): any {
+  private async evaluateExpr(expr: Expr, env: Environment): Promise<any> {
     switch (expr.kind) {
       case "AssignmentExpr":
-        const assignValue = this.evaluateExpr(expr.value, env);
+        const assignValue = await this.evaluateExpr(expr.value, env);
         if (expr.assignee.kind === "Identifier") {
           env.assign(expr.assignee.symbol, assignValue);
           return assignValue;
         } else if (expr.assignee.kind === "MemberExpr") {
-          const objectInstance = this.evaluateExpr(expr.assignee.object, env);
+          const objectInstance = await this.evaluateExpr(expr.assignee.object, env);
           if (!(objectInstance instanceof Map)) {
             throw new Error("TypeError: Cannot assign to property on non-object.");
           }
           objectInstance.set(expr.assignee.property, assignValue);
           return assignValue;
         } else if (expr.assignee.kind === "IndexExpr") {
-          const arrayInstance = this.evaluateExpr(expr.assignee.object, env);
+          const arrayInstance = await this.evaluateExpr(expr.assignee.object, env);
           if (!Array.isArray(arrayInstance)) {
             throw new Error("TypeError: Cannot index into a non-array.");
           }
-          const indexValue = this.evaluateExpr(expr.assignee.index, env);
+          const indexValue = await this.evaluateExpr(expr.assignee.index, env);
           arrayInstance[indexValue] = assignValue;
           return assignValue;
         } else {
@@ -189,13 +240,13 @@ export class Interpreter {
         instance.set("__structName", expr.structName);
 
         for (const prop of expr.properties) {
-          const evalValue = this.evaluateExpr(prop.value, env);
+          const evalValue = await this.evaluateExpr(prop.value, env);
           instance.set(prop.name, evalValue);
         }
         return instance;
 
       case "MemberExpr":
-        const objectInstance = this.evaluateExpr(expr.object, env);
+        const objectInstance = await this.evaluateExpr(expr.object, env);
         if (typeof objectInstance === "object" && objectInstance !== null && objectInstance.kind === "EnumDeclaration") {
              // Retorna um construtor parcial de variante ou a própria variante vazia
              const variantName = expr.property;
@@ -213,30 +264,34 @@ export class Interpreter {
       case "CallExpr":
         // 1. Verificamos se é a chamada de um MÉTODO (ex: p.sum())
         if (expr.caller.kind === "MemberExpr") {
-          const objectInstance = this.evaluateExpr(expr.caller.object, env);
+          const objectInstanceCall = await this.evaluateExpr(expr.caller.object, env);
           
           // Se for Enum, repassa para a lógica geral de Call abaixo que captura __isEnumConstructor
-          if (typeof objectInstance === "object" && objectInstance !== null && objectInstance.kind === "EnumDeclaration") {
+          if (typeof objectInstanceCall === "object" && objectInstanceCall !== null && objectInstanceCall.kind === "EnumDeclaration") {
               // Pula o bloco if de método.
           } else {
-              if (!(objectInstance instanceof Map)) {
+              if (!(objectInstanceCall instanceof Map)) {
                 throw new Error("TypeError: Cannot call a method on a non-object.");
               }
 
               // Lógica original de chamada de método...
-              const structName = objectInstance.get("__structName");
+              const structName = objectInstanceCall.get("__structName");
               const methodMap = this.globalEnv.get(`impl_${structName}`);
               if (!methodMap) {
                 throw new Error(`TypeError: No impl block found for ${structName}`);
               }
-              const methodFunc = methodMap.find((m: any) => m.declaration.name === expr.caller.property);
+              const methodFunc = methodMap.find((m: any) => m.declaration.name === (expr.caller as any).property);
               if (!methodFunc) {
-                throw new Error(`TypeError: Method '${expr.caller.property}' not found`);
+                throw new Error(`TypeError: Method '${(expr.caller as any).property}' not found`);
               }
 
-              const args = expr.args.map((arg) => this.evaluateExpr(arg, env));
+              const args = [];
+              for (const arg of expr.args) {
+                  args.push(await this.evaluateExpr(arg, env));
+              }
+              
               const methodEnv = new Environment(methodFunc.closure);
-              methodEnv.define("self", objectInstance);
+              methodEnv.define("self", objectInstanceCall);
 
               methodFunc.declaration.parameters.forEach((param: any, index: number) => {
                 methodEnv.define(param.name, args[index]);
@@ -244,7 +299,7 @@ export class Interpreter {
 
               try {
                 for (const blockStmt of methodFunc.declaration.body.body) {
-                  this.evaluateStmt(blockStmt, methodEnv);
+                  await this.evaluateStmt(blockStmt, methodEnv);
                 }
               } catch (e) {
                 if (e instanceof ReturnException) {
@@ -256,16 +311,22 @@ export class Interpreter {
           }
         }
 
-        const func = this.evaluateExpr(expr.caller, env);
+        const func = await this.evaluateExpr(expr.caller, env);
 
         if (func && func.__isEnumConstructor) {
-             const args = expr.args.map((arg) => this.evaluateExpr(arg, env));
+             const args = [];
+             for (const arg of expr.args) {
+                  args.push(await this.evaluateExpr(arg, env));
+             }
              return { kind: "EnumVariant", enumName: func.enumName, variantName: func.variantName, payload: args };
         }
 
         if (func instanceof FlexFunction) {
             // 2. avaliamos os argumentos passados
-            const args = expr.args.map((arg) => this.evaluateExpr(arg, env));
+            const args = [];
+            for (const arg of expr.args) {
+                 args.push(await this.evaluateExpr(arg, env));
+            }
 
             // 3. Criamos um NOVO escopo baseado no escopo onde a função foi DEFINIDA (Closure) real
             const functionEnv = new Environment(func.closure);
@@ -278,7 +339,7 @@ export class Interpreter {
             // 5. Executamos o corpo da função e capturamos o retorno
             try {
               for (const blockStmt of func.declaration.body.body) {
-                this.evaluateStmt(blockStmt, functionEnv);
+                await this.evaluateStmt(blockStmt, functionEnv);
               }
             } catch (e) {
               if (e instanceof ReturnException) {
@@ -297,13 +358,18 @@ export class Interpreter {
       case "StringLiteral":
         return expr.value;
       case "StringInterpolationExpr":
-        return expr.parts.map(p => {
-          if (typeof p === "string") return p;
-          return String(this.evaluateExpr(p, env));
-        }).join("");
+        const parts = [];
+        for (const p of expr.parts) {
+            if (typeof p === "string") {
+                parts.push(p);
+            } else {
+                parts.push(String(await this.evaluateExpr(p, env)));
+            }
+        }
+        return parts.join("");
 
       case "TryExpr":
-        const tryValue = this.evaluateExpr(expr.expression, env);
+        const tryValue = await this.evaluateExpr(expr.expression, env);
         if (typeof tryValue === "object" && tryValue !== null && tryValue.kind === "EnumVariant") {
             if (tryValue.variantName === "Ok" || tryValue.variantName === "Some" || tryValue.variantName === "Sucesso") {
                 return tryValue.payload.length > 0 ? tryValue.payload[0] : null;
@@ -323,33 +389,37 @@ export class Interpreter {
         }
         return value;
       case "LogicalExpr":
-        const leftVal = this.evaluateExpr(expr.left, env);
+        const leftVal = await this.evaluateExpr(expr.left, env);
         if (expr.operator === "&&") {
           if (!leftVal) return leftVal;
-          return this.evaluateExpr(expr.right, env);
+          return await this.evaluateExpr(expr.right, env);
         } else if (expr.operator === "||") {
           if (leftVal) return leftVal;
-          return this.evaluateExpr(expr.right, env);
+          return await this.evaluateExpr(expr.right, env);
         }
         throw new Error(`Unknown logical operator: ${expr.operator}`);
       case "UnaryExpr":
-        const arg = this.evaluateExpr(expr.argument, env);
+        const arg = await this.evaluateExpr(expr.argument, env);
         if (expr.operator === "-") return -arg;
         if (expr.operator === "!") return !arg;
         throw new Error(`Unknown unary operator: ${expr.operator}`);
       case "ArrayLiteral":
-        return expr.elements.map(e => this.evaluateExpr(e, env));
+        const elements = [];
+        for (const e of expr.elements) {
+             elements.push(await this.evaluateExpr(e, env));
+        }
+        return elements;
       case "IndexExpr":
-        const obj = this.evaluateExpr(expr.object, env);
-        const idx = this.evaluateExpr(expr.index, env);
+        const obj = await this.evaluateExpr(expr.object, env);
+        const idx = await this.evaluateExpr(expr.index, env);
         if (Array.isArray(obj)) {
           return obj[idx];
         } else {
           throw new Error("TypeError: Indexing is only supported on arrays.");
         }
       case "BinaryExpr":
-        const left = this.evaluateExpr(expr.left, env);
-        const right = this.evaluateExpr(expr.right, env);
+        const left = await this.evaluateExpr(expr.left, env);
+        const right = await this.evaluateExpr(expr.right, env);
         switch (expr.operator) {
           case "+":
             return left + right;

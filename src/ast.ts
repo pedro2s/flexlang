@@ -5,6 +5,8 @@ export enum TokenType {
   Mut = "MUT",
   Enum = "ENUM",
   Match = "MATCH",
+  Scope = "SCOPE",
+  Spawn = "SPAWN",
   Print = "PRINT",
   If = "IF", // Novos tokens para controle de fluxo
   Else = "ELSE",
@@ -73,6 +75,8 @@ export type Stmt =
   | ImplDeclaration
   | EnumDeclaration
   | MatchStmt
+  | ScopeStmt
+  | SpawnStmt
   | ExpressionStatement;
 
 export type Expr =
@@ -295,6 +299,17 @@ export interface MatchStmt {
   kind: "MatchStmt";
   value: Expr;
   arms: MatchArm[];
+}
+
+export interface ScopeStmt {
+  kind: "ScopeStmt";
+  deadline?: Expr; // Opcional, para timeout
+  body: BlockStmt;
+}
+
+export interface SpawnStmt {
+  kind: "SpawnStmt";
+  body: BlockStmt;
 }
 
 export interface TryExpr {

@@ -41,11 +41,11 @@ class TypeEnvironment {
 
 // --- O Type Checker Central ---
 export class TypeChecker {
-  private env = new TypeEnvironment();
-  // Globais como Structs e Functions para checagem de tipos
-  private structs = new Map<string, StructDeclaration>();
-  private functions = new Map<string, FunctionDeclaration>();
-  private enums = new Map<string, EnumDeclaration>();
+  private env: TypeEnvironment = new TypeEnvironment();
+  private structs: Map<string, StructDeclaration> = new Map();
+  private functions: Map<string, FunctionDeclaration> = new Map();
+  private enums: Map<string, EnumDeclaration> = new Map();
+  private inScopeContext: number = 0;
 
   public check(stmts: Stmt[]): void {
     // Primeira Passagem (Pass 1): Registrar declarações (Hoisting de Structs e Funcs)
@@ -85,6 +85,26 @@ export class TypeChecker {
           declaredType = valueType;
         }
         env.define(stmt.name, declaredType, stmt.isMut);
+        break;
+
+      case "ScopeStmt":
+        if (stmt.deadline) {
+            const deadlineType = this.checkExpr(stmt.deadline, env);
+            // Idealmente exigiriamos um tipo Duration, mas por hora Int serve
+            if (deadlineType.kind !== "Int" && deadlineType.kind !== "Any") {
+                 throw new Error(`TypeError: scope deadline must be an Int, got ${this.typeToString(deadlineType)}`);
+            }
+        }
+        this.inScopeContext++;
+        this.checkStmt(stmt.body, env);
+        this.inScopeContext--;
+        break;
+
+      case "SpawnStmt":
+        if (this.inScopeContext === 0) {
+            throw new Error("SyntaxError: 'spawn' can only be called inside a 'scope' block");
+        }
+        this.checkStmt(stmt.body, env);
         break;
 
       case "ExpressionStatement":
