@@ -1,0 +1,23 @@
+import type { NativeModule } from "./types";
+import { httpModule } from "./http";
+
+export class ModuleRegistry {
+  private modules = new Map<string, NativeModule>();
+
+  register(mod: NativeModule): void {
+    this.modules.set(mod.path, mod);
+  }
+
+  get(path: string): NativeModule | undefined {
+    return this.modules.get(path);
+  }
+}
+
+/**
+ * Registro dos módulos nativos da linguagem. Módulos de teste podem ser
+ * registrados de fora (ver `tests/runner.ts`), o que é justamente a prova de
+ * que checker/interpretador/transpiler não conhecem nenhum módulo por nome.
+ */
+export const registry = new ModuleRegistry();
+
+registry.register(httpModule);

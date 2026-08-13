@@ -10,6 +10,13 @@ import type {
   ImportDeclaration,
 } from "./ast";
 import { builtinEnums, isBuiltinType, successVariant } from "./stdlib";
+import { registry } from "./modules/registry";
+import {
+  modulePath,
+  nativeStructDeclaration,
+  type NativeSignature,
+  type NativeType,
+} from "./modules/types";
 
 // --- Representação Interna de Tipos do TypeChecker ---
 export type FlexType =
@@ -64,6 +71,8 @@ export class TypeChecker {
   private functions: Map<string, FunctionDeclaration> = new Map();
   private enums: Map<string, EnumDeclaration> = new Map();
   private traits: Map<string, TraitDeclaration> = new Map();
+  /** Superfície dos módulos nativos importados (RFC-003), por nome de tipo. */
+  private nativeTypes: Map<string, NativeType> = new Map();
   private inScopeContext: number = 0;
   private typeMap: TypeMap = new Map();
 
@@ -99,12 +108,14 @@ export class TypeChecker {
       } else if (stmt.kind === "TraitDeclaration") {
         this.traits.set(stmt.name, stmt);
       } else if (stmt.kind === "ImportDeclaration") {
-        if (stmt.moduleName === "\"net/http\"") {
-             this.structs.set("Server", { kind: "StructDeclaration", name: "Server", properties: [] });
-             this.structs.set("Request", { kind: "StructDeclaration", name: "Request", properties: [] });
-             this.structs.set("Response", { kind: "StructDeclaration", name: "Response", properties: [] });
-        } else {
-             throw new Error(`ImportError: Module '${stmt.moduleName}' not found`);
+        const path = modulePath(stmt.moduleName);
+        const mod = registry.get(path);
+        if (!mod) {
+             throw new Error(`ImportError: Module '${path}' not found`);
+        }
+        for (const nativeType of mod.types) {
+             this.structs.set(nativeType.name, nativeStructDeclaration(nativeType));
+             this.nativeTypes.set(nativeType.name, nativeType);
         }
       }
     }
@@ -498,15 +509,23 @@ export class TypeChecker {
         }
         
         if (expr.caller.kind === "MemberExpr") {
+            // Channel é primitivo da linguagem (não vem de import): `send` move o
+            // valor, e `recv` devolve o tipo do canal — semânticas que uma
+            // assinatura de módulo nativo não expressa.
             if (expr.caller.object.kind === "Identifier" && expr.caller.object.symbol === "Channel" && expr.caller.property === "new") {
                 return { kind: "Struct", name: "Channel", genericArgs: [{ kind: "Any" }] };
             }
-            if (expr.caller.object.kind === "Identifier" && expr.caller.object.symbol === "Server" && expr.caller.property === "new") {
-                if (expr.args.length !== 1) throw new Error("TypeError: Server.new expects exactly 1 argument (address)");
-                this.checkExpr(expr.args[0], env);
-                return { kind: "Struct", name: "Server", genericArgs: [] };
+
+            // Construtor estático de módulo nativo: `Server.new(...)`
+            if (expr.caller.object.kind === "Identifier") {
+                const staticSig = this.nativeTypes
+                    .get(expr.caller.object.symbol)
+                    ?.statics?.find((s) => s.name === expr.caller.property);
+                if (staticSig) {
+                    return this.checkNativeCall(`${expr.caller.object.symbol}.${staticSig.name}`, staticSig, expr.args, env);
+                }
             }
-            
+
             const callerType = this.checkExpr(expr.caller.object, env);
             if (callerType.kind === "Struct" && callerType.name === "Channel") {
                 if (expr.caller.property === "send") {
@@ -526,15 +545,13 @@ export class TypeChecker {
                     return callerType.genericArgs.length > 0 ? callerType.genericArgs[0] : { kind: "Any" };
                 }
             }
-            if (callerType.kind === "Struct" && callerType.name === "Server") {
-                if (expr.caller.property === "route") {
-                    if (expr.args.length !== 2) throw new Error("TypeError: Server.route expects exactly 2 arguments");
-                    this.checkExpr(expr.args[0], env);
-                    this.checkExpr(expr.args[1], env);
-                    return { kind: "Void" };
-                } else if (expr.caller.property === "start") {
-                    if (expr.args.length !== 0) throw new Error("TypeError: Server.start expects exactly 0 arguments");
-                    return { kind: "Void" };
+            // Método de instância de um tipo nativo: `server.route(...)`
+            if (callerType.kind === "Struct") {
+                const methodSig = this.nativeTypes
+                    .get(callerType.name)
+                    ?.methods?.find((m) => m.name === expr.caller.property);
+                if (methodSig) {
+                    return this.checkNativeCall(`${callerType.name}.${methodSig.name}`, methodSig, expr.args, env);
                 }
             }
         }
@@ -637,6 +654,28 @@ export class TypeChecker {
    * Liga os parâmetros de tipo de um enum aos argumentos concretos daquela
    * instanciação. O que não foi informado vira `Any`, para não inventar tipo.
    */
+  /**
+   * Chamada a um método de módulo nativo. A validação é por aridade: os tipos
+   * dos argumentos de métodos nativos continuam sem checagem, como antes desta
+   * RFC — limitação conhecida, não regressão.
+   */
+  private checkNativeCall(
+    label: string,
+    signature: NativeSignature,
+    args: Expr[],
+    env: TypeEnvironment,
+  ): FlexType {
+    if (args.length !== signature.arity) {
+      throw new Error(
+        `TypeError: ${label} expects exactly ${signature.arity} argument${signature.arity === 1 ? "" : "s"}, got ${args.length}`,
+      );
+    }
+    for (const arg of args) {
+      this.checkExpr(arg, env);
+    }
+    return signature.returns;
+  }
+
   /**
    * O `?` devolve o payload de sucesso e propaga qualquer outra variante **como
    * está** — logo os parâmetros de tipo que essas variantes carregam (o `E` de

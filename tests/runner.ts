@@ -4,6 +4,11 @@ import { Lexer } from "../src/lexer";
 import { Parser } from "../src/parser";
 import { Interpreter } from "../src/interpreter";
 import { TypeChecker } from "../src/checker";
+import { registry } from "../src/modules/registry";
+import { echoModule } from "../src/modules/echo";
+
+// Módulo nativo fictício, disponível só para a suíte (RFC-003)
+registry.register(echoModule);
 
 const testsDir = path.join(process.cwd(), "tests");
 

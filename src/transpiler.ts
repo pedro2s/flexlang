@@ -8,6 +8,8 @@ import type {
 } from "./ast";
 import type { FlexType, TypeMap } from "./checker";
 import { builtinEnums, isBuiltinType, successVariant } from "./stdlib";
+import { registry } from "./modules/registry";
+import { modulePath, type NativeType } from "./modules/types";
 
 /**
  * Identificadores legítimos em FlexLang que o Go não aceita: palavras reservadas
@@ -36,6 +38,9 @@ export class GoTranspiler {
   // emitidos, para não poluir a saída de quem não usa nenhum dos dois.
   private usedBuiltins = new Set<string>();
 
+  // Superfície dos módulos nativos importados (RFC-003), por nome de tipo.
+  private nativeTypes = new Map<string, NativeType>();
+
   // Anotação de tipos vinda do TypeChecker (ver RFC-001).
   private types: TypeMap = new Map();
 
@@ -55,6 +60,7 @@ export class GoTranspiler {
     this.structNames.clear();
     this.traitNames.clear();
     this.usedBuiltins.clear();
+    this.nativeTypes.clear();
     this.types = types ?? new Map();
 
     // Result/Option não são declarados pelo usuário: entram direto na tabela
@@ -70,9 +76,14 @@ export class GoTranspiler {
     // e registra os nomes declarados (necessário para resolver tipos ao emitir).
     for (const stmt of program) {
       switch (stmt.kind) {
-        case "ImportDeclaration":
+        case "ImportDeclaration": {
           this.importedModules.add(stmt.moduleName);
+          const mod = registry.get(modulePath(stmt.moduleName));
+          for (const nativeType of mod?.types ?? []) {
+            this.nativeTypes.set(nativeType.name, nativeType);
+          }
           break;
+        }
         case "EnumDeclaration":
           this.enums.set(stmt.name, stmt);
           declarations.push(stmt);
@@ -114,11 +125,15 @@ export class GoTranspiler {
 
   private buildHeader(): string {
     const lines: string[] = ["package main", ""];
-    const isHttp = this.importedModules.has('"net/http"');
 
-    if (isHttp) {
-      this.goImports.add("net/http");
-      this.goImports.add("encoding/json");
+    // Cada módulo importado diz o que precisa em Go — nenhum nome de módulo
+    // aparece aqui dentro (RFC-003).
+    const boilerplates: string[] = [];
+    for (const moduleName of this.importedModules) {
+      const mod = registry.get(modulePath(moduleName));
+      if (!mod) continue; // import inválido já foi recusado pelo checker
+      for (const goImport of mod.goCodegen.imports) this.goImports.add(goImport);
+      if (mod.goCodegen.boilerplate) boilerplates.push(mod.goCodegen.boilerplate);
     }
 
     const imports = [...this.goImports].sort();
@@ -141,24 +156,8 @@ export class GoTranspiler {
       lines.push("// ---------------------------------------", "");
     }
 
-    if (isHttp) {
-      lines.push(
-        "// --- FlexLang HTTP Boilerplate ---",
-        "type Request struct { Raw *http.Request }",
-        "type Response struct { Raw http.ResponseWriter }",
-        "func (r Response) json(data any) {",
-        '    r.Raw.Header().Set("Content-Type", "application/json")',
-        "    json.NewEncoder(r.Raw).Encode(data)",
-        "}",
-        "type Server struct { Addr string; Mux *http.ServeMux }",
-        "func NewServer(addr string) *Server { return &Server{Addr: addr, Mux: http.NewServeMux()} }",
-        "func (s *Server) route(path string, handler func(req Request, res Response)) {",
-        "    s.Mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) { handler(Request{Raw: r}, Response{Raw: w}) })",
-        "}",
-        "func (s *Server) start() { http.ListenAndServe(s.Addr, s.Mux) }",
-        "// ---------------------------------",
-        "",
-      );
+    for (const boilerplate of boilerplates) {
+      lines.push(boilerplate, "");
     }
 
     return lines.join("\n") + "\n";
@@ -579,10 +578,19 @@ export class GoTranspiler {
         return `${this.variantValueName(member.object.symbol, member.property)}_new(${args})`;
       }
 
-      if (member.object.kind === "Identifier" && member.object.symbol === "Server" && member.property === "new") {
-        return `NewServer(${this.transpileExpr(expr.args[0]!)})`;
+      // Construtor estático de módulo nativo: `Server.new(x)` -> `NewServer(x)`,
+      // a convenção que o boilerplate Go de cada módulo segue.
+      if (member.object.kind === "Identifier") {
+        const isStatic = this.nativeTypes
+          .get(member.object.symbol)
+          ?.statics?.some((s) => s.name === member.property);
+        if (isStatic && member.property === "new") {
+          const args = expr.args.map((a) => this.transpileExpr(a)).join(", ");
+          return `New${member.object.symbol}(${args})`;
+        }
       }
 
+      // Channel é primitivo da linguagem, não vem de módulo: vira `chan` do Go
       if (member.object.kind === "Identifier" && member.object.symbol === "Channel" && member.property === "new") {
         const type = this.types.get(expr);
         const element =

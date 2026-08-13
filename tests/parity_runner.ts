@@ -18,6 +18,11 @@ import { Parser } from "../src/parser";
 import { Interpreter } from "../src/interpreter";
 import { TypeChecker } from "../src/checker";
 import { GoTranspiler } from "../src/transpiler";
+import { registry } from "../src/modules/registry";
+import { echoModule } from "../src/modules/echo";
+
+// Módulo nativo fictício, disponível só para a suíte (RFC-003)
+registry.register(echoModule);
 
 const testsDir = path.join(process.cwd(), "tests");
 const RUN_TIMEOUT_MS = 30_000;

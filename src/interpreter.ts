@@ -1,6 +1,7 @@
 import type { Stmt, Expr, FunctionDeclaration } from "./ast";
 import { builtinEnums, isBuiltinType, isSuccessVariant } from "./stdlib";
-import * as http from "http";
+import { registry } from "./modules/registry";
+import { NATIVE_TAG, isNativeObject, modulePath, nativeMethod } from "./modules/types";
 
 class Environment {
   private variables: Map<string, any> = new Map();
@@ -49,7 +50,9 @@ class FlexFunction {
   ) {}
 }
 
+/** Canal síncrono. Primitivo da linguagem: existe sem import, como `scope`/`spawn`. */
 class FlexChannel {
+  readonly [NATIVE_TAG] = "Channel";
   private queue: any[] = [];
   private receivers: ((val: any) => void)[] = [];
 
@@ -79,60 +82,6 @@ class FlexChannel {
   }
 }
 
-class FlexServer {
-    private mux = new Map<string, any>(); // path -> FlexFunction
-    private server: http.Server;
-    private interpreter: Interpreter;
-    private env: Environment;
-    
-    constructor(private addr: string, interpreter: Interpreter, env: Environment) {
-        this.interpreter = interpreter;
-        this.env = env;
-        
-        this.server = http.createServer((req, res) => {
-            const path = req.url || "/";
-            const handler = this.mux.get(path);
-            if (handler) {
-                 const reqObj = new Map<string, any>();
-                 const resObj = new Map<string, any>();
-                 resObj.set("json", (data: any) => {
-                     res.setHeader("Content-Type", "application/json");
-                     // Handle FlexLang Map objects inside JSON!
-                     res.end(JSON.stringify(data, (k, v) => (v instanceof Map ? Object.fromEntries(v) : v)));
-                 });
-                 
-                 // Run handler asynchronously
-                 const mEnv = new Environment(handler.closure);
-                 handler.declaration.parameters.forEach((param: any, i: number) => {
-                     mEnv.define(param.name, i === 0 ? reqObj : resObj);
-                 });
-                 
-                 (async () => {
-                     try {
-                         for (const stmt of handler.declaration.body.body) {
-                             await this.interpreter.evaluateStmt(stmt, mEnv);
-                         }
-                     } catch (e) {
-                         if (!(e instanceof ReturnException)) console.error("Error in handler:", e);
-                     }
-                 })();
-            } else {
-                res.writeHead(404);
-                res.end("Not found");
-            }
-        });
-    }
-    
-    public route(path: string, handler: any) {
-        this.mux.set(path, handler);
-    }
-    
-    public start() {
-        const port = parseInt(this.addr.replace(":", ""));
-        this.server.listen(port, () => console.log(`[FlexLang] Server listening on ${this.addr}`));
-    }
-}
-
 export class Interpreter {
   // Ambiente para armazenar variáveis na memória
   private globalEnv = new Environment();
@@ -148,6 +97,35 @@ export class Interpreter {
     for (const stmt of program) {
       await this.evaluateStmt(stmt, this.globalEnv);
     }
+  }
+
+  /**
+   * Executa uma função FlexLang com argumentos já avaliados. É por aqui que um
+   * módulo nativo chama de volta o código do usuário (ex: o handler de uma rota
+   * HTTP), sem precisar do ambiente interno do interpretador.
+   */
+  public async callFunction(fn: unknown, args: any[]): Promise<any> {
+    if (!(fn instanceof FlexFunction)) {
+      throw new Error("TypeError: Not a function");
+    }
+
+    // Escopo novo a partir de onde a função foi DEFINIDA (closure real)
+    const functionEnv = new Environment(fn.closure);
+    fn.declaration.parameters.forEach((param, index) => {
+      functionEnv.define(param.name, args[index]);
+    });
+
+    try {
+      for (const stmt of fn.declaration.body.body) {
+        await this.evaluateStmt(stmt, functionEnv);
+      }
+    } catch (e) {
+      if (e instanceof ReturnException) {
+        return e.value; // Pega o valor e devolve para quem chamou!
+      }
+      throw e; // Se for um erro real, lança adiante!
+    }
+    return null; // Caso a função não tenha return
   }
 
   private async evaluateStmt(stmt: Stmt, env: Environment): Promise<void> {
@@ -233,9 +211,21 @@ export class Interpreter {
         env.define(stmt.name, stmt);
         break;
       case "TraitDeclaration":
-      case "ImportDeclaration":
-        // Apenas definições
+        // Apenas definição
         break;
+
+      case "ImportDeclaration": {
+        // O módulo nativo injeta seus valores no ambiente (RFC-003)
+        const path = modulePath(stmt.moduleName);
+        const mod = registry.get(path);
+        if (!mod) {
+          throw new Error(`ImportError: Module '${path}' not found`);
+        }
+        for (const [name, binding] of Object.entries(mod.runtimeBinding(this))) {
+          env.define(name, binding);
+        }
+        break;
+      }
       case "FunctionDeclaration":
         // Guardamos a declaração envolta em uma closure (FlexFunction)
         const flexFunc = new FlexFunction(stmt, env);
@@ -350,6 +340,9 @@ export class Interpreter {
              }
              return { __isEnumConstructor: true, enumName: objectInstance.name, variantName };
         }
+        if (isNativeObject(objectInstance)) {
+          return objectInstance[expr.property];
+        }
         if (!(objectInstance instanceof Map)) {
           throw new Error("TypeError: Cannot access property on non-object.");
         }
@@ -359,39 +352,25 @@ export class Interpreter {
         // 1. Verificamos se é a chamada de um MÉTODO (ex: p.sum())
         if (expr.caller.kind === "MemberExpr") {
           
+          // Channel é primitivo da linguagem: existe sem import
           if (expr.caller.object.kind === "Identifier" && expr.caller.object.symbol === "Channel" && expr.caller.property === "new") {
               return new FlexChannel();
           }
-          if (expr.caller.object.kind === "Identifier" && expr.caller.object.symbol === "Server" && expr.caller.property === "new") {
-              const addr = await this.evaluateExpr(expr.args[0], env);
-              return new FlexServer(addr, this, env);
-          }
 
           const objectInstanceCall = await this.evaluateExpr(expr.caller.object, env);
-          
-          if (objectInstanceCall instanceof FlexChannel) {
-              if (expr.caller.property === "send") {
-                  const val = await this.evaluateExpr(expr.args[0], env);
-                  await objectInstanceCall.send(val);
-                  return null;
-              } else if (expr.caller.property === "recv") {
-                  return await objectInstanceCall.recv();
+
+          // Chamada nativa (construtor estático de módulo, método de canal, de
+          // servidor...): todo objeto nativo expõe seus métodos como funções,
+          // então um caminho só atende a todos os módulos.
+          const native = nativeMethod(objectInstanceCall, expr.caller.property);
+          if (native) {
+              const args = [];
+              for (const arg of expr.args) {
+                  args.push(await this.evaluateExpr(arg, env));
               }
+              return await native(...args);
           }
-          if (objectInstanceCall instanceof FlexServer) {
-              if (expr.caller.property === "route") {
-                  const path = await this.evaluateExpr(expr.args[0], env);
-                  const handlerName = (expr.args[1] as any).symbol; // assumes Identifier
-                  const handler = env.get(handlerName);
-                  objectInstanceCall.route(path, handler);
-                  return null;
-              } else if (expr.caller.property === "start") {
-                  objectInstanceCall.start();
-                  // We can await a never-resolving promise to keep the interpreter alive!
-                  return new Promise(() => {});
-              }
-          }
-          
+
           // Tratamento de metodos dinâmicos (como res.json)
           if (objectInstanceCall instanceof Map && objectInstanceCall.has(expr.caller.property)) {
               const dynMethod = objectInstanceCall.get(expr.caller.property);
@@ -472,27 +451,7 @@ export class Interpreter {
             for (const arg of expr.args) {
                  args.push(await this.evaluateExpr(arg, env));
             }
-
-            // 3. Criamos um NOVO escopo baseado no escopo onde a função foi DEFINIDA (Closure) real
-            const functionEnv = new Environment(func.closure);
-
-            // 4. Mapeamos os argumentos para os nomes dos parâmetros
-            func.declaration.parameters.forEach((param, index) => {
-              functionEnv.define(param.name, args[index]);
-            });
-
-            // 5. Executamos o corpo da função e capturamos o retorno
-            try {
-              for (const blockStmt of func.declaration.body.body) {
-                await this.evaluateStmt(blockStmt, functionEnv);
-              }
-            } catch (e) {
-              if (e instanceof ReturnException) {
-                return e.value; // Pega o valor e devolve para quem chamou!
-              }
-              throw e; // Se for um erro real, lança adiante!
-            }
-            return null; // Caso a função não tenha return
+            return await this.callFunction(func, args);
         }
         throw new Error(`TypeError: Not a function`);
 

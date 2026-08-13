@@ -1,6 +1,6 @@
 # RFC-003: Arquitetura Mínima de Módulos Nativos
 
-> **Status:** Draft · **Prioridade:** P1 (enabler) · **Depende de:** RFC-001, RFC-002
+> **Status:** Implementado · **Prioridade:** P1 (enabler) · **Depende de:** RFC-001, RFC-002
 > **Bloqueia:** RFC-004, RFC-005 · **Relacionado:** Seção 7 do [roadmap arquitetural](../../flexlang_architecture_roadmap.md) (versão completa, pós-v1.0)
 
 ## Resumo
@@ -81,9 +81,26 @@ Nenhuma dessas mudanças altera comportamento observável — é uma refatoraç�
 
 ## Critério de Aceite
 
-- [ ] `checker.ts`, `interpreter.ts` e `transpiler.ts` não têm mais nenhuma comparação literal `moduleName === "\"net/http\""` — tudo passa por `registry.get()`.
-- [ ] `net/http` (RFC-004) e `db/postgres` (RFC-005) são implementados como `NativeModule`, não como casos especiais.
-- [ ] Todos os golden tests preexistentes continuam passando sem alteração de `.out`.
+- [x] `checker.ts`, `interpreter.ts` e `transpiler.ts` não têm mais nenhuma comparação literal `moduleName === "\"net/http\""` — tudo passa por `registry.get()`. Nenhum dos três cita mais `net/http` em lugar nenhum.
+- [x] `net/http` é implementado como `NativeModule` (`src/modules/http.ts`). `db/postgres` fica para a RFC-005, que agora só precisa escrever o módulo — nenhuma mudança no core.
+- [x] Todos os golden tests preexistentes continuam passando sem alteração de `.out`. O Go gerado também é byte a byte idêntico ao do commit anterior, conferido para `net/http`, canais e o exemplo HTTP.
+
+## Estado da Implementação
+
+Entregue em `src/modules/` (`types.ts`, `registry.ts`, `http.ts`, `echo.ts`), com as três costuras em checker, interpretador e transpiler. Além dos golden tests, os dois modos foram verificados servindo HTTP de verdade (`examples/01_hello_http.flex` interpretado e compilado devolvem a mesma resposta), já que nenhum teste automatizado sobe um servidor.
+
+Quatro ajustes em relação ao desenho:
+
+1. **`typeSurface.structs` virou `types: NativeType[]`.** O próprio comentário da RFC pedia "assinaturas de método por struct, para o checker validar chamadas" como um campo a mais; em vez de duas listas paralelas, cada tipo nativo carrega suas propriedades, seus construtores estáticos e seus métodos no mesmo lugar. A validação continua sendo só de aridade, como antes desta RFC.
+2. **`Channel` não virou módulo.** Ele não é importado (existe em todo programa, como `scope`/`spawn`), e não injeta boilerplate: mapeia para o tipo `chan` e para os operadores `<-` do Go. Além disso, `send` move o valor e `recv` devolve o tipo do canal — semânticas que uma assinatura de módulo não expressa. Continua tratado como primitivo da linguagem, em três pontos localizados e comentados.
+3. **Despacho nativo unificado.** Em vez de o interpretador consultar o binding do módulo por import, toda instância nativa é marcada com `NATIVE_TAG` e expõe seus métodos como funções. Com isso, os quatro `if`/`instanceof` de `Channel` e `Server` viraram um caminho só, que já atende qualquer módulo futuro sem tocar no interpretador.
+4. **`Interpreter.callFunction` passou a ser público.** É como um módulo nativo chama de volta o código do usuário (o handler de uma rota, por exemplo) sem precisar do `Environment` interno — antes o `FlexServer` montava o escopo na mão e chamava um método privado.
+
+Para o Go, construtores estáticos seguem a convenção `T.new(...)` → `NewT(...)`, que é o que o boilerplate de cada módulo declara.
+
+### O teste do módulo fictício
+
+`src/modules/echo.ts` (`"test/echo"`) **não** é registrado por padrão: quem o registra são os dois runners. `tests/22_native_module.flex` importa esse módulo e passa nos dois modos — ou seja, um módulo que o core desconhece por completo funciona de ponta a ponta, que é a prova real de que não sobrou nenhum módulo conhecido por nome. Como consequência esperada, esse `.flex` só roda pela suíte: `flex run` nele dá `ImportError`.
 
 ## Riscos e Alternativas Consideradas
 
