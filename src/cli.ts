@@ -40,8 +40,8 @@ async function main() {
     const ast = parser.parse();
     
     const checker = new TypeChecker();
-    checker.check(ast);
-    
+    const types = checker.check(ast);
+
     if (command === "run") {
         console.log(`[flex] Running ${filePath} in interpreted mode...\n`);
         const interpreter = new Interpreter();
@@ -49,7 +49,7 @@ async function main() {
     } else if (command === "build") {
         console.log(`[flex] Transpiling ${filePath} to Go...`);
         const transpiler = new GoTranspiler();
-        const goCode = transpiler.transpile(ast);
+        const goCode = transpiler.transpile(ast, types);
         
         const baseName = path.basename(filePath, ".flex");
         const outGo = `${baseName}.go`;

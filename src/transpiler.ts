@@ -1,59 +1,93 @@
-import type { Stmt, Expr, TypeNode } from "./ast";
+import type {
+  Stmt,
+  Expr,
+  TypeNode,
+  EnumDeclaration,
+  FunctionDeclaration,
+  Parameter,
+} from "./ast";
+import type { FlexType, TypeMap } from "./checker";
+
+/**
+ * Nomes de variante tratados como "sucesso" pelo operador `?`.
+ * Heurística herdada do checker (checker.ts) e do interpreter (interpreter.ts);
+ * some quando a RFC-002 fixar `Ok`/`Some` como stdlib de verdade.
+ */
+const OK_VARIANT_NAMES = ["Ok", "Some", "Sucesso"];
+
+/**
+ * Identificadores legítimos em FlexLang que o Go não aceita: palavras reservadas
+ * (`type`, `range`, `map`, ...) e `main`/`init`, que colidiriam com o entrypoint
+ * gerado. São prefixados para não quebrar programas válidos na hora de compilar.
+ */
+const GO_RESERVED = new Set([
+  "break", "case", "chan", "const", "continue", "default", "defer", "else", "fallthrough",
+  "for", "func", "go", "goto", "if", "import", "interface", "map", "package", "range",
+  "return", "select", "struct", "switch", "type", "var",
+  "main", "init",
+]);
 
 export class GoTranspiler {
   private out: string = "";
   private indentLevel: number = 0;
   private importedModules = new Set<string>();
+  private goImports = new Set<string>();
+
+  // Tabelas de declarações, preenchidas antes de emitir qualquer código.
+  private enums = new Map<string, EnumDeclaration>();
+  private structNames = new Set<string>();
+  private traitNames = new Set<string>();
+
+  // Anotação de tipos vinda do TypeChecker (ver RFC-001).
+  private types: TypeMap = new Map();
+
+  private tmpCount = 0;
+  private funcDepth = 0;
 
   constructor() {}
 
-  public transpile(program: Stmt[]): string {
+  public transpile(program: Stmt[], types?: TypeMap): string {
+    this.out = "";
+    this.indentLevel = 0;
+    this.tmpCount = 0;
+    this.funcDepth = 0;
+    this.goImports.clear();
+    this.importedModules.clear();
+    this.enums.clear();
+    this.structNames.clear();
+    this.traitNames.clear();
+    this.types = types ?? new Map();
+
     const declarations: Stmt[] = [];
     const mainStatements: Stmt[] = [];
 
     // Separa declaracoes de escopo global (structs, funcs) do corpo do programa
+    // e registra os nomes declarados (necessário para resolver tipos ao emitir).
     for (const stmt of program) {
-      if (stmt.kind === "ImportDeclaration") {
-        this.importedModules.add(stmt.moduleName);
-      } else if (
-        stmt.kind === "StructDeclaration" ||
-        stmt.kind === "FunctionDeclaration" ||
-        stmt.kind === "EnumDeclaration" ||
-        stmt.kind === "TraitDeclaration" ||
-        stmt.kind === "ImplDeclaration"
-      ) {
-        declarations.push(stmt);
-      } else {
-        mainStatements.push(stmt);
+      switch (stmt.kind) {
+        case "ImportDeclaration":
+          this.importedModules.add(stmt.moduleName);
+          break;
+        case "EnumDeclaration":
+          this.enums.set(stmt.name, stmt);
+          declarations.push(stmt);
+          break;
+        case "StructDeclaration":
+          this.structNames.add(stmt.name);
+          declarations.push(stmt);
+          break;
+        case "TraitDeclaration":
+          this.traitNames.add(stmt.name);
+          declarations.push(stmt);
+          break;
+        case "FunctionDeclaration":
+        case "ImplDeclaration":
+          declarations.push(stmt);
+          break;
+        default:
+          mainStatements.push(stmt);
       }
     }
-
-    this.emitLine("package main");
-    this.emitLine("");
-    this.emitLine('import "fmt"');
-    this.emitLine('import "sync"'); // Para o motor de scope/spawn
-    
-    if (this.importedModules.has("\"net/http\"")) {
-         this.emitLine('import "net/http"');
-         this.emitLine('import "encoding/json"');
-         this.emitLine("");
-         this.emitLine("// --- FlexLang HTTP Boilerplate ---");
-         this.emitLine("type Request struct { Raw *http.Request }");
-         this.emitLine("type Response struct { Raw http.ResponseWriter }");
-         this.emitLine("func (r Response) json(data any) {");
-         this.emitLine("    r.Raw.Header().Set(\"Content-Type\", \"application/json\")");
-         this.emitLine("    json.NewEncoder(r.Raw).Encode(data)");
-         this.emitLine("}");
-         this.emitLine("type Server struct { Addr string; Mux *http.ServeMux }");
-         this.emitLine("func NewServer(addr string) *Server { return &Server{Addr: addr, Mux: http.NewServeMux()} }");
-         this.emitLine("func (s *Server) route(path string, handler func(req Request, res Response)) {");
-         this.emitLine("    s.Mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) { handler(Request{Raw: r}, Response{Raw: w}) })");
-         this.emitLine("}");
-         this.emitLine("func (s *Server) start() { http.ListenAndServe(s.Addr, s.Mux) }");
-         this.emitLine("// ---------------------------------");
-    }
-
-    this.emitLine("");
 
     for (const decl of declarations) {
       this.transpileStmt(decl);
@@ -62,23 +96,64 @@ export class GoTranspiler {
 
     this.emitLine("func main() {");
     this.indent();
-    for (const stmt of mainStatements) {
-      this.transpileStmt(stmt);
-    }
+    this.transpileStmts(mainStatements);
     this.dedent();
     this.emitLine("}");
 
-    return this.out;
+    // O cabeçalho só é montado no fim: as importações do Go dependem do que
+    // o corpo realmente usou (import não usado é erro de compilação em Go).
+    return this.buildHeader() + this.out;
   }
 
-  private emit(code: string) {
-    this.out += code;
+  // =========== CABEÇALHO (package + imports + boilerplate) ===========
+
+  private buildHeader(): string {
+    const lines: string[] = ["package main", ""];
+    const isHttp = this.importedModules.has('"net/http"');
+
+    if (isHttp) {
+      this.goImports.add("net/http");
+      this.goImports.add("encoding/json");
+    }
+
+    const imports = [...this.goImports].sort();
+    if (imports.length === 1) {
+      lines.push(`import "${imports[0]}"`);
+      lines.push("");
+    } else if (imports.length > 1) {
+      lines.push("import (");
+      for (const imp of imports) lines.push(`  "${imp}"`);
+      lines.push(")");
+      lines.push("");
+    }
+
+    if (isHttp) {
+      lines.push(
+        "// --- FlexLang HTTP Boilerplate ---",
+        "type Request struct { Raw *http.Request }",
+        "type Response struct { Raw http.ResponseWriter }",
+        "func (r Response) json(data any) {",
+        '    r.Raw.Header().Set("Content-Type", "application/json")',
+        "    json.NewEncoder(r.Raw).Encode(data)",
+        "}",
+        "type Server struct { Addr string; Mux *http.ServeMux }",
+        "func NewServer(addr string) *Server { return &Server{Addr: addr, Mux: http.NewServeMux()} }",
+        "func (s *Server) route(path string, handler func(req Request, res Response)) {",
+        "    s.Mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) { handler(Request{Raw: r}, Response{Raw: w}) })",
+        "}",
+        "func (s *Server) start() { http.ListenAndServe(s.Addr, s.Mux) }",
+        "// ---------------------------------",
+        "",
+      );
+    }
+
+    return lines.join("\n") + "\n";
   }
 
   private emitLine(code: string) {
     if (code.trim() === "") {
-        this.out += "\n";
-        return;
+      this.out += "\n";
+      return;
     }
     this.out += "  ".repeat(this.indentLevel) + code + "\n";
   }
@@ -91,109 +166,176 @@ export class GoTranspiler {
     this.indentLevel--;
   }
 
-  private transpileStmt(stmt: Stmt): void {
-    switch (stmt.kind) {
-      case "PrintStmt":
-        this.emitLine(`fmt.Println(${this.transpileExpr(stmt.value)})`);
-        break;
+  private nextTmp(prefix: string): string {
+    return `__${prefix}${this.tmpCount++}`;
+  }
 
-      case "VarDeclaration":
+  // =========== STATEMENTS ===========
+
+  private transpileStmts(stmts: Stmt[]): void {
+    for (let i = 0; i < stmts.length; i++) {
+      // O "resto" do bloco permite saber se uma variável declarada aqui chega a
+      // ser lida: em Go, variável local declarada e não usada é erro de compilação.
+      this.transpileStmt(stmts[i]!, stmts.slice(i + 1));
+    }
+  }
+
+  private transpileStmt(stmt: Stmt, rest: Stmt[] = []): void {
+    switch (stmt.kind) {
+      case "PrintStmt": {
+        this.goImports.add("fmt");
+        const value = this.transpileExpr(stmt.value);
+        this.emitLine(`fmt.Println(${value})`);
+        break;
+      }
+
+      case "VarDeclaration": {
         // Como o TypeChecker já validou a mutabilidade, no Go será apenas uma variável comum
         // Usamos a inferência nativa do Go :=
-        this.emitLine(`${stmt.name} := ${this.transpileExpr(stmt.value)}`);
+        const value = this.transpileExpr(stmt.value);
+        this.emitLine(`${this.goIdent(stmt.name)} := ${value}`);
+        this.emitDiscardIfUnused(stmt.name, rest);
         break;
+      }
 
-      case "ExpressionStatement":
-        this.emitLine(this.transpileExpr(stmt.expression));
+      case "ExpressionStatement": {
+        const code = this.transpileExpr(stmt.expression);
+        if (code.trim() !== "") this.emitLine(code);
         break;
+      }
 
       case "StructDeclaration":
-        this.emitLine(`type ${stmt.name} struct {`);
+        this.emitLine(`type ${this.goIdent(stmt.name)} struct {`);
         this.indent();
         for (const prop of stmt.properties) {
-          this.emitLine(`${prop.name} ${this.transpileType(prop.typeAnnotation)}`);
+          this.emitLine(`${this.goIdent(prop.name)} ${this.transpileType(prop.typeAnnotation)}`);
         }
         this.dedent();
         this.emitLine(`}`);
         break;
 
+      case "EnumDeclaration":
+        this.transpileEnum(stmt);
+        break;
+
       case "FunctionDeclaration":
-        const params = stmt.parameters
-          .map((p) => `${p.name} ${this.transpileType(p.typeAnnotation)}`)
-          .join(", ");
-        const retType = stmt.returnType ? this.transpileType(stmt.returnType) : "";
-        this.emitLine(`func ${stmt.name}(${params}) ${retType} {`);
-        this.indent();
-        this.transpileBlock(stmt.body);
-        this.dedent();
-        this.emitLine(`}`);
+        if (this.funcDepth === 0) {
+          this.emitLine(
+            `func ${this.goIdent(stmt.name)}(${this.transpileParams(stmt.parameters)})${this.suffixType(stmt)} {`,
+          );
+          this.indent();
+          this.funcDepth++;
+          this.transpileStmts(stmt.body.body);
+          this.funcDepth--;
+          this.dedent();
+          this.emitLine(`}`);
+        } else {
+          // Go não tem função nomeada aninhada: viram closures.
+          // A forma `var f func(...); f = func(...)` (em vez de `:=`) é a que
+          // permite recursão, já que o nome existe antes do corpo ser atribuído.
+          this.transpileNestedFunction(stmt, rest);
+        }
         break;
 
       case "ImplDeclaration":
         // Em Go, métodos são anexados ao ponteiro da struct: func (self *Struct) Method()
         for (const method of stmt.methods) {
-          const mParams = method.parameters
-            .map((p) => `${p.name} ${this.transpileType(p.typeAnnotation)}`)
-            .join(", ");
-          const mRet = method.returnType ? this.transpileType(method.returnType) : "";
-          this.emitLine(`func (self *${stmt.structName}) ${method.name}(${mParams}) ${mRet} {`);
+          this.emitLine(
+            `func (self *${this.goIdent(stmt.structName)}) ${this.goIdent(method.name)}(${this.transpileParams(
+              method.parameters,
+            )})${this.suffixType(method)} {`,
+          );
           this.indent();
-          this.transpileBlock(method.body);
+          this.funcDepth++;
+          this.transpileStmts(method.body.body);
+          this.funcDepth--;
           this.dedent();
           this.emitLine(`}`);
         }
         break;
 
       case "TraitDeclaration":
-        this.emitLine(`type ${stmt.name} interface {`);
+        this.emitLine(`type ${this.goIdent(stmt.name)} interface {`);
         this.indent();
         for (const method of stmt.methods) {
-          const tParams = method.parameters
-            .map((p) => `${p.name} ${this.transpileType(p.typeAnnotation)}`)
-            .join(", ");
-          const tRet = method.returnType ? this.transpileType(method.returnType) : "";
-          this.emitLine(`${method.name}(${tParams}) ${tRet}`);
+          this.emitLine(
+            `${this.goIdent(method.name)}(${this.transpileParams(method.parameters)})${this.suffixType(method)}`,
+          );
         }
         this.dedent();
         this.emitLine(`}`);
         break;
 
       case "BlockStmt":
-        this.transpileBlock(stmt);
+        this.transpileStmts(stmt.body);
         break;
 
-      case "IfStmt":
-        this.emitLine(`if ${this.transpileExpr(stmt.condition)} {`);
+      case "IfStmt": {
+        const condition = this.transpileExpr(stmt.condition);
+        this.emitLine(`if ${condition} {`);
         this.indent();
-        this.transpileBlock(stmt.consequent);
+        this.transpileStmts(stmt.consequent.body);
         this.dedent();
         if (stmt.alternate) {
           this.emitLine(`} else {`);
           this.indent();
-          this.transpileBlock(stmt.alternate);
+          this.transpileStmts(stmt.alternate.body);
           this.dedent();
         }
         this.emitLine(`}`);
         break;
+      }
 
-      case "ForStmt":
-        this.emitLine(`for ${stmt.iteratorName} := ${this.transpileExpr(stmt.start)}; ${stmt.iteratorName} < ${this.transpileExpr(stmt.end)}; ${stmt.iteratorName}++ {`);
+      case "ForStmt": {
+        const start = this.transpileExpr(stmt.start);
+        // O interpretador avalia o limite uma única vez, antes do laço; o `for`
+        // do Go reavaliaria a cada iteração. Fixamos em um temporário p/ manter paridade.
+        const end = this.nextTmp("end");
+        const iterator = this.goIdent(stmt.iteratorName);
+        this.emitLine(`${end} := ${this.transpileExpr(stmt.end)}`);
+        this.emitLine(`for ${iterator} := ${start}; ${iterator} < ${end}; ${iterator}++ {`);
         this.indent();
-        this.transpileBlock(stmt.body);
+        this.transpileStmts(stmt.body.body);
         this.dedent();
         this.emitLine(`}`);
         break;
+      }
+
+      case "WhileStmt": {
+        if (this.containsTry(stmt.condition)) {
+          // `?` na condição precisa ser reavaliado a cada volta: o preâmbulo
+          // gerado pelo `?` tem que ficar dentro do laço, não antes dele.
+          this.emitLine(`for {`);
+          this.indent();
+          const condition = this.transpileExpr(stmt.condition);
+          this.emitLine(`if !(${condition}) {`);
+          this.indent();
+          this.emitLine(`break`);
+          this.dedent();
+          this.emitLine(`}`);
+          this.transpileStmts(stmt.body.body);
+          this.dedent();
+          this.emitLine(`}`);
+        } else {
+          const condition = this.transpileExpr(stmt.condition);
+          this.emitLine(`for ${condition} {`);
+          this.indent();
+          this.transpileStmts(stmt.body.body);
+          this.dedent();
+          this.emitLine(`}`);
+        }
+        break;
+      }
 
       case "ScopeStmt":
         // Concorrência estruturada via sync.WaitGroup
+        this.goImports.add("sync");
         this.emitLine(`{`); // Escopo limpo em Go
         this.indent();
         this.emitLine(`var wg sync.WaitGroup`);
-        // Aqui dentro, os spawn vão injetar código
-        // Precisaremos repassar a WaitGroup para dentro do bloco, mas
-        // como `transpileStmt` não toma estado extra, vamos apenas injetar 'wg' em scope
-        // e os 'spawn' dentro vão procurar a WaitGroup pai lexicalmente.
-        this.transpileBlock(stmt.body);
+        // Aqui dentro, os spawn vão injetar código: eles procuram a WaitGroup
+        // pai lexicalmente, que é exatamente como o Go resolve o nome `wg`.
+        this.transpileStmts(stmt.body.body);
         this.emitLine(`wg.Wait()`);
         this.dedent();
         this.emitLine(`}`);
@@ -204,93 +346,261 @@ export class GoTranspiler {
         this.emitLine(`go func() {`);
         this.indent();
         this.emitLine(`defer wg.Done()`);
-        this.transpileBlock(stmt.body);
+        this.transpileStmts(stmt.body.body);
         this.dedent();
         this.emitLine(`}()`);
         break;
 
-      case "ReturnStmt":
+      case "ReturnStmt": {
         if (stmt.value) {
-           this.emitLine(`return ${this.transpileExpr(stmt.value)}`);
+          const value = this.transpileExpr(stmt.value);
+          this.emitLine(`return ${value}`);
         } else {
-           this.emitLine(`return`);
+          this.emitLine(`return`);
         }
         break;
+      }
 
-      case "WhileStmt":
-        this.emitLine(`for ${this.transpileExpr(stmt.condition)} {`);
-        this.indent();
-        this.transpileBlock(stmt.body);
-        this.dedent();
-        this.emitLine(`}`);
+      case "MatchStmt":
+        this.transpileMatch(stmt);
         break;
 
-      case "StructDeclaration":
-      case "ImplDeclaration":
       case "ImportDeclaration":
-      case "FunctionDeclaration":
-      case "TraitDeclaration":
-        // Tratados no top-level iterador, não emitem nada aqui
-        break;
-
-      default:
-        this.emitLine(`// TODO: transpile ${stmt.kind}`);
+        // Tratado no cabeçalho, não emite nada aqui
         break;
     }
   }
 
-  private transpileBlock(block: any): void {
-    if (!block.body) return;
-    for (const stmt of block.body) {
-      this.transpileStmt(stmt);
+  private transpileNestedFunction(stmt: FunctionDeclaration, rest: Stmt[]): void {
+    const paramTypes = this.declaredParams(stmt.parameters).map((p) => this.transpileType(p.typeAnnotation));
+    const name = this.goIdent(stmt.name);
+
+    this.emitLine(`var ${name} func(${paramTypes.join(", ")})${this.suffixType(stmt)}`);
+    this.emitLine(`${name} = func(${this.transpileParams(stmt.parameters)})${this.suffixType(stmt)} {`);
+    this.indent();
+    this.funcDepth++;
+    this.transpileStmts(stmt.body.body);
+    this.funcDepth--;
+    this.dedent();
+    this.emitLine(`}`);
+    this.emitDiscardIfUnused(stmt.name, rest);
+  }
+
+  private transpileEnum(decl: EnumDeclaration): void {
+    // Sum type idiomático em Go: interface marcadora + uma struct por variante.
+    const enumName = this.goIdent(decl.name);
+    const marker = `is${enumName}`;
+    this.emitLine(`type ${enumName} interface{ ${marker}() }`);
+    this.emitLine("");
+
+    for (const variant of decl.variants) {
+      const typeName = this.variantTypeName(decl.name, variant.name);
+      const value = this.variantValueName(decl.name, variant.name);
+      const payload = variant.payload ?? [];
+
+      if (payload.length === 0) {
+        this.emitLine(`type ${typeName} struct{}`);
+        this.emitLine(`func (${typeName}) ${marker}() {}`);
+        this.emitLine(`var ${value} ${enumName} = ${typeName}{}`);
+      } else {
+        const fields = payload.map((t, i) => `Field${i} ${this.transpileType(t)}`).join("; ");
+        const params = payload.map((t, i) => `f${i} ${this.transpileType(t)}`).join(", ");
+        const init = payload.map((_, i) => `Field${i}: f${i}`).join(", ");
+        this.emitLine(`type ${typeName} struct{ ${fields} }`);
+        this.emitLine(`func (${typeName}) ${marker}() {}`);
+        this.emitLine(`func ${value}_new(${params}) ${enumName} { return ${typeName}{${init}} }`);
+      }
+      this.emitLine("");
     }
   }
+
+  private transpileMatch(stmt: Extract<Stmt, { kind: "MatchStmt" }>): void {
+    const subject = this.transpileExpr(stmt.value);
+    const hasBinders = stmt.arms.some((arm) => arm.binders.length > 0);
+    const bound = this.nextTmp("m");
+
+    // A exhaustiveness já foi validada pelo checker, então o switch não precisa
+    // de `default` — todas as variantes do enum estão cobertas por construção.
+    this.emitLine(hasBinders ? `switch ${bound} := ${subject}.(type) {` : `switch ${subject}.(type) {`);
+
+    for (const arm of stmt.arms) {
+      this.emitLine(`case ${this.variantTypeName(arm.enumName, arm.variantName, arm.binders.length)}:`);
+      this.indent();
+      for (let i = 0; i < arm.binders.length; i++) {
+        const binder = arm.binders[i]!;
+        this.emitLine(`${this.goIdent(binder)} := ${bound}.Field${i}`);
+        this.emitDiscardIfUnused(binder, arm.body.body);
+      }
+      this.transpileStmts(arm.body.body);
+      this.dedent();
+    }
+
+    this.emitLine(`}`);
+  }
+
+  // =========== EXPRESSÕES ===========
 
   private transpileExpr(expr: Expr): string {
     switch (expr.kind) {
       case "NumericLiteral":
-      case "BooleanLiteral":
         return String(expr.value);
+      case "BooleanLiteral":
+        return expr.value ? "true" : "false";
       case "StringLiteral":
-        return `"${expr.value}"`;
+        return this.goString(expr.value);
       case "Identifier":
-        return expr.symbol;
+        return this.goIdent(expr.symbol);
+
       case "BinaryExpr":
-        return `${this.transpileExpr(expr.left)} ${expr.operator} ${this.transpileExpr(expr.right)}`;
+      case "LogicalExpr": {
+        const prec = this.binaryPrecedence(expr.operator);
+        return `${this.operand(expr.left, prec, false)} ${expr.operator} ${this.operand(expr.right, prec, true)}`;
+      }
+
+      case "UnaryExpr":
+        // Parênteses sempre: `--x` seria erro de sintaxe em Go, `-(-(x))` não.
+        return `${expr.operator}(${this.transpileExpr(expr.argument)})`;
+
       case "AssignmentExpr":
         return `${this.transpileExpr(expr.assignee)} = ${this.transpileExpr(expr.value)}`;
+
+      case "ArrayLiteral": {
+        const type = this.types.get(expr);
+        const elementType = type && type.kind === "Array" ? this.goType(type.elementType) : "any";
+        return `[]${elementType}{${expr.elements.map((e) => this.transpileExpr(e)).join(", ")}}`;
+      }
+
+      case "IndexExpr":
+        return `${this.transpileExpr(expr.object)}[${this.transpileExpr(expr.index)}]`;
+
       case "MemberExpr":
-        return `${this.transpileExpr(expr.object)}.${expr.property}`;
-      case "CallExpr":
-        if (expr.caller.kind === "MemberExpr") {
-            const member = expr.caller;
-            if (member.object.kind === "Identifier" && member.object.symbol === "Server" && member.property === "new") {
-                  return `NewServer(${this.transpileExpr(expr.args[0])})`; 
-            }
-            
-            // Translate Channel method calls to Go operators
-            if (member.property === "send") {
-                return `${this.transpileExpr(member.object)} <- ${this.transpileExpr(expr.args[0])}`;
-            } else if (member.property === "recv") {
-                return `<-${this.transpileExpr(member.object)}`;
-            }
+        // `Status.Pendente` (variante sem payload) é o singleton, não um acesso a campo
+        if (expr.object.kind === "Identifier" && this.enums.has(expr.object.symbol)) {
+          return this.variantValueName(expr.object.symbol, expr.property);
         }
-        
-        const args = expr.args.map((a) => this.transpileExpr(a)).join(", ");
-        return `${this.transpileExpr(expr.caller)}(${args})`;
-      case "StructExpr":
+        return `${this.transpileExpr(expr.object)}.${this.goIdent(expr.property)}`;
+
+      case "CallExpr":
+        return this.transpileCall(expr);
+
+      case "StructExpr": {
         const props = expr.properties
-          .map((p) => `${p.name}: ${this.transpileExpr(p.value)}`)
+          .map((p) => `${this.goIdent(p.name)}: ${this.transpileExpr(p.value)}`)
           .join(", ");
-        return `&${expr.structName}{${props}}`;
+        return `&${this.goIdent(expr.structName)}{${props}}`;
+      }
+
       case "StringInterpolationExpr":
+        this.goImports.add("fmt");
         return expr.parts
-           .map(p => typeof p === "string" ? `"${p}"` : `fmt.Sprint(${this.transpileExpr(p)})`)
-           .join(" + ");
-      default:
-        return `/* expr ${expr.kind} */`;
+          .map((p) => (typeof p === "string" ? this.goString(p) : `fmt.Sprint(${this.transpileExpr(p)})`))
+          .join(" + ");
+
+      case "TryExpr":
+        return this.transpileTry(expr);
     }
   }
+
+  private transpileCall(expr: Extract<Expr, { kind: "CallExpr" }>): string {
+    if (expr.caller.kind === "MemberExpr") {
+      const member = expr.caller;
+
+      // Construtor de variante de enum: Status.Sucesso("msg") -> Status_Sucesso_new("msg")
+      if (member.object.kind === "Identifier" && this.enums.has(member.object.symbol)) {
+        const args = expr.args.map((a) => this.transpileExpr(a)).join(", ");
+        return `${this.variantValueName(member.object.symbol, member.property)}_new(${args})`;
+      }
+
+      if (member.object.kind === "Identifier" && member.object.symbol === "Server" && member.property === "new") {
+        return `NewServer(${this.transpileExpr(expr.args[0]!)})`;
+      }
+
+      if (member.object.kind === "Identifier" && member.object.symbol === "Channel" && member.property === "new") {
+        const type = this.types.get(expr);
+        const element =
+          type && type.kind === "Struct" && type.genericArgs[0] ? this.goType(type.genericArgs[0]) : "any";
+        return `make(chan ${element})`;
+      }
+
+      // Translate Channel method calls to Go operators
+      if (member.property === "send" && expr.args[0]) {
+        return `${this.transpileExpr(member.object)} <- ${this.transpileExpr(expr.args[0]!)}`;
+      } else if (member.property === "recv") {
+        return `<-${this.transpileExpr(member.object)}`;
+      }
+    }
+
+    const args = expr.args.map((a) => this.transpileExpr(a)).join(", ");
+    return `${this.transpileExpr(expr.caller)}(${args})`;
+  }
+
+  /**
+   * `?` vira uma checagem explícita de erro no fluxo em que aparece: o preâmbulo
+   * (temporário + type-switch) é emitido antes do statement que contém o `?`, e a
+   * expressão em si passa a ser o temporário com o payload da variante de sucesso.
+   */
+  private transpileTry(expr: Extract<Expr, { kind: "TryExpr" }>): string {
+    const inner = this.transpileExpr(expr.expression);
+    const enumDecl = this.enumOf(expr.expression);
+
+    if (!enumDecl) {
+      throw new Error(
+        "TranspileError: cannot resolve the enum behind the '?' operator (missing type information)",
+      );
+    }
+
+    const okVariant = enumDecl.variants.find((v) => OK_VARIANT_NAMES.includes(v.name));
+    if (!okVariant) {
+      throw new Error(
+        `TranspileError: enum '${enumDecl.name}' has no success variant (${OK_VARIANT_NAMES.join("/")}) for the '?' operator`,
+      );
+    }
+
+    const tmp = this.nextTmp("try");
+    const bound = this.nextTmp("tv");
+    const caseType = this.variantTypeName(enumDecl.name, okVariant.name);
+    const payload = okVariant.payload ?? [];
+
+    this.emitLine(`${tmp} := ${inner}`);
+
+    if (payload.length === 0) {
+      this.emitLine(`switch ${tmp}.(type) {`);
+      this.emitLine(`case ${caseType}:`);
+      this.emitLine(`default:`);
+      this.indent();
+      this.emitPropagation(tmp);
+      this.dedent();
+      this.emitLine(`}`);
+      return ""; // variante de sucesso sem payload não produz valor utilizável
+    }
+
+    const value = `${tmp}_v`;
+    this.emitLine(`var ${value} ${this.transpileType(payload[0]!)}`);
+    this.emitLine(`switch ${bound} := ${tmp}.(type) {`);
+    this.emitLine(`case ${caseType}:`);
+    this.indent();
+    this.emitLine(`${value} = ${bound}.Field0`);
+    this.dedent();
+    this.emitLine(`default:`);
+    this.indent();
+    this.emitPropagation(tmp);
+    this.dedent();
+    this.emitLine(`}`);
+    this.emitLine(`_ = ${value}`);
+    return value;
+  }
+
+  private emitPropagation(tmp: string): void {
+    if (this.funcDepth > 0) {
+      this.emitLine(`return ${tmp}`); // propaga o Err como está
+    } else {
+      // No topo do programa não há função para onde propagar; o interpretador
+      // também aborta nesse caso (ReturnException sem função envolvente).
+      this.emitLine(`panic("RuntimeError: '?' propagated outside of a function")`);
+    }
+  }
+
+  // =========== TIPOS ===========
 
   private transpileType(typeNode: TypeNode): string {
     if (typeNode.kind === "NamedTypeNode") {
@@ -303,19 +613,288 @@ export class GoTranspiler {
           return "bool";
         case "Any":
           return "any";
+        case "Void":
+          return ""; // Go representa "sem retorno" pela ausência do tipo
         default:
-          return typeNode.name; // Assumimos que e uma struct ou trait existente
+          if (this.enums.has(typeNode.name) || this.traitNames.has(typeNode.name)) {
+            return this.goIdent(typeNode.name); // interface (sum type ou trait)
+          }
+          if (this.structNames.has(typeNode.name)) {
+            return `*${this.goIdent(typeNode.name)}`; // structs FlexLang são sempre valores por referência
+          }
+          return typeNode.name; // tipo injetado pela stdlib (Request, Response, ...)
       }
     }
     if (typeNode.kind === "ArrayTypeNode") {
       return `[]${this.transpileType(typeNode.elementType)}`;
     }
     if (typeNode.kind === "GenericTypeNode") {
-       if (typeNode.name === "Channel") {
-            return `chan ${this.transpileType(typeNode.typeArguments[0])}`;
-       }
-       return `any /* generic ${typeNode.name} */`;
+      if (typeNode.name === "Channel") {
+        return `chan ${typeNode.typeArguments[0] ? this.transpileType(typeNode.typeArguments[0]) : "any"}`;
+      }
+      if (this.enums.has(typeNode.name)) {
+        // Genéricos reais (monomorfização) estão fora do escopo da RFC-001:
+        // Result<Int, String> transpila para a interface Result.
+        return this.goIdent(typeNode.name);
+      }
+      return `any /* generic ${typeNode.name} */`;
     }
     return "any";
+  }
+
+  /** Converte um tipo já resolvido pelo checker no tipo Go correspondente. */
+  private goType(type: FlexType): string {
+    switch (type.kind) {
+      case "Int":
+        return "int";
+      case "String":
+        return "string";
+      case "Bool":
+        return "bool";
+      case "Void":
+        return "";
+      case "Any":
+        return "any";
+      case "Array":
+        return `[]${this.goType(type.elementType)}`;
+      case "Enum":
+        return this.goIdent(type.name);
+      case "Struct":
+        if (type.name === "Channel") {
+          return `chan ${type.genericArgs[0] ? this.goType(type.genericArgs[0]) : "any"}`;
+        }
+        return this.structNames.has(type.name) ? `*${this.goIdent(type.name)}` : type.name;
+    }
+  }
+
+  private transpileParams(parameters: Parameter[]): string {
+    return this.declaredParams(parameters)
+      .map((p) => `${this.goIdent(p.name)} ${this.transpileType(p.typeAnnotation)}`.trimEnd())
+      .join(", ");
+  }
+
+  /** `self` é o receiver do método em Go, não um parâmetro. */
+  private declaredParams(parameters: Parameter[]): Parameter[] {
+    return parameters.filter((p) => p.name !== "self");
+  }
+
+  /** Tipo de retorno já pronto para concatenar depois da lista de parâmetros. */
+  private suffixType(fn: { returnType?: TypeNode | undefined }): string {
+    const type = fn.returnType ? this.transpileType(fn.returnType) : "";
+    return type === "" ? "" : ` ${type}`;
+  }
+
+  /**
+   * Nome base de uma variante: `Status_Sucesso`. É o singleton (variante sem
+   * payload) ou o prefixo do construtor `_new` (variante com payload).
+   */
+  private variantValueName(enumName: string, variantName: string): string {
+    return `${this.goIdent(enumName)}_${this.goIdent(variantName)}`;
+  }
+
+  /**
+   * Nome Go do tipo de uma variante. Variantes sem payload ganham sufixo `_t`
+   * porque o nome sem sufixo é usado pela instância singleton.
+   */
+  private variantTypeName(enumName: string, variantName: string, binderCount?: number): string {
+    const declared = this.enums.get(enumName)?.variants.find((v) => v.name === variantName);
+    const hasPayload = declared ? (declared.payload?.length ?? 0) > 0 : (binderCount ?? 0) > 0;
+    const base = this.variantValueName(enumName, variantName);
+    return hasPayload ? base : `${base}_t`;
+  }
+
+  private enumOf(expr: Expr): EnumDeclaration | undefined {
+    const type = this.types.get(expr);
+    if (type && type.kind === "Enum") {
+      const decl = this.enums.get(type.name);
+      if (decl) return decl;
+    }
+    // Sem anotação de tipo (ex: transpilação sem checker), só dá para resolver
+    // sem ambiguidade quando existe um único enum declarado no programa.
+    if (this.enums.size === 1) return [...this.enums.values()][0];
+    return undefined;
+  }
+
+  private goString(value: string): string {
+    return JSON.stringify(value);
+  }
+
+  /** Nome Go seguro para um identificador FlexLang (ver GO_RESERVED). */
+  private goIdent(name: string): string {
+    return GO_RESERVED.has(name) ? `flex_${name}` : name;
+  }
+
+  // =========== PRECEDÊNCIA ===========
+
+  private binaryPrecedence(operator: string): number {
+    switch (operator) {
+      case "||":
+        return 1;
+      case "&&":
+        return 2;
+      case "==":
+      case "!=":
+      case "<":
+      case "<=":
+      case ">":
+      case ">=":
+        return 3;
+      case "+":
+      case "-":
+        return 4;
+      case "*":
+      case "/":
+      case "%":
+        return 5;
+      default:
+        return 6;
+    }
+  }
+
+  private exprPrecedence(expr: Expr): number {
+    if (expr.kind === "BinaryExpr" || expr.kind === "LogicalExpr") return this.binaryPrecedence(expr.operator);
+    if (expr.kind === "StringInterpolationExpr" && expr.parts.length > 1) return 4; // vira uma cadeia de `+`
+    return 100; // átomos: literais, identificadores, chamadas, indexações, unários
+  }
+
+  /**
+   * A AST já carrega a precedência na sua forma; parênteses são reintroduzidos
+   * só onde a forma da árvore diverge da precedência natural do Go
+   * (ex: `(x + y) * 2`, que sem parênteses viraria `x + y * 2`).
+   */
+  private operand(expr: Expr, parentPrecedence: number, isRight: boolean): string {
+    const code = this.transpileExpr(expr);
+    const precedence = this.exprPrecedence(expr);
+    if (precedence < parentPrecedence || (isRight && precedence === parentPrecedence)) {
+      return `(${code})`;
+    }
+    return code;
+  }
+
+  // =========== USO DE VARIÁVEIS ===========
+
+  /**
+   * Em Go, variável local declarada e nunca lida é erro de compilação — o que é
+   * legal em FlexLang. Quando o nome não é lido, emitimos `_ = nome`.
+   */
+  private emitDiscardIfUnused(name: string, rest: Stmt[]): void {
+    if (!this.isUsedIn(rest, name)) {
+      this.emitLine(`_ = ${this.goIdent(name)}`);
+    }
+  }
+
+  private isUsedIn(stmts: Stmt[], name: string): boolean {
+    let used = false;
+    const visit = (expr: Expr) => {
+      if (expr.kind === "Identifier" && expr.symbol === name) used = true;
+    };
+    for (const stmt of stmts) this.walkStmt(stmt, visit);
+    return used;
+  }
+
+  private containsTry(expr: Expr): boolean {
+    let found = false;
+    this.walkExpr(expr, (e) => {
+      if (e.kind === "TryExpr") found = true;
+    });
+    return found;
+  }
+
+  private walkStmt(stmt: Stmt, visit: (expr: Expr) => void): void {
+    const walkAll = (stmts: Stmt[]) => stmts.forEach((s) => this.walkStmt(s, visit));
+
+    switch (stmt.kind) {
+      case "VarDeclaration":
+      case "PrintStmt":
+        this.walkExpr(stmt.value, visit);
+        break;
+      case "ExpressionStatement":
+        this.walkExpr(stmt.expression, visit);
+        break;
+      case "ReturnStmt":
+        if (stmt.value) this.walkExpr(stmt.value, visit);
+        break;
+      case "IfStmt":
+        this.walkExpr(stmt.condition, visit);
+        walkAll(stmt.consequent.body);
+        if (stmt.alternate) walkAll(stmt.alternate.body);
+        break;
+      case "WhileStmt":
+        this.walkExpr(stmt.condition, visit);
+        walkAll(stmt.body.body);
+        break;
+      case "ForStmt":
+        this.walkExpr(stmt.start, visit);
+        this.walkExpr(stmt.end, visit);
+        walkAll(stmt.body.body);
+        break;
+      case "BlockStmt":
+        walkAll(stmt.body);
+        break;
+      case "ScopeStmt":
+        if (stmt.deadline) this.walkExpr(stmt.deadline, visit);
+        walkAll(stmt.body.body);
+        break;
+      case "SpawnStmt":
+        walkAll(stmt.body.body);
+        break;
+      case "MatchStmt":
+        this.walkExpr(stmt.value, visit);
+        stmt.arms.forEach((arm) => walkAll(arm.body.body));
+        break;
+      case "FunctionDeclaration":
+        walkAll(stmt.body.body);
+        break;
+      case "ImplDeclaration":
+        stmt.methods.forEach((m) => walkAll(m.body.body));
+        break;
+      default:
+        break;
+    }
+  }
+
+  private walkExpr(expr: Expr, visit: (expr: Expr) => void): void {
+    visit(expr);
+    switch (expr.kind) {
+      case "BinaryExpr":
+      case "LogicalExpr":
+        this.walkExpr(expr.left, visit);
+        this.walkExpr(expr.right, visit);
+        break;
+      case "UnaryExpr":
+        this.walkExpr(expr.argument, visit);
+        break;
+      case "AssignmentExpr":
+        this.walkExpr(expr.assignee, visit);
+        this.walkExpr(expr.value, visit);
+        break;
+      case "CallExpr":
+        this.walkExpr(expr.caller, visit);
+        expr.args.forEach((a) => this.walkExpr(a, visit));
+        break;
+      case "MemberExpr":
+        this.walkExpr(expr.object, visit);
+        break;
+      case "IndexExpr":
+        this.walkExpr(expr.object, visit);
+        this.walkExpr(expr.index, visit);
+        break;
+      case "ArrayLiteral":
+        expr.elements.forEach((e) => this.walkExpr(e, visit));
+        break;
+      case "StructExpr":
+        expr.properties.forEach((p) => this.walkExpr(p.value, visit));
+        break;
+      case "StringInterpolationExpr":
+        expr.parts.forEach((p) => {
+          if (typeof p !== "string") this.walkExpr(p, visit);
+        });
+        break;
+      case "TryExpr":
+        this.walkExpr(expr.expression, visit);
+        break;
+      default:
+        break;
+    }
   }
 }

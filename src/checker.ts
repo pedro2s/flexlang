@@ -21,6 +21,12 @@ export type FlexType =
   | { kind: "Void" }
   | { kind: "Any" }; // Usado quando falha a inferência para evitar de dar 'cascade' de erros
 
+// Anotação de tipos produzida durante a checagem: cada nó de expressão da AST
+// mapeado para o tipo que o checker inferiu para ele.
+// O GoTranspiler consome esse mapa para emitir tipos concretos (ex: `[]int{...}`
+// em vez de `[]any{...}`) — ver RFC-001, seção "Onde o tipo resolvido do checker é necessário".
+export type TypeMap = Map<Expr, FlexType>;
+
 // --- Ambiente de Tipos (Environment para checagem estática) ---
 class TypeEnvironment {
   private variables = new Map<string, { type: FlexType; isMut: boolean; isMoved: boolean }>();
@@ -58,8 +64,13 @@ export class TypeChecker {
   private enums: Map<string, EnumDeclaration> = new Map();
   private traits: Map<string, TraitDeclaration> = new Map();
   private inScopeContext: number = 0;
+  private typeMap: TypeMap = new Map();
 
-  public check(stmts: Stmt[]): void {
+  /**
+   * Checa o programa e devolve a anotação de tipos de cada expressão.
+   * O retorno é aditivo: quem só quer validar pode continuar ignorando-o.
+   */
+  public check(stmts: Stmt[]): TypeMap {
     // Primeira Passagem (Pass 1): Registrar declarações (Hoisting de Structs e Funcs)
     for (const stmt of stmts) {
       if (stmt.kind === "StructDeclaration") {
@@ -85,6 +96,13 @@ export class TypeChecker {
     for (const stmt of stmts) {
       this.checkStmt(stmt, this.env);
     }
+
+    return this.typeMap;
+  }
+
+  /** Anotação de tipos da última checagem (vazia antes de `check()` rodar). */
+  public getTypeMap(): TypeMap {
+    return this.typeMap;
   }
 
   // =========== CHECAGEM DE STATEMENTS ===========
@@ -274,6 +292,12 @@ export class TypeChecker {
   // =========== CHECAGEM DE EXPRESSÕES ===========
 
   private checkExpr(expr: Expr, env: TypeEnvironment): FlexType {
+    const type = this.inferExpr(expr, env);
+    this.typeMap.set(expr, type);
+    return type;
+  }
+
+  private inferExpr(expr: Expr, env: TypeEnvironment): FlexType {
     switch (expr.kind) {
       case "NumericLiteral":
         return { kind: "Int" };

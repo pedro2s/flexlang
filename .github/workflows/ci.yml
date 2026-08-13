@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      # O parity gate compila a saída do transpiler: sem Go, ele falha por definição.
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - run: npm ci
+
+      # Golden-file: valida o modo interpretado contra os .out
+      - run: npm test
+
+      # Parity gate (RFC-001): interpretado == compilado, para todo teste
+      - run: npm run test:parity

@@ -1,4 +1,5 @@
 // Teste 07: Concorrencia Estruturada (Scope e Spawn)
+// parity: nondeterministic goroutines reais nao garantem a ordem de saida do interpretador
 
 let mut valor_compartilhado = 0;
 
