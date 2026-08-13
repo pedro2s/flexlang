@@ -1,4 +1,5 @@
 import type { Stmt, Expr, FunctionDeclaration } from "./ast";
+import { builtinEnums, isBuiltinType, isSuccessVariant } from "./stdlib";
 import * as http from "http";
 
 class Environment {
@@ -136,7 +137,12 @@ export class Interpreter {
   // Ambiente para armazenar variáveis na memória
   private globalEnv = new Environment();
 
-  constructor(private stdout: (msg: string) => void = console.log) {}
+  constructor(private stdout: (msg: string) => void = console.log) {
+    // Result e Option existem em todo programa, sem declaração (RFC-002).
+    for (const builtin of builtinEnums()) {
+      this.globalEnv.define(builtin.name, builtin);
+    }
+  }
 
   public async run(program: Stmt[]) {
     for (const stmt of program) {
@@ -509,15 +515,19 @@ export class Interpreter {
 
       case "TryExpr":
         const tryValue = await this.evaluateExpr(expr.expression, env);
-        if (typeof tryValue === "object" && tryValue !== null && tryValue.kind === "EnumVariant") {
-            if (tryValue.variantName === "Ok" || tryValue.variantName === "Some" || tryValue.variantName === "Sucesso") {
+        if (
+          typeof tryValue === "object" &&
+          tryValue !== null &&
+          tryValue.kind === "EnumVariant" &&
+          isBuiltinType(tryValue.enumName)
+        ) {
+            if (isSuccessVariant(tryValue.enumName, tryValue.variantName)) {
                 return tryValue.payload.length > 0 ? tryValue.payload[0] : null;
-            } else {
-                // Propaga o erro retornado
-                throw new ReturnException(tryValue);
             }
+            // Qualquer outra variante (Err/None) é propagada como está
+            throw new ReturnException(tryValue);
         }
-        throw new Error("RuntimeError: Cannot apply ? operator to non-enum value");
+        throw new Error("RuntimeError: ? operator can only be applied to Result or Option");
 
       case "Identifier":
         const value = env.get(expr.symbol);

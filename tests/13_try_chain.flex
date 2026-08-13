@@ -1,11 +1,6 @@
 // Teste 13: Operador ? em cadeia (varios ? por funcao e ? aninhado em expressao)
 
-enum Result {
-    Ok(Int),
-    Err(String)
-}
-
-func positivo(n: Int) -> Result {
+func positivo(n: Int) -> Result<Int, String> {
     if n < 0 {
         return Result.Err("valor negativo");
     }
@@ -13,19 +8,19 @@ func positivo(n: Int) -> Result {
 }
 
 // Dois ? no mesmo corpo, e dois ? dentro de uma mesma expressao
-func soma_validada(a: Int, b: Int) -> Result {
+func soma_validada(a: Int, b: Int) -> Result<Int, String> {
     let total = positivo(a)? + positivo(b)?;
     return Result.Ok(total);
 }
 
 // ? em cadeia: propaga o erro de uma funcao que ja propagou o erro de outra
-func pipeline(a: Int, b: Int) -> Result {
+func pipeline(a: Int, b: Int) -> Result<Int, String> {
     let parcial = soma_validada(a, b)?;
     let dobro = soma_validada(parcial, parcial)?;
     return Result.Ok(dobro);
 }
 
-func mostra(r: Result) -> Void {
+func mostra(r: Result<Int, String>) -> Void {
     match r {
         Result.Ok(v) => {
             print("ok:");

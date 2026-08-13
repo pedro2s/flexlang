@@ -7,13 +7,7 @@ import type {
   Parameter,
 } from "./ast";
 import type { FlexType, TypeMap } from "./checker";
-
-/**
- * Nomes de variante tratados como "sucesso" pelo operador `?`.
- * Heurística herdada do checker (checker.ts) e do interpreter (interpreter.ts);
- * some quando a RFC-002 fixar `Ok`/`Some` como stdlib de verdade.
- */
-const OK_VARIANT_NAMES = ["Ok", "Some", "Sucesso"];
+import { builtinEnums, isBuiltinType, successVariant } from "./stdlib";
 
 /**
  * Identificadores legítimos em FlexLang que o Go não aceita: palavras reservadas
@@ -38,6 +32,10 @@ export class GoTranspiler {
   private structNames = new Set<string>();
   private traitNames = new Set<string>();
 
+  // Tipos embutidos (Result/Option) referenciados pelo programa: só esses são
+  // emitidos, para não poluir a saída de quem não usa nenhum dos dois.
+  private usedBuiltins = new Set<string>();
+
   // Anotação de tipos vinda do TypeChecker (ver RFC-001).
   private types: TypeMap = new Map();
 
@@ -56,7 +54,14 @@ export class GoTranspiler {
     this.enums.clear();
     this.structNames.clear();
     this.traitNames.clear();
+    this.usedBuiltins.clear();
     this.types = types ?? new Map();
+
+    // Result/Option não são declarados pelo usuário: entram direto na tabela
+    // e são emitidos pelo cabeçalho, se o programa referenciar algum.
+    for (const builtin of builtinEnums()) {
+      this.enums.set(builtin.name, builtin);
+    }
 
     const declarations: Stmt[] = [];
     const mainStatements: Stmt[] = [];
@@ -127,6 +132,15 @@ export class GoTranspiler {
       lines.push("");
     }
 
+    if (this.usedBuiltins.size > 0) {
+      lines.push("// --- FlexLang stdlib: Result / Option ---");
+      for (const builtin of builtinEnums()) {
+        if (!this.usedBuiltins.has(builtin.name)) continue;
+        lines.push(this.capture(() => this.transpileEnum(builtin)).trimEnd());
+      }
+      lines.push("// ---------------------------------------", "");
+    }
+
     if (isHttp) {
       lines.push(
         "// --- FlexLang HTTP Boilerplate ---",
@@ -168,6 +182,19 @@ export class GoTranspiler {
 
   private nextTmp(prefix: string): string {
     return `__${prefix}${this.tmpCount++}`;
+  }
+
+  /** Emite para um buffer separado, sem tocar na saída em construção. */
+  private capture(emit: () => void): string {
+    const savedOut = this.out;
+    const savedIndent = this.indentLevel;
+    this.out = "";
+    this.indentLevel = 0;
+    emit();
+    const captured = this.out;
+    this.out = savedOut;
+    this.indentLevel = savedIndent;
+    return captured;
   }
 
   // =========== STATEMENTS ===========
@@ -390,6 +417,10 @@ export class GoTranspiler {
     // Sum type idiomático em Go: interface marcadora + uma struct por variante.
     const enumName = this.goIdent(decl.name);
     const marker = `is${enumName}`;
+    // Parâmetros de tipo (Result<T, E>) viram `any` no campo: uma única definição
+    // Go serve a todas as instanciações, e a asserção acontece na extração.
+    const typeParams = new Set(decl.typeParams ?? []);
+
     this.emitLine(`type ${enumName} interface{ ${marker}() }`);
     this.emitLine("");
 
@@ -403,8 +434,8 @@ export class GoTranspiler {
         this.emitLine(`func (${typeName}) ${marker}() {}`);
         this.emitLine(`var ${value} ${enumName} = ${typeName}{}`);
       } else {
-        const fields = payload.map((t, i) => `Field${i} ${this.transpileType(t)}`).join("; ");
-        const params = payload.map((t, i) => `f${i} ${this.transpileType(t)}`).join(", ");
+        const fields = payload.map((t, i) => `Field${i} ${this.transpileType(t, typeParams)}`).join("; ");
+        const params = payload.map((t, i) => `f${i} ${this.transpileType(t, typeParams)}`).join(", ");
         const init = payload.map((_, i) => `Field${i}: f${i}`).join(", ");
         this.emitLine(`type ${typeName} struct{ ${fields} }`);
         this.emitLine(`func (${typeName}) ${marker}() {}`);
@@ -414,8 +445,41 @@ export class GoTranspiler {
     }
   }
 
+  /**
+   * Como extrair o campo `Field{index}` de uma variante: o tipo Go do valor e a
+   * asserção necessária. Payload concreto (`Sucesso(String)`) já sai tipado do
+   * campo; parâmetro de tipo (`Ok(T)`) sai como `any` e precisa da asserção para
+   * o tipo daquela instanciação, que o checker resolveu.
+   */
+  private payloadAccess(
+    decl: EnumDeclaration | undefined,
+    payloadType: TypeNode | undefined,
+    genericArgs: FlexType[],
+  ): { goType: string; cast: string } {
+    if (!payloadType) return { goType: "any", cast: "" };
+
+    const params = decl?.typeParams ?? [];
+    const position = payloadType.kind === "NamedTypeNode" ? params.indexOf(payloadType.name) : -1;
+    if (position < 0) {
+      return { goType: this.transpileType(payloadType), cast: "" };
+    }
+
+    const resolved = genericArgs[position];
+    if (!resolved || resolved.kind === "Any") return { goType: "any", cast: "" };
+
+    const goType = this.goType(resolved);
+    return { goType, cast: `.(${goType})` };
+  }
+
+  /** Argumentos genéricos que o checker resolveu para o valor desta expressão. */
+  private genericArgsOf(expr: Expr): FlexType[] {
+    const type = this.types.get(expr);
+    return type && type.kind === "Enum" ? type.genericArgs : [];
+  }
+
   private transpileMatch(stmt: Extract<Stmt, { kind: "MatchStmt" }>): void {
     const subject = this.transpileExpr(stmt.value);
+    const genericArgs = this.genericArgsOf(stmt.value);
     const hasBinders = stmt.arms.some((arm) => arm.binders.length > 0);
     const bound = this.nextTmp("m");
 
@@ -424,11 +488,15 @@ export class GoTranspiler {
     this.emitLine(hasBinders ? `switch ${bound} := ${subject}.(type) {` : `switch ${subject}.(type) {`);
 
     for (const arm of stmt.arms) {
+      const decl = this.enums.get(arm.enumName);
+      const payload = decl?.variants.find((v) => v.name === arm.variantName)?.payload ?? [];
+
       this.emitLine(`case ${this.variantTypeName(arm.enumName, arm.variantName, arm.binders.length)}:`);
       this.indent();
       for (let i = 0; i < arm.binders.length; i++) {
         const binder = arm.binders[i]!;
-        this.emitLine(`${this.goIdent(binder)} := ${bound}.Field${i}`);
+        const { cast } = this.payloadAccess(decl, payload[i], genericArgs);
+        this.emitLine(`${this.goIdent(binder)} := ${bound}.Field${i}${cast}`);
         this.emitDiscardIfUnused(binder, arm.body.body);
       }
       this.transpileStmts(arm.body.body);
@@ -545,17 +613,12 @@ export class GoTranspiler {
 
     if (!enumDecl) {
       throw new Error(
-        "TranspileError: cannot resolve the enum behind the '?' operator (missing type information)",
+        "TranspileError: cannot resolve the Result/Option behind the '?' operator (missing type information)",
       );
     }
 
-    const okVariant = enumDecl.variants.find((v) => OK_VARIANT_NAMES.includes(v.name));
-    if (!okVariant) {
-      throw new Error(
-        `TranspileError: enum '${enumDecl.name}' has no success variant (${OK_VARIANT_NAMES.join("/")}) for the '?' operator`,
-      );
-    }
-
+    // A variante de sucesso é a primeira declarada — Ok/Some, por construção.
+    const okVariant = successVariant(enumDecl)!;
     const tmp = this.nextTmp("try");
     const bound = this.nextTmp("tv");
     const caseType = this.variantTypeName(enumDecl.name, okVariant.name);
@@ -575,11 +638,12 @@ export class GoTranspiler {
     }
 
     const value = `${tmp}_v`;
-    this.emitLine(`var ${value} ${this.transpileType(payload[0]!)}`);
+    const access = this.payloadAccess(enumDecl, payload[0], this.genericArgsOf(expr.expression));
+    this.emitLine(`var ${value} ${access.goType}`);
     this.emitLine(`switch ${bound} := ${tmp}.(type) {`);
     this.emitLine(`case ${caseType}:`);
     this.indent();
-    this.emitLine(`${value} = ${bound}.Field0`);
+    this.emitLine(`${value} = ${bound}.Field0${access.cast}`);
     this.dedent();
     this.emitLine(`default:`);
     this.indent();
@@ -602,8 +666,13 @@ export class GoTranspiler {
 
   // =========== TIPOS ===========
 
-  private transpileType(typeNode: TypeNode): string {
+  /**
+   * @param typeParams nomes que são parâmetros de tipo no contexto atual (T, E):
+   *                   viram `any`, já que a definição Go é única por enum.
+   */
+  private transpileType(typeNode: TypeNode, typeParams?: Set<string>): string {
     if (typeNode.kind === "NamedTypeNode") {
+      if (typeParams?.has(typeNode.name)) return "any";
       switch (typeNode.name) {
         case "Int":
           return "int";
@@ -617,6 +686,7 @@ export class GoTranspiler {
           return ""; // Go representa "sem retorno" pela ausência do tipo
         default:
           if (this.enums.has(typeNode.name) || this.traitNames.has(typeNode.name)) {
+            this.markBuiltinUse(typeNode.name);
             return this.goIdent(typeNode.name); // interface (sum type ou trait)
           }
           if (this.structNames.has(typeNode.name)) {
@@ -626,15 +696,16 @@ export class GoTranspiler {
       }
     }
     if (typeNode.kind === "ArrayTypeNode") {
-      return `[]${this.transpileType(typeNode.elementType)}`;
+      return `[]${this.transpileType(typeNode.elementType, typeParams)}`;
     }
     if (typeNode.kind === "GenericTypeNode") {
       if (typeNode.name === "Channel") {
-        return `chan ${typeNode.typeArguments[0] ? this.transpileType(typeNode.typeArguments[0]) : "any"}`;
+        return `chan ${typeNode.typeArguments[0] ? this.transpileType(typeNode.typeArguments[0], typeParams) : "any"}`;
       }
       if (this.enums.has(typeNode.name)) {
-        // Genéricos reais (monomorfização) estão fora do escopo da RFC-001:
+        // Uma definição Go por enum serve a todas as instanciações:
         // Result<Int, String> transpila para a interface Result.
+        this.markBuiltinUse(typeNode.name);
         return this.goIdent(typeNode.name);
       }
       return `any /* generic ${typeNode.name} */`;
@@ -658,6 +729,7 @@ export class GoTranspiler {
       case "Array":
         return `[]${this.goType(type.elementType)}`;
       case "Enum":
+        this.markBuiltinUse(type.name);
         return this.goIdent(type.name);
       case "Struct":
         if (type.name === "Channel") {
@@ -689,7 +761,13 @@ export class GoTranspiler {
    * payload) ou o prefixo do construtor `_new` (variante com payload).
    */
   private variantValueName(enumName: string, variantName: string): string {
+    this.markBuiltinUse(enumName);
     return `${this.goIdent(enumName)}_${this.goIdent(variantName)}`;
+  }
+
+  /** Marca um tipo embutido como referenciado, para o cabeçalho emiti-lo. */
+  private markBuiltinUse(name: string): void {
+    if (isBuiltinType(name)) this.usedBuiltins.add(name);
   }
 
   /**
@@ -706,12 +784,8 @@ export class GoTranspiler {
   private enumOf(expr: Expr): EnumDeclaration | undefined {
     const type = this.types.get(expr);
     if (type && type.kind === "Enum") {
-      const decl = this.enums.get(type.name);
-      if (decl) return decl;
+      return this.enums.get(type.name);
     }
-    // Sem anotação de tipo (ex: transpilação sem checker), só dá para resolver
-    // sem ambiguidade quando existe um único enum declarado no programa.
-    if (this.enums.size === 1) return [...this.enums.values()][0];
     return undefined;
   }
 

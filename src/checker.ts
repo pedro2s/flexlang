@@ -9,6 +9,7 @@ import type {
   ImplDeclaration,
   ImportDeclaration,
 } from "./ast";
+import { builtinEnums, isBuiltinType, successVariant } from "./stdlib";
 
 // --- Representação Interna de Tipos do TypeChecker ---
 export type FlexType =
@@ -71,8 +72,24 @@ export class TypeChecker {
    * O retorno é aditivo: quem só quer validar pode continuar ignorando-o.
    */
   public check(stmts: Stmt[]): TypeMap {
+    // Result<T, E> e Option<T> existem em todo programa, sem import e sem declaração.
+    for (const builtin of builtinEnums()) {
+      this.enums.set(builtin.name, builtin);
+    }
+
     // Primeira Passagem (Pass 1): Registrar declarações (Hoisting de Structs e Funcs)
     for (const stmt of stmts) {
+      if (
+        (stmt.kind === "StructDeclaration" ||
+          stmt.kind === "EnumDeclaration" ||
+          stmt.kind === "TraitDeclaration") &&
+        isBuiltinType(stmt.name)
+      ) {
+        throw new Error(
+          `TypeError: '${stmt.name}' is a built-in type and cannot be redeclared`,
+        );
+      }
+
       if (stmt.kind === "StructDeclaration") {
         this.structs.set(stmt.name, stmt);
       } else if (stmt.kind === "FunctionDeclaration") {
@@ -208,7 +225,21 @@ export class TypeChecker {
 
       case "ReturnStmt":
         if (stmt.value) {
-          this.checkExpr(stmt.value, env);
+          const returnedType = this.checkExpr(stmt.value, env);
+          const expectedReturn = env.get("__RETURN_TYPE__");
+          // Valida a instanciação dos embutidos: `Result.Ok(x)` aceita qualquer x
+          // (T é livre na construção), então é aqui que o T declarado é cobrado.
+          if (
+            expectedReturn &&
+            expectedReturn.type.kind === "Enum" &&
+            isBuiltinType(expectedReturn.type.name) &&
+            returnedType.kind === "Enum" &&
+            !this.isTypeAssignable(expectedReturn.type, returnedType)
+          ) {
+            throw new Error(
+              `TypeError: Cannot return ${this.typeToString(returnedType)} from a function that returns ${this.typeToString(expectedReturn.type)}`,
+            );
+          }
         }
         break;
 
@@ -268,9 +299,15 @@ export class TypeChecker {
                  throw new Error(`TypeError: Match arm binds ${arm.binders.length} variables, but variant '${arm.variantName}' has ${payloadTypes.length} fields`);
             }
             
+            // Os binders recebem o payload já com T/E trocados pelos tipos concretos
+            // da instanciação sendo casada (ex: Result<Int, String> -> Ok(v): Int).
+            const armSubst = this.genericSubst(
+                eDecl,
+                matchValueType.kind === "Enum" ? matchValueType.genericArgs : [],
+            );
             const armEnv = new TypeEnvironment(env);
             for (let i = 0; i < arm.binders.length; i++) {
-                 armEnv.define(arm.binders[i], this.resolveTypeNode(payloadTypes[i]), false);
+                 armEnv.define(arm.binders[i], this.resolveTypeNode(payloadTypes[i], armSubst), false);
             }
             
             this.checkStmt(arm.body, armEnv);
@@ -388,7 +425,12 @@ export class TypeChecker {
              if (variant.payload && variant.payload.length > 0) {
                  throw new Error(`TypeError: Variant '${variantName}' expects ${variant.payload.length} arguments, got 0`);
              }
-             return { kind: "Enum", name: enumName, genericArgs: [] };
+             // Variante sem payload (ex: Option.None) não diz nada sobre T.
+             return {
+                 kind: "Enum",
+                 name: enumName,
+                 genericArgs: (enumDecl.typeParams ?? []).map(() => ({ kind: "Any" }) as FlexType),
+             };
         }
         // Pula checagem complexa por enquanto
         return { kind: "Any" };
@@ -406,15 +448,20 @@ export class TypeChecker {
              if (payloadTypes.length !== expr.args.length) {
                  throw new Error(`TypeError: Variant '${variantName}' expects ${payloadTypes.length} arguments, got ${expr.args.length}`);
              }
-             
+
+             // Na construção, os parâmetros de tipo ainda são livres: qualquer
+             // argumento serve para T/E, e é dele que a instanciação é inferida.
+             const freeSubst = this.genericSubst(enumDecl, []);
+             const argTypes: FlexType[] = [];
              for (let i = 0; i < expr.args.length; i++) {
                  const argType = this.checkExpr(expr.args[i], env);
-                 const expectedType = this.resolveTypeNode(payloadTypes[i]);
+                 argTypes.push(argType);
+                 const expectedType = this.resolveTypeNode(payloadTypes[i], freeSubst);
                  if (!this.isTypeAssignable(expectedType, argType)) {
                       throw new Error(`TypeError: Argument ${i+1} of variant '${variantName}' must be ${this.typeToString(expectedType)}, got ${this.typeToString(argType)}`);
                  }
              }
-             return { kind: "Enum", name: enumName, genericArgs: [] };
+             return { kind: "Enum", name: enumName, genericArgs: this.inferGenericArgs(enumDecl, payloadTypes, argTypes) };
         }
         
         if (expr.caller.kind === "Identifier") {
@@ -525,25 +572,30 @@ export class TypeChecker {
         
       case "TryExpr":
         const tryType = this.checkExpr(expr.expression, env);
-        if (tryType.kind !== "Enum" && tryType.kind !== "Any") {
-            throw new Error(`TypeError: ? operator can only be applied to Enums (like Result or Option), got ${this.typeToString(tryType)}`);
+        if (tryType.kind === "Any") return { kind: "Any" };
+
+        // Checagem estrutural: `?` é uma operação sobre os tipos embutidos, não
+        // sobre "qualquer enum cuja primeira variante se chame Ok".
+        if (tryType.kind !== "Enum" || !isBuiltinType(tryType.name)) {
+            throw new Error(`TypeError: ? operator can only be applied to Result or Option, got ${this.typeToString(tryType)}`);
         }
-        
+
         const currentReturn = env.get("__RETURN_TYPE__");
-        if (currentReturn && tryType.kind === "Enum") {
-            if (currentReturn.type.kind !== "Enum" && currentReturn.type.kind !== "Any") {
+        if (currentReturn && currentReturn.type.kind !== "Any") {
+            if (currentReturn.type.kind !== "Enum") {
                 throw new Error(`TypeError: Cannot use ? operator in a function that returns ${this.typeToString(currentReturn.type)}`);
             }
-        }
-        
-        if (tryType.kind === "Enum") {
-            const eDecl = this.enums.get(tryType.name);
-            if (eDecl) {
-                const okVariant = eDecl.variants.find(v => v.name === "Ok" || v.name === "Some" || v.name === "Sucesso");
-                if (okVariant && okVariant.payload && okVariant.payload.length > 0) {
-                     return this.resolveTypeNode(okVariant.payload[0]);
-                }
+            // O erro é propagado como está, então só cabe no retorno se for o mesmo tipo.
+            if (currentReturn.type.name !== tryType.name) {
+                throw new Error(`TypeError: Cannot use ? on ${tryType.name} in a function that returns ${this.typeToString(currentReturn.type)}`);
             }
+            this.checkPropagatedPayload(tryType, currentReturn.type);
+        }
+
+        const tryDecl = this.enums.get(tryType.name)!;
+        const okVariant = successVariant(tryDecl);
+        if (okVariant && okVariant.payload && okVariant.payload.length > 0) {
+            return this.resolveTypeNode(okVariant.payload[0], this.genericSubst(tryDecl, tryType.genericArgs));
         }
         return { kind: "Any" };
 
@@ -554,9 +606,15 @@ export class TypeChecker {
 
   // =========== UTILITÁRIOS ===========
 
-  private resolveTypeNode(node: TypeNode): FlexType {
+  /**
+   * @param subst substituição de parâmetros de tipo (ex: {T: Int, E: String} ao
+   *              resolver o payload de uma variante de `Result<Int, String>`)
+   */
+  private resolveTypeNode(node: TypeNode, subst?: Map<string, FlexType>): FlexType {
     switch (node.kind) {
       case "NamedTypeNode":
+        const bound = subst?.get(node.name);
+        if (bound) return bound;
         if (node.name === "Int") return { kind: "Int" };
         if (node.name === "String") return { kind: "String" };
         if (node.name === "Bool") return { kind: "Bool" };
@@ -564,15 +622,78 @@ export class TypeChecker {
         return { kind: "Struct", name: node.name, genericArgs: [] };
 
       case "ArrayTypeNode":
-        return { kind: "Array", elementType: this.resolveTypeNode(node.elementType) };
+        return { kind: "Array", elementType: this.resolveTypeNode(node.elementType, subst) };
 
       case "GenericTypeNode":
-        return {
-          kind: "Struct",
-          name: node.name,
-          genericArgs: node.typeArguments.map((t) => this.resolveTypeNode(t)),
-        };
+        const genericArgs = node.typeArguments.map((t) => this.resolveTypeNode(t, subst));
+        if (this.enums.has(node.name)) {
+          return { kind: "Enum", name: node.name, genericArgs };
+        }
+        return { kind: "Struct", name: node.name, genericArgs };
     }
+  }
+
+  /**
+   * Liga os parâmetros de tipo de um enum aos argumentos concretos daquela
+   * instanciação. O que não foi informado vira `Any`, para não inventar tipo.
+   */
+  /**
+   * O `?` devolve o payload de sucesso e propaga qualquer outra variante **como
+   * está** — logo os parâmetros de tipo que essas variantes carregam (o `E` de
+   * `Result<T, E>`) precisam caber no retorno da função. `Option.None` não carrega
+   * nada, então propagar `Option<User>` de uma função `-> Option<String>` é seguro.
+   */
+  private checkPropagatedPayload(tryType: FlexType, returnType: FlexType): void {
+    if (tryType.kind !== "Enum" || returnType.kind !== "Enum") return;
+    const decl = this.enums.get(tryType.name);
+    if (!decl) return;
+
+    const success = successVariant(decl);
+    const params = decl.typeParams ?? [];
+
+    for (const variant of decl.variants) {
+      if (variant === success) continue;
+      for (const payload of variant.payload ?? []) {
+        if (payload.kind !== "NamedTypeNode") continue;
+        const position = params.indexOf(payload.name);
+        if (position < 0) continue;
+
+        const propagated = tryType.genericArgs[position];
+        const expected = returnType.genericArgs[position];
+        if (!propagated || !expected) continue;
+        if (!this.isTypeAssignable(expected, propagated)) {
+          throw new Error(
+            `TypeError: ? propagates ${this.typeToString(tryType)}, which does not fit the return type ${this.typeToString(returnType)}`,
+          );
+        }
+      }
+    }
+  }
+
+  /**
+   * Inferência na construção de uma variante: `Result.Ok(5)` diz que T é Int,
+   * mas não diz nada sobre E — o que não dá para inferir fica `Any`.
+   */
+  private inferGenericArgs(
+    decl: EnumDeclaration,
+    payloadTypes: TypeNode[],
+    argTypes: FlexType[],
+  ): FlexType[] {
+    return (decl.typeParams ?? []).map((param) => {
+      const position = payloadTypes.findIndex(
+        (node) => node.kind === "NamedTypeNode" && node.name === param,
+      );
+      const inferred = position >= 0 ? argTypes[position] : undefined;
+      return inferred ?? { kind: "Any" };
+    });
+  }
+
+  private genericSubst(decl: EnumDeclaration, genericArgs: FlexType[]): Map<string, FlexType> {
+    const subst = new Map<string, FlexType>();
+    for (const [i, param] of (decl.typeParams ?? []).entries()) {
+      subst.set(param, genericArgs[i] ?? { kind: "Any" });
+    }
+    return subst;
   }
 
   private isTypeAssignable(target: FlexType, source: FlexType): boolean {
@@ -586,7 +707,17 @@ export class TypeChecker {
       return target.name === source.name;
     }
     if (target.kind === "Enum" && source.kind === "Enum") {
-      return target.name === source.name;
+      if (target.name !== source.name) return false;
+      // Instanciações precisam ser compatíveis: Result<Int, String> não aceita
+      // um Result<String, ...>. Argumento ausente ou Any casa com qualquer coisa.
+      const arity = Math.max(target.genericArgs.length, source.genericArgs.length);
+      for (let i = 0; i < arity; i++) {
+        const targetArg = target.genericArgs[i];
+        const sourceArg = source.genericArgs[i];
+        if (!targetArg || !sourceArg) continue;
+        if (!this.isTypeAssignable(targetArg, sourceArg)) return false;
+      }
+      return true;
     }
     return true;
   }

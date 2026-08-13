@@ -145,7 +145,7 @@ Entregue em `src/transpiler.ts`, `src/checker.ts`, `src/cli.ts` e `tests/parity_
 
 Uma divergência semântica também foi fechada: o limite do `for` é fixado em um temporário antes do laço, já que o interpretador avalia o limite uma única vez e o `for` do Go reavaliaria a cada iteração.
 
-O `?` (item 3) foi implementado **sem** esperar a RFC-002: o transpiler descobre o enum pelo mapa de tipos do checker e a variante de sucesso pela mesma heurística de nome (`Ok`/`Some`/`Sucesso`) que checker e interpreter já usam — a constante `OK_VARIANT_NAMES` em `transpiler.ts` é o ponto único a remover quando a RFC-002 fixar `Result`/`Option` como stdlib de verdade. A expansão em si é mais geral que a do desenho acima: como `?` pode aparecer em qualquer posição de expressão (inclusive duas vezes na mesma), o preâmbulo é emitido antes do statement que contém o `?`, e a expressão passa a ser o temporário com o payload.
+O `?` (item 3) foi implementado **sem** esperar a RFC-002: o transpiler descobria o enum pelo mapa de tipos do checker e a variante de sucesso pela mesma heurística de nome (`Ok`/`Some`/`Sucesso`) que checker e interpreter usavam. Essa heurística foi removida pela RFC-002, que fixou `Result`/`Option` como embutidos — hoje a variante de sucesso é simplesmente a primeira declarada. A expansão em si é mais geral que a do desenho acima: como `?` pode aparecer em qualquer posição de expressão (inclusive duas vezes na mesma), o preâmbulo é emitido antes do statement que contém o `?`, e a expressão passa a ser o temporário com o payload.
 
 ### Limitações conhecidas (não fechadas por esta RFC)
 

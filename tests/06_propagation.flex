@@ -1,24 +1,20 @@
 // Teste 06: Operador de Propagacao (?)
+// Result<T, E> e embutido na linguagem: nenhum enum precisa ser declarado aqui.
 
-enum Result {
-    Ok(Int),
-    Err(String)
-}
-
-func divide(a: Int, b: Int) -> Result {
+func divide(a: Int, b: Int) -> Result<Int, String> {
     if b == 0 {
         return Result.Err("Divisao por zero!");
     }
     return Result.Ok(a / b); // Divisao basica inteira vai requerer math de verdade no futuro, mas o AST parser vai dar evaluate. Na real, JS divide float, entao 10/2 = 5
 }
 
-func calcula() -> Result {
+func calcula() -> Result<Int, String> {
     let mut x = divide(10, 2)?;
     print("Divisao 1 OK:");
     print(x);
-    
-    let y = divide(x, 0)?; // Retorna prematuramente Result::Err
-    
+
+    let y = divide(x, 0)?; // Retorna prematuramente Result.Err
+
     print("Isso nao deve ser impresso");
     return Result.Ok(y);
 }

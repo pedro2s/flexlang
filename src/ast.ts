@@ -309,6 +309,11 @@ export interface EnumDeclaration {
   kind: "EnumDeclaration";
   name: string;
   variants: EnumVariantDecl[];
+  /**
+   * Parâmetros de tipo do enum (ex: ["T", "E"] em `Result<T, E>`).
+   * Só os enums embutidos têm — o parser não aceita generics de usuário.
+   */
+  typeParams?: string[];
 }
 
 export interface MatchArm {

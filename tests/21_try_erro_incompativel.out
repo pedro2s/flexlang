@@ -1,0 +1,1 @@
+TypeError: ? propagates Result<Int, String>, which does not fit the return type Result<Int, Int>

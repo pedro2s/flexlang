@@ -1,6 +1,6 @@
 # RFC-002: `Result<T, E>` e `Option<T>` como Stdlib Real
 
-> **Status:** Draft · **Prioridade:** P0 — bloqueante · **Depende de:** nada (pode andar em paralelo à RFC-001)
+> **Status:** Implementado · **Prioridade:** P0 — bloqueante · **Depende de:** nada (pode andar em paralelo à RFC-001)
 > **Bloqueia:** RFC-001 (item 3, expansão do `?`), RFC-004, RFC-005 (toda API de erro depende disto)
 
 ## Resumo
@@ -99,9 +99,40 @@ Isso é uma exceção deliberada ao padrão geral "enum → interface + type-swi
 
 ## Critério de Aceite
 
-- [ ] Nenhum `.flex` de teste ou exemplo declara seu próprio `enum Result`/`Option`.
-- [ ] `?` funciona por checagem estrutural de tipo, sem qualquer `if v.name === "Ok" || ...` no código-fonte do checker/interpretador.
-- [ ] `Result<T, E>` e `Option<T>` transpilam para Go genérico válido e passam no parity gate.
+- [x] Nenhum `.flex` de teste ou exemplo declara seu próprio `enum Result`/`Option`. (A única exceção é `tests/18_result_redeclarado.flex`, que existe justamente para provar que a redeclaração é recusada.)
+- [x] `?` funciona por checagem estrutural de tipo, sem qualquer `if v.name === "Ok" || ...` no código-fonte do checker/interpretador.
+- [x] `Result<T, E>` e `Option<T>` passam no parity gate — **mas não transpilam para Go genérico**; ver "Desvio do item 5" abaixo.
+
+## Estado da Implementação
+
+Entregue em `src/stdlib.ts` (novo — definição única dos embutidos, consumida por checker, interpretador e transpiler), `src/checker.ts`, `src/interpreter.ts` e `src/transpiler.ts`.
+
+Os itens 1 a 4 saíram como desenhados. `Result<T, E>` e `Option<T>` são registrados incondicionalmente, redeclarar qualquer um deles (como `enum`, `struct` ou `trait`) falha com mensagem específica, `resolveTypeNode` ganhou um mapa de substituição de parâmetros de tipo, e o `?` passou a ser estrutural nos três componentes — a heurística `"Ok"/"Some"/"Sucesso"` não existe mais em lugar nenhum. Os goldens de `tests/06_propagation.flex` e `tests/13_try_chain.flex` não mudaram ao trocar o enum próprio pelo embutido, que era o teste de fumaça pedido no plano.
+
+### Desvio do item 5: apagamento de tipo, não generics do Go
+
+O item 5 propõe `Result[T, E]` usando generics nativos do Go. **Não foi o caminho tomado**: o transpiler emite uma única definição por embutido, com o payload dos parâmetros de tipo apagado para `any`, e insere a asserção do tipo concreto no ponto de extração (binder de `match` e valor do `?`), a partir da instanciação que o checker resolveu:
+
+```go
+type Result interface{ isResult() }
+type Result_Ok struct{ Field0 any }
+// ...
+case Result_Ok:
+    v := __m4.Field0.(int)   // instanciação Result<Int, String>, resolvida pelo checker
+```
+
+O motivo é o `?`, que é a razão de o tipo existir. Com `Result[T, E]`, `Ok[T, E](v)` não tem como inferir `E` do argumento — toda construção precisaria da instanciação completa no site, o que exige inferência bidirecional que o checker não faz — e, pior, propagar um `Err` de `Result<Int, String>` de dentro de uma função que devolve `Result<Bool, String>` deixaria de compilar em Go, embora seja exatamente o uso normal do `?`. O apagamento mantém uma única representação para todas as instanciações e um único padrão de codegen (o da RFC-001), ao custo de a checagem sair do compilador Go e voltar para o checker — ver abaixo.
+
+### Checagens que passaram a ser responsabilidade do checker
+
+O apagamento troca erro de compilação do Go por asserção em tempo de execução, então duas validações que os generics do Go dariam de graça foram implementadas no checker (com testes negativos dedicados):
+
+- **Instanciação no retorno** (`tests/20_result_instanciacao.flex`): na construção, `Result.Ok(x)` aceita qualquer `x`, porque `T` é livre; é no `return` que o `Result<Int, String>` declarado cobra o tipo. Sem isso, `return Result.Ok("texto")` numa função `-> Result<Int, String>` rodaria interpretado e daria panic no binário Go.
+- **Erro propagado pelo `?`** (`tests/21_try_erro_incompativel.flex`): como o erro é propagado como está, os parâmetros de tipo que ele carrega precisam caber no retorno de quem propaga. A checagem é feita só sobre os parâmetros que aparecem nas variantes não-sucesso — por isso propagar `Option<User>` dentro de uma função `-> Option<String>` continua válido: `None` não carrega nada.
+
+### Limitação conhecida
+
+A instanciação só é verificada onde há um tipo declarado (retorno de função, anotação de variável, parâmetro). Um `let r = Result.Ok(5);` solto infere `Result<Int, Any>`, e o `Any` vira `any` no Go sem asserção — o valor imprime igual nos dois modos, mas não serve para aritmética no modo compilado. Anotar o tipo resolve; fechar o caso geral exige inferência bidirecional, que continua fora de escopo.
 
 ## Riscos e Alternativas Consideradas
 
