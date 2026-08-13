@@ -1,10 +1,39 @@
 # FlexLang: Roadmap Arquitetural para Backends Escaláveis
 
-> **Rev. 2 — agosto/2026.** Revisado após debate arquitetural. Este documento é a fonte de verdade da arquitetura da FlexLang; onde houver conflito com o README (em especial a ideia de "segurança de memória sem GC tradicional, via borrow checker"), vale o que está aqui.
+> **Rev. 3 — agosto/2026.** Revisado após nova análise da base de código: as Fases 0–2 foram implementadas e a Fase 3 está parcialmente entregue desde a Rev. 2. Este documento é a fonte de verdade da arquitetura da FlexLang; onde houver conflito com o README (em especial numeração de fases), vale o que está aqui.
 
-Avaliada a estrutura atual da **FlexLang** — interpretador tree-walking em TypeScript com `struct`, `impl`, funções, controle de fluxo e escopos léxicos — a separação clara entre dados e comportamento já nos coloca em excelente posição para uma linguagem previsível e sustentável. Este documento registra as decisões arquiteturais e o plano de evolução (Fases 0 a 3) rumo ao objetivo: uma linguagem robusta, performática e escalável para backends.
+Avaliada a estrutura atual da **FlexLang** — que deixou de ser um interpretador de bolso e passou a ter type checker, motor de concorrência estruturada, traits, transpiler Go e CLI unificada — a separação clara entre dados e comportamento segue sendo a base de uma linguagem previsível e sustentável. Este documento registra as decisões arquiteturais e o plano de evolução (Fases 0 a 5) rumo ao objetivo: uma linguagem robusta, performática e escalável para backends.
 
 Em uma frase, o alvo é **"um Go com sistema de tipos melhor"** — GC + green threads + `Result`/`match` — somando, desde o dia zero, duas lições que o ecossistema Go aprendeu tarde demais: **concorrência estruturada** e **backpressure por padrão**.
+
+---
+
+## Estado Atual da Implementação (pós Fases 0–2, Fase 3 em andamento)
+
+Desde a Rev. 2, a FlexLang deixou de ser só uma especificação: as Fases 0, 1 e 2 foram implementadas e a Fase 3 está parcialmente entregue. O que existe hoje, de fato, rodando:
+
+- **Lexer** (`src/lexer.ts`) — tokens com linha/coluna; comentários de linha e de bloco; strings com interpolação (`"Olá, ${nome}"`) parseadas via sub-lexer/sub-parser recursivo; operadores completos (`- * / % ! != <= >= && ||`).
+- **Parser** (`src/parser.ts`) — expression statements e atribuição (`AssignmentExpr`) — o gap identificado na Rev. 2 foi fechado; precedência completa (`or → and → igualdade → relacional → aditivo → multiplicativo → unário → postfix`); arrays (`ArrayLiteral`/`IndexExpr`); `while`; `enum` com payload posicional; `match` (apenas sobre variantes de enum, sem guards/wildcard `_` ainda); `scope`/`spawn`; `trait` e `impl Trait for Struct`; `import { A, B } from "modulo"`.
+- **Type Checker** (`src/checker.ts`) — dois passes (hoisting de structs/funcs/enums/traits, depois checagem profunda); inferência local; enforcement de `mut` em variáveis, parâmetros e alvos de atribuição (`Identifier`/`MemberExpr`/`IndexExpr`); **exhaustiveness checking real** no `match`; validação de conformidade de `trait`; generics representados estruturalmente (`Struct`/`Enum` com `genericArgs`), mas sem verificação de bounds.
+- **Interpretador** (`src/interpreter.ts`) — motor 100% assíncrono (`async/await` sobre Promises do Node simulando green threads); **closures agora capturam o ambiente de definição** (`FlexFunction` guarda a declaração + o closure) — o bug de escopo dinâmico da Rev. 2 foi corrigido; `scope`/`spawn` via `Promise.all`/`Promise.race` (deadline vira timeout real); `FlexChannel` com rendezvous síncrono (capacidade 0); `FlexServer` envolvendo o módulo `http` nativo do Node para servir `net/http` em modo interpretado.
+- **Transpiler Go** (`src/transpiler.ts`) — emite `package main`, boilerplate de `net/http` quando importado, `struct`→`type ... struct`, `impl`→métodos com ponteiro receiver, `trait`→`interface`, `scope`/`spawn`→`sync.WaitGroup`+`go func()`, `channel.send`/`.recv()`→operadores nativos `<-` do Go.
+- **CLI unificada** (`src/cli.ts`, binário `flex`) — `flex run <arquivo>` (interpretado) e `flex build <arquivo>` (transpila + invoca `go build`); o type checker roda **antes** dos dois caminhos, cumprindo a condição inegociável do ADR-001 (Seção 6).
+- **Suíte golden-file** (`tests/`, `tests/runner.ts`) — 11 arquivos `.flex`/`.out`, com auto-geração do golden file quando ausente. É o entregável de testes da Fase 0.
+- **Exemplos públicos** (`examples/`) — três `.flex` executáveis cobrindo HTTP, concorrência e traits.
+
+### Lacunas conhecidas (o que ainda falta ou está raso)
+
+Achados concretos desta análise, priorizados por risco:
+
+1. **Paridade Node↔Go incompleta.** O transpiler não emite `EnumDeclaration`, `MatchStmt`, `TryExpr`, `ArrayLiteral`, `IndexExpr`, `LogicalExpr`, `UnaryExpr` nem `BooleanLiteral` — cai no `default` (`// TODO: transpile ...`) ou em `/* expr ... */`. Ou seja: **qualquer programa que use `enum`/`match`/`?`/arrays/booleanos passa no type checker mas gera Go quebrado em `flex build`.** Isso viola o espírito (embora não a letra) do ADR-001: o checker aprova, mas o codegen não sustenta. É a lacuna de maior risco — antes de modularizar a stdlib ou empacotar dependências, o caminho de produção precisa gerar Go correto para a linguagem que o checker já aceita.
+2. **`Result`/`Option` ainda não são stdlib.** Hoje cada teste declara seu próprio `enum Result { Ok(...), Err(...) }`; o operador `?` funciona por **convenção de nome de variante** (`Ok`/`Some`/`Sucesso`), não por um tipo `Result<T, E>` genérico injetado automaticamente. Fecha uma promessa da Rev. 2 (Seção 4) que ainda está pendente.
+3. **Isolamento por mutabilidade cobre só o `channel.send`.** O checker marca `isMoved` apenas quando uma variável `mut` é argumento de `.send(...)`; uma variável `mut` capturada diretamente por uma closure `spawn { }` sem passar por canal **não é analisada** — a data race que a Seção 1 promete impedir ainda é possível por captura direta.
+4. **Conformidade de trait é rasa.** `impl Trait for Struct` hoje valida só nome do método e quantidade de parâmetros — não compara tipos de parâmetro nem tipo de retorno.
+5. **Sem funções anônimas/closures como expressão.** Funções são first-class apenas quando nomeadas (`FunctionDeclaration` guardada em uma `Identifier`); não existe literal de lambda (`|a, b| { ... }`) no parser. Handlers de rota, por exemplo, só podem ser funções `func` top-level.
+6. **`flex fmt`, `flex test` e `flex mod` não existem na CLI** — os testes rodam via `npm test` chamando `tests/runner.ts` diretamente, não via `flex test`.
+7. **Módulos nativos são hardcoded.** `"net/http"` é reconhecido por comparação literal de string dentro do próprio `checker.ts` (linha 74) e `transpiler.ts` (linha 36); não existe nenhum mecanismo de import entre arquivos `.flex` locais. É o gap que motiva as Seções 7 e 8 abaixo.
+
+Nada disso invalida o que foi construído — ao contrário, valida a estratégia da Rev. 2 (laboratório Node primeiro). Mas são os itens concretos que orientam a priorização das próximas fases.
 
 ---
 
@@ -191,24 +220,115 @@ Uma linguagem não sobrevive apenas de sua sintaxe. A adoção por engenheiros d
 
 ---
 
+## 7. Modularização da Stdlib (Native Modules)
+
+Hoje, suportar uma nova lib nativa exige editar três motores ao mesmo tempo: `checker.ts` (registrar os tipos expostos), `interpreter.ts` (implementar o binding em runtime) e `transpiler.ts` (emitir o boilerplate Go). É exatamente o padrão que `"net/http"` segue agora — três blocos de `if stmt.moduleName === "net/http"` espalhados pelo core (`checker.ts:74`, `transpiler.ts:36`). Nenhum colaborador externo consegue adicionar `fs`, `encoding/json` ou um driver de banco sem tocar no core dos três motores, e sem risco de quebrar o que já existe ao redor.
+
+**Decisão Arquitetural:**
+
+- **Interface `NativeModule`** — cada lib nativa descreve três facetas independentes, sem precisar tocar em `checker.ts`/`interpreter.ts`/`transpiler.ts`:
+  1. **`typeSurface`** — os `struct`/`trait`/assinaturas de função que o `TypeChecker` deve enxergar (substitui o `structs.set("Server", ...)` manual de hoje).
+  2. **`runtimeBinding`** — a classe/objeto JS que implementa o comportamento real em modo interpretado (substitui o `FlexServer`/`FlexChannel` como casos especiais fixos do interpretador).
+  3. **`goCodegen`** — as linhas de `import` Go e o boilerplate a injetar, mais as regras de tradução de call sites (substitui o `if this.importedModules.has("net/http")` do transpiler).
+- **`ModuleRegistry`** — um registro único, indexado pelo caminho do módulo (`"net/http"`, `"fs"`, ...), que os três motores consultam. Checker, interpretador e transpiler passam a fazer `registry.get(moduleName)` em vez de `if/else` encadeados.
+- **Escopo deliberadamente contido para v1**: só módulos 1ª-parte usam essa arquitetura no começo — migrar `net/http` como implementação de referência, e adicionar `fs` como segundo módulo, só para provar que a costura realmente desacopla. **Fora de escopo por ora**: carregamento dinâmico de plugins compilados por terceiros (superfície de ataque desnecessária antes de existir um ecossistema real) e um sistema de permissões/capabilities por módulo (só faz sentido quando houver de fato módulos de terceiros rodando código do usuário).
+
+**Sintaxe Conceitual** (não é sintaxe da FlexLang — é a arquitetura interna do compilador):
+
+```ts
+// src/modules/http.ts — como "net/http" passaria a ser descrito
+export const httpModule: NativeModule = {
+  path: "net/http",
+  typeSurface: {
+    structs: ["Server", "Request", "Response"],
+    // futuramente: assinaturas de método por struct, para o checker validar argumentos
+  },
+  runtimeBinding: (interpreter) => ({
+    Server: { new: (addr: string) => new FlexServer(addr, interpreter) },
+  }),
+  goCodegen: {
+    imports: ["net/http", "encoding/json"],
+    boilerplate: HTTP_GO_BOILERPLATE, // string extraída do transpiler.ts atual
+  },
+};
+```
+
+**Pré-requisito real**: a Lacuna 1 (paridade Node↔Go, ver "Estado Atual") precisa estar fechada antes de migrar módulos para essa arquitetura — não faz sentido desacoplar o codegen de um módulo cujo próprio codegen de linguagem básica (enums/match) ainda está incompleto.
+
+---
+
+## 8. Módulos Locais e Gerenciador de Pacotes (`flex mod`)
+
+O pedido da comunidade — "quero importar meu próprio código em múltiplos arquivos" e, depois, "quero publicar uma lib para outros usarem" — são dois problemas de tamanhos bem diferentes. Tratamos como dois estágios sequenciais, e o segundo só começa quando o primeiro estiver sólido.
+
+**Decisão Arquitetural:**
+
+- **Estágio A — Resolução de módulos locais (pré-requisito).** Hoje a FlexLang só executa um único arquivo por vez (`flex run arquivo.flex`); não existe nenhuma resolução de `import` entre arquivos `.flex`. Antes de qualquer gerenciador de pacotes, `import { Foo } from "./utils"` precisa resolver, ler e type-checar o arquivo local referenciado. Sem isso, um "pacote" não tem o que empacotar.
+- **Estágio B — `flex mod`, descentralizado via Git (estilo Go).** Um manifesto (`flex.toml`) declara dependências como URL de repositório + tag/commit; um lockfile (`flex.lock`) fixa exatamente o que foi resolvido, para builds reprodutíveis; um cache local por conteúdo (`~/.flex/pkg/`) evita re-clone a cada build.
+- **Deliberadamente fora de escopo agora** (para não exagerar antes da hora):
+  - Servidor de índice/registro central (o Go só criou o seu — `sum.db`/proxy — anos depois de módulos já funcionarem só com Git; seguimos a mesma ordem).
+  - Resolvedor de SemVer com ranges (`^1.2.3`); v1 fixa commit/tag exato, sem solver de compatibilidade.
+  - Autenticação para registros privados e distribuição de artefatos binários pré-compilados.
+
+**Sintaxe Conceitual:**
+
+```flexlang
+// Estágio A: import local, hoje inexistente
+import { format_currency } from "./utils/money";
+```
+
+```toml
+# flex.toml — Estágio B
+[package]
+name = "minha-api"
+version = "0.1.0"
+
+[dependencies]
+# nome = { git = "url-do-repositorio", tag = "..." }
+flex-postgres = { git = "https://github.com/comunidade/flex-postgres", tag = "v0.3.0" }
+```
+
+```bash
+flex mod install   # resolve flex.toml, grava flex.lock, popula ~/.flex/pkg/
+```
+
+---
+
 ## Plano de Evolução (Roadmap)
 
-### Fase 0: Consolidação do Interpretador (Imediato)
+Fases 0 a 2 estão concluídas; a Fase 3 está parcialmente entregue. As Fases 4 e 5 — modularização da stdlib e gerenciador de pacotes — são a prioridade imediata seguinte: é o que destrava colaboradores externos, o pedido concreto que motivou esta revisão. Recursos de mais longo prazo (decorators, IoC, ORM, framework web) continuam fora deste roadmap — ver `README.md`, seção "Fase 6+".
 
-- **Foco**: eliminar os gaps estruturais do laboratório Node — *expression statements* e atribuição (`self.name = v;` e `u2.rename(...);` hoje nem parseiam); closures capturando o ambiente de **definição** (hoje o escopo é dinâmico); precedência/associatividade completas e operadores faltantes (`-`, `*`, `/`, `!=`, `<=`, `>=`, `&&`, `||`); spans (linha/coluna) em tokens, AST e diagnósticos; suíte **golden-file** (`.flex` → stdout/erro esperado).
-- **Entregável**: os exemplos da Seção 1 executam no interpretador; diagnósticos apontam linha/coluna; toda feature nova nasce com teste-espec. É a fundação exigida pelo checker da Fase 1.
+### Fase 0: Consolidação do Interpretador — ✅ Concluída
 
-### Fase 1: Núcleo do Sistema de Tipos (Curto Prazo)
+- **Entregue**: expression statements e atribuição; closures léxicas corretas (`FlexFunction`); precedência completa e operadores (`- * / % ! != <= >= && ||`); spans de linha/coluna em todo token; suíte golden-file (`tests/`, 11 casos).
 
-- **Foco**: type checker estático; `enum` com payload; generics (representação uniforme); inferência local; enforcement de `mut` — incluindo propagação por caminho de acesso (`a.b.rename()` exige `a` mutável); `match` com exhaustiveness; `Result`/`Option` na stdlib; açúcar `?`.
-- **Entregável**: erros de tipo, mutabilidade e exaustividade em tempo de compilação; tratamento de erros obrigatório sem exceções cegas. (O que a antiga Fase 1 prometia, agora com a fundação explícita — sem enums + generics + checker não existe `Result` de verdade.)
+### Fase 1: Núcleo do Sistema de Tipos — ✅ Concluída
 
-### Fase 2: O Motor Concorrente (Médio Prazo)
+- **Entregue**: type checker estático de dois passes; `enum` com payload; `match` com exhaustiveness real; enforcement de `mut` em variáveis/parâmetros/alvos de atribuição; operador `?`.
+- **Pendente, movido para backlog de correção** (Lacuna 2): `Result<T, E>`/`Option<T>` como stdlib genérica de verdade, substituindo a convenção de nome de variante (`Ok`/`Some`/`Sucesso`) hoje hardcoded no checker e no interpretador.
 
-- **Foco**: `spawn` + channels bounded; **concorrência estruturada** (`scope` com espera, cancelamento e deadline); regra de **isolamento por mutabilidade** (move no send; use-after-send é erro de compilação); **traits**; início do transpiler Go (ADR-001).
-- **Entregável**: modelo concorrente completo no laboratório Node (single-core) e primeiro binário via Go com M:N real usando todos os cores da CPU.
+### Fase 2: O Motor Concorrente — ✅ Concluída
 
-### Fase 3: Prontidão para Backend (Longo Prazo)
+- **Entregue**: `scope`/`spawn` com espera estrutural (`Promise.all`) e deadline real (`Promise.race` viabilizando timeout); `Channel` com rendezvous síncrono; `trait`/`impl Trait for Struct` com validação de conformidade; fundação do transpiler Go (`sync.WaitGroup` + `go func()` para concorrência, canais viram `<-`).
+- **Pendente, priorizado abaixo** (Lacuna 3): o isolamento por mutabilidade só cobre `channel.send`; captura direta de `mut` por uma closure `spawn` sem canal não é analisada.
 
-- **Foco**: biblioteca padrão de rede (`net/http`, `net/tcp`) sobre o netpoller do runtime Go, com deadlines propagando por todas as APIs de I/O; drivers de banco via interop Go (`database/sql`, começando por PostgreSQL); CLI `flex` completa.
-- **Entregável**: FlexLang torna-se viável para construção de APIs REST, WebSockets e microsserviços em produção.
+### Fase 3: Prontidão para Backend — 🔶 Em andamento
+
+- **Entregue**: `net/http` funcional em modo interpretado (`FlexServer` sobre o `http` do Node); CLI `flex run`/`flex build`; `flex build` já invoca `go build` de ponta a ponta.
+- **Pendente — prioridade imediata** (bloqueia tudo o que depende de `flex build` funcionar de verdade): fechar a **Lacuna 1** — paridade Node↔Go para `enum`, `match`, `?`, arrays, booleanos, lógicos e unários no transpiler. Sem isso, qualquer programa idiomático (que use `Result`/`match`) passa no checker mas quebra em `flex build`.
+- **Pendente — segunda prioridade**: `flex test` e `flex fmt` como subcomandos reais da CLI (hoje `flex test` não existe; `npm test` chama `tests/runner.ts` direto); drivers de banco (PostgreSQL via `database/sql`, conforme ADR-001) ficam para depois da modularização (Fase 4), já que um driver de banco é o primeiro candidato natural a "módulo nativo de terceiros".
+
+### Fase 4 (Nova): Modularização da Stdlib
+
+- **Foco**: interface `NativeModule` + `ModuleRegistry` (Seção 7); migrar `net/http` como implementação de referência; adicionar `fs` como segundo módulo, para provar que a costura desacopla checker/interpretador/transpiler do core.
+- **Pré-requisito**: Fase 3 completa (Lacuna 1) — não vale a pena desacoplar codegen de módulo enquanto o codegen da linguagem básica ainda tem buracos.
+- **Entregável**: um colaborador consegue adicionar uma lib nativa nova (ex: `encoding/json` isolado, ou um driver) implementando a interface `NativeModule`, sem editar `checker.ts`/`interpreter.ts`/`transpiler.ts`.
+
+### Fase 5 (Nova): Módulos Locais e Gerenciador de Pacotes
+
+- **Foco**: Estágio A — resolução de `import` entre arquivos `.flex` locais (pré-requisito real, hoje inexistente); Estágio B — `flex mod` com manifesto (`flex.toml`), lockfile (`flex.lock`) e dependências via Git, sem registro central nem solver de SemVer (Seção 8).
+- **Entregável**: um projeto FlexLang pode ser dividido em múltiplos arquivos locais (Estágio A) e, depois, a comunidade consegue publicar e consumir pacotes de terceiros via `flex mod install` (Estágio B).
+
+### Fase 6+: Visão de Longo Prazo
+
+Decorators, Reflection/IoC em tempo de compilação, ORM/Query Builder, RLS/multi-tenancy e o framework web oficial continuam como visão pós-Fase 5 — ver `README.md` para o resumo; o detalhamento técnico entra neste documento quando a Fase 5 estiver concluída, para não antecipar decisões que dependem do sistema de módulos já estar pronto.
