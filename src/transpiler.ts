@@ -436,6 +436,10 @@ export class GoTranspiler {
         break;
 
       case "SpawnStmt":
+        this.goImports.add("sync");
+        this.goImports.add("fmt");
+        this.goImports.add("time");
+        this.goImports.add("encoding/json");
         this.emitLine(`wg.Add(1)`);
         this.emitLine(`go func() {`);
         this.indent();

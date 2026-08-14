@@ -1,3 +1,4 @@
+// parity: nondeterministic timestamps dinamicos nos logs
 import { log } from "core/log";
 
 log.info("App started", { version: "1.0", env: "test" });

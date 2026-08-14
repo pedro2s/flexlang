@@ -115,6 +115,20 @@ async function runScenarios(base: string): Promise<void> {
   }
 
   {
+    const res = await fetch(`${base}/healthz`);
+    const body = await res.json();
+    check("GET /healthz padrão -> 200", res.status === 200, String(res.status));
+    check("GET /healthz padrão -> corpo {status: ok}", body.status === "ok", JSON.stringify(body));
+  }
+
+  {
+    const res = await fetch(`${base}/panic`);
+    const body = await res.json();
+    check("GET /panic -> 500 (RFC-008/009 panic recovery)", res.status === 500, String(res.status));
+    check("GET /panic -> erro genérico sem leak de stack trace", body.error === "internal server error", JSON.stringify(body));
+  }
+
+  {
     const res = await fetch(`${base}/nope`);
     check("GET rota inexistente -> 404", res.status === 404, String(res.status));
   }

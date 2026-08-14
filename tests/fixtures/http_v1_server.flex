@@ -47,10 +47,16 @@ func create_user(req: Request, mut res: Response) {
     }
 }
 
+func trigger_panic(req: Request, mut res: Response) {
+    let arr = [1];
+    print(arr[100]);
+}
+
 let mut server = Server.new(":__PORT__", ServerConfig {
     read_timeout: 5000,
     max_body_size: 64,
 });
 server.route("/users/:id", get_user);
 server.route("/users", create_user);
+server.route("/panic", trigger_panic);
 server.start();

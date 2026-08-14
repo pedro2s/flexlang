@@ -326,6 +326,9 @@ export class Interpreter {
             throw new Error("TypeError: Cannot index into a non-array.");
           }
           const indexValue = await this.evaluateExpr(expr.assignee.index, env);
+          if (indexValue < 0 || indexValue >= arrayInstance.length) {
+            throw new Error(`RuntimeError: index out of range [${indexValue}] with length ${arrayInstance.length}`);
+          }
           arrayInstance[indexValue] = assignValue;
           return assignValue;
         } else {
@@ -552,6 +555,9 @@ export class Interpreter {
         const obj = await this.evaluateExpr(expr.object, env);
         const idx = await this.evaluateExpr(expr.index, env);
         if (Array.isArray(obj)) {
+          if (idx < 0 || idx >= obj.length) {
+            throw new Error(`RuntimeError: index out of range [${idx}] with length ${obj.length}`);
+          }
           return obj[idx];
         } else {
           throw new Error("TypeError: Indexing is only supported on arrays.");

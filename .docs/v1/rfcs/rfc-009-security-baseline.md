@@ -1,6 +1,6 @@
 # RFC-009: Baseline de Segurança para v1.0
 
-> **Status:** Draft · **Prioridade:** P0 — bloqueante · **Depende de:** RFC-004, RFC-005 (define requisitos sobre as superfícies que elas expõem)
+> **Status:** IMPLEMENTADO · **Prioridade:** P0 — bloqueante · **Depende de:** RFC-004, RFC-005 (define requisitos sobre as superfícies que elas expõem)
 
 ## Resumo
 

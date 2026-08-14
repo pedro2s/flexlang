@@ -192,7 +192,13 @@ class FlexServer {
         const request = new FlexRequest(params, url.searchParams, body);
         const response = new FlexResponse(res);
         void this.interpreter.callFunction(route.handler, [request, response]).catch((e) => {
-          console.error("Error in handler:", e);
+          const entry = {
+            level: "error",
+            msg: "panic recovered",
+            panic: e.message || String(e),
+            ts: new Date().toISOString(),
+          };
+          console.log(JSON.stringify(entry));
           response.errorIfUnwritten(500, "internal server error");
         });
       });
