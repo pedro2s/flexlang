@@ -12,4 +12,5 @@ let mut server = Server.new(":8080");
 server.route("/", handle_request);
 
 print("🚀 Servidor online! Acesse: http://localhost:8080/");
-server.start();
+// server.start(); // Descomente para manter o servidor escutando em background
+

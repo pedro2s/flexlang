@@ -11,8 +11,7 @@ struct ConsoleLogger {
 
 impl Logger for ConsoleLogger {
     func log(self, msg: String) {
-        print(self.prefix);
-        print(msg);
+        print("${self.prefix}${msg}");
     }
 }
 

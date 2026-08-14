@@ -2,7 +2,13 @@
   <h1>🚀 FlexLang</h1>
   <p><strong>A linguagem definitiva para Backends Escaláveis, Seguros e Altamente Performáticos.</strong></p>
   <p>
-    Sintaxe limpa. Semântica rigorosa. Zero <i>Data Races</i>.
+    <i>Sintaxe limpa. Semântica rigorosa. Zero Data Races. Compilação nativa Go.</i>
+  </p>
+  <p>
+    <img src="https://img.shields.io/badge/status-v1.0--preview-blue?style=flat-square" alt="Status" />
+    <img src="https://img.shields.io/badge/tests-27%2F27%20passing-brightgreen?style=flat-square" alt="Tests" />
+    <img src="https://img.shields.io/badge/target-Go%20%7C%20Node.js-informational?style=flat-square" alt="Targets" />
+    <img src="https://img.shields.io/badge/license-ISC-green?style=flat-square" alt="License" />
   </p>
 </div>
 
@@ -10,69 +16,234 @@
 
 A **FlexLang** nasceu da necessidade de unir a simplicidade no aprendizado e produtividade (com sintaxe clara e familiar) à segurança extrema de acesso à memória e alto desempenho para sistemas paralelos que processam pesadas cargas de I/O em Backend.
 
-Esqueça o _Callback Hell_ ou funções "coloridas" (`async/await`). Na FlexLang a concorrência flui nativamente inspirada no ecossistema Go, sendo suportada por transpiladores modernos que vertem seu código seguro diretamente para binários Go de alta disponibilidade.
+Esqueça o *Callback Hell* ou funções "coloridas" (`async/await`). Na FlexLang, a concorrência estruturada flui nativamente inspirada no ecossistema Go, sendo suportada por transpiladores modernos que vertem seu código seguro diretamente para binários Go nativos de alta disponibilidade.
+
+---
 
 ## ✨ Destaques & Filosofia
 
-- **🔒 Imutabilidade por Padrão:** Variáveis na FlexLang são cravadas em pedra (`let`). A Mutabilidade (`let mut`) é explícita e mapeável pelo compilador.
-- **⚡ Concorrência Estruturada Nativa:** Crie rotinas secundárias usando o modelo semântico `scope` / `spawn`. O motor fará as Fibras trabalharem sem bloquear o Event Loop principal.
-- **🛡️ Erradicação de Data Races:** Canais (`Channel.new()`) são os únicos meios de comunicação de estado em concorrência. Quando uma variável mutável é repassada via canal (`send`), nosso compilador ativa as regras de _Move Semantics_: você perde a posse da variável na origem, impedindo corrupção paralela ("Use-after-send" será barrado estaticamente!).
-- **🌐 Stdlib Direto ao Ponto:** A linguagem possui importação direta de módulos robustos para web, como `net/http`.
-- **⚙️ CLI Unificada (`flex`):** Um binário, todos os comandos. De `flex run` (desenvolvimento Node.js) a `flex build` (transpilação Go / binário de máquina).
+- **🔒 Imutabilidade por Padrão:** Variáveis na FlexLang são imutáveis por padrão (`let`). A mutabilidade (`let mut`) é explícita e rastreada pelo compilador.
+- **⚡ Concorrência Estruturada Nativa:** Crie rotinas secundárias usando o bloco `scope` / `spawn`. O compilador gerencia o ciclo de vida das tarefas e sincroniza execuções concorrentes de forma limpa.
+- **🛡️ Erradicação de Data Races:** Canais (`Channel.new()`) são o meio primordial de comunicação de estado em concorrência. Quando uma variável mutável é repassada via canal (`send`), nosso compilador ativa as regras de *Move Semantics*: a posse da variável na origem é revogada estaticamente (*Use-after-send* é barrado em tempo de compilação).
+- **🎯 Tratamento Funcional de Erros:** Nada de `null`, `nil` ou exceções descontroladas. Tipos `Result<T, E>` e `Option<T>` embutidos como cidadãos de primeira classe, com propagação elegante via operador `?` e desestruturação exaustiva via `match`.
+- **🌐 Stdlib Produtiva para Backend:** Módulos nativos de alto desempenho integrados, incluindo `net/http` (com path params, parsing de JSON e timeout) e `db/postgres` (com pool de conexões gerenciado, queries parametrizadas obrigatórias `$1` e transações atômicas ACID com rollback automático).
+- **📦 Sistema de Módulos Locais:** Importações limpas entre múltiplos arquivos (`import { X } from "./models/user"`), resolução automática de dependências, detecção de ciclos de import e compilação Go unificada em arquivo único.
+- **⚙️ CLI Unificada (`flex`):** Um comando para todas as etapas. De `flex run` (desenvolvimento ágil interpretado) a `flex build` (transpilação Go e compilação para binário nativo).
 
 ---
 
-## ⚡ Hello World: Criando um Servidor Web
+## 🚀 Guia de Início Rápido
 
-Com a FlexLang, subir uma API robusta não requer instalação de bibliotecas de terceiros ou frameworks. O próprio compilador absorve e transpila sua lógica para o poller nativo:
+### Instalação & Dependências
+
+Clone o repositório e instale as dependências de desenvolvimento:
+
+```bash
+git clone https://github.com/pedro2s/flexlang.git
+cd flexlang
+npm install
+```
+
+### Comandos da CLI (`flex`)
+
+A FlexLang inclui uma interface de linha de comando completa:
+
+```bash
+# 1. Executar no modo interpretado (desenvolvimento / REPL ágil)
+./src/cli.ts run caminho/para/arquivo.flex
+
+# 2. Compilar para binário nativo executável (produção via Go)
+./src/cli.ts build caminho/para/arquivo.flex
+
+# 3. Executar o binário gerado
+./arquivo
+```
+
+---
+
+## 💻 Tour pela Linguagem & Exemplos
+
+### 1. Servidor Web Moderno (`net/http`)
+
+Suba uma API REST robusta com suporte nativo a rotas dinâmicas, parsing tipado de JSON e códigos de status HTTP:
 
 ```flexlang
-// arquivo: api.flex
-
 import { Server, Request, Response } from "net/http";
 
-func handle_users(req: Request, mut res: Response) {
-    let payload = "Bem-vindo a FlexLang! A linguagem do futuro.";
-    res.json(payload);
+struct CreateUserDTO {
+    name: String,
+    role: String
 }
 
-// Inicia um servidor escutando na porta 8080
+func handle_create_user(req: Request, mut res: Response) {
+    match req.json() {
+        Result.Ok(dto) => {
+            res.status(201).json(dto);
+        },
+        Result.Err(msg) => {
+            res.error(400, "Corpo JSON invalido");
+        }
+    }
+}
+
 let mut server = Server.new(":8080");
-server.route("/users", handle_users);
+server.route("/users", handle_create_user);
 
-print("Servidor subiu perfeitamente! Escutando localhost:8080");
-server.start(); // Bloqueia a Fiber atual e passa a escutar chamadas assíncronas
-```
-
-**Execute no terminal instantaneamente:**
-```bash
-# Rodar via Interpretador Integrado (Dev)
-npx flex run api.flex
-
-# OU Compilar para um Binário Nativo (Prod)
-npx flex build api.flex
-./api
+print("🚀 Servidor online em http://localhost:8080");
+server.start();
 ```
 
 ---
 
-## 📚 Documentação e Exemplos Públicos
+### 2. Persistência Nativa com PostgreSQL (`db/postgres`)
 
-Preparamos uma documentação interativa baseada em códigos reais. Acesse o diretório **`examples/`** na raiz deste repositório para estudar exemplos executáveis que ilustram as peças-chave da linguagem:
+Conexões gerenciadas por pool, proteção contra SQL Injection com parâmetros posicionais `$1` e transações ACID via lambdas com rollback automático:
 
-- [**`01_hello_http.flex`**](./examples/01_hello_http.flex): O "Hello World" ilustrando a inicialização e tratamento de HTTP.
-- [**`02_concurrency.flex`**](./examples/02_concurrency.flex): Estudo avançado do bloco de Concorrência, abordando `scope`, `spawn` e o compilador vetando acessos via *Move Semantics*.
-- [**`03_traits.flex`**](./examples/03_traits.flex): Demonstração de Polimorfismo e interfaces restritas via *Traits*.
+```flexlang
+import { Pool, Tx } from "db/postgres";
+
+match Pool.connect("postgres://postgres:postgres@localhost:5432/postgres") {
+    Result.Ok(pool) => {
+        // Query com parâmetro obrigatório $1
+        let rows = pool.query("SELECT id, name, balance FROM accounts WHERE balance >= $1", [500])?;
+        
+        // Transação atômica ACID
+        pool.transaction(|tx: Tx| {
+            tx.execute("UPDATE accounts SET balance = balance - $1 WHERE id = $2", [100, 1]);
+            tx.execute("UPDATE accounts SET balance = balance + $1 WHERE id = $2", [100, 2]);
+        })?;
+
+        pool.close();
+    },
+    Result.Err(err) => {
+        print("Falha ao conectar no banco: ${err}");
+    }
+}
+```
+
+---
+
+### 3. Concorrência Estruturada, Canais & *Move Semantics*
+
+O compilador garante a ausência de *Data Races* bloqueando o acesso a dados mutáveis após o envio por canal:
+
+```flexlang
+struct TaskPayload {
+    id: Int,
+    content: String
+}
+
+func main() {
+    let mut c = Channel.new();
+    
+    scope {
+        spawn {
+            let mut payload = TaskPayload { id: 1, content: "Processamento seguro" };
+            c.send(payload); // 'payload' é MOVIDO. Tentar acessá-lo aqui dispararia Use-after-send no compilador!
+        }
+        
+        let received = c.recv();
+        print("Recebido da Green Thread: ${received.content}");
+    }
+}
+
+main();
+```
+
+---
+
+### 4. Tratamento Funcional de Erros (`Result` e `Option`)
+
+Erros e ausência de dados são modelados explicitamente através de tipos genéricos e propagação com `?`:
+
+```flexlang
+struct User {
+    id: Int,
+    name: String
+}
+
+func find_user(id: Int) -> Option<User> {
+    if id == 1 {
+        return Option.Some(User { id: 1, name: "Alice" });
+    }
+    return Option.None;
+}
+
+func get_user_name(id: Int) -> Result<String, String> {
+    match find_user(id) {
+        Option.Some(u) => Result.Ok(u.name),
+        Option.None => Result.Err("Usuario nao encontrado")
+    }
+}
+```
+
+---
+
+### 5. Arquitetura Modular Multi-arquivo
+
+Organize projetos reais em múltiplas camadas limpas:
+
+```flexlang
+// arquivo: services/order_service.flex
+import { Order } from "../models/order";
+import { find_order_by_id } from "../repository/order_repository";
+
+func process_order(id: Int) -> Result<String, String> {
+    let order = find_order_by_id(id)?;
+    return Result.Ok("Pedido #${order.id} processado com sucesso!");
+}
+```
+
+---
+
+## 📚 Catálogo de Exemplos Executáveis
+
+O diretório [**`examples/`**](./examples/) contém exemplos práticos prontos para execução e compilação:
+
+| Exemplo | Descrição | Destaques |
+| :--- | :--- | :--- |
+| [**`01_hello_http.flex`**](./examples/01_hello_http.flex) | Hello World de Servidor Web | Inicialização do `net/http` e resposta JSON básica |
+| [**`02_concurrency.flex`**](./examples/02_concurrency.flex) | Concorrência Estruturada | `scope`, `spawn`, `Channel` e *Move Semantics* |
+| [**`03_traits.flex`**](./examples/03_traits.flex) | Polimorfismo e Traits | Interfaces estritas e validação estática de implementação |
+| [**`04_result_and_option.flex`**](./examples/04_result_and_option.flex) | Tratamento Funcional de Erros | `Result<T, E>`, `Option<T>`, operador `?` e pattern matching |
+| [**`05_rest_api_http.flex`**](./examples/05_rest_api_http.flex) | API REST Completa | Path params (`:id`), query params, status codes e JSON DTOs |
+| [**`06_database_postgres.flex`**](./examples/06_database_postgres.flex) | Banco de Dados PostgreSQL | Pool de conexões, queries `$1, $2` e transações atômicas ACID |
+| [**`07_multi_file_architecture/`**](./examples/07_multi_file_architecture/) | Arquitetura Multi-arquivo | Camadas `models/`, `repository/`, `services/` e ponto de entrada `main.flex` |
+
+---
+
+## 🧪 Suíte de Testes & Paridade
+
+O ecossistema FlexLang conta com uma suíte de testes de validação contínua e garantia de paridade entre os runtimes interpretado (Node.js) e compilado (Go):
+
+```bash
+# Executar suíte de testes golden
+npm test
+
+# Executar suíte de testes de paridade (Node.js vs Go compilado)
+npm run test:parity
+
+# Executar testes de integração HTTP real
+npm run test:http
+
+# Executar testes de integração PostgreSQL real
+npm run test:db
+```
 
 ---
 
 ## 🏛️ Arquitetura e Engenharia Interna
 
-Você é um entusiasta de Compiladores ou apenas quer entender o motor V8 / LLVM / Go sob o capô da linguagem? Nossas decisões de engenharia são totalmente abertas e explicadas:
-
-📖 **Leia o [Roadmap Arquitetural (ADR-001)](./.docs/flexlang_architecture_roadmap.md)** para visualizar o escopo completo.
-📖 **Acompanhe o [Registro Histórico da Fase 2](./.docs/phase2_walkthrough.md)** detalhando o nascimento do TypeChecker e Semântica Move.
+- 📖 **[Roadmap Arquitetural (ADR-001)](./.docs/flexlang_architecture_roadmap.md)** — Visão holística da evolução do compilador e especificação técnica.
+- 📖 **[RFC-001: Go Transpiler Parity](./.docs/v1/rfcs/rfc-001-go-transpiler-parity.md)** — Paridade total entre runtime interpretado e binário compilado.
+- 📖 **[RFC-002: Result e Option Stdlib](./.docs/v1/rfcs/rfc-002-result-option-stdlib.md)** — Tipos fundamentais e expansão do operador `?`.
+- 📖 **[RFC-003: Arquitetura de Módulos Nativos](./.docs/v1/rfcs/rfc-003-native-module-architecture.md)** — Infraestrutura desacoplada para módulos stdlib.
+- 📖 **[RFC-004: net/http v1](./.docs/v1/rfcs/rfc-004-http-stdlib-v1.md)** — Superfície de produção para servidores web.
+- 📖 **[RFC-005: db/postgres](./.docs/v1/rfcs/rfc-005-postgres-native-module.md)** — Driver de banco de dados nativo com pool e transações.
+- 📖 **[RFC-006: Local Module System](./.docs/v1/rfcs/rfc-006-local-module-system.md)** — Resolução e compilação de módulos locais multi-arquivo.
 
 ---
 
-> _"Faça simples, faça robusto. Construa com FlexLang."_
+<div align="center">
+  <p><i>"Faça simples, faça robusto. Construa com FlexLang."</i></p>
+</div>

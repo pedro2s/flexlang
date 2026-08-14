@@ -372,6 +372,7 @@ export const postgresModule: NativeModule = {
     },
     {
       name: "Tx",
+      goPointer: true,
       methods: [
         {
           name: "query",

@@ -287,7 +287,9 @@ export class GoTranspiler {
 
       case "ExpressionStatement": {
         const code = this.transpileExpr(stmt.expression);
-        if (code.trim() !== "") this.emitLine(code);
+        if (code.trim() !== "" && stmt.expression.kind !== "TryExpr") {
+          this.emitLine(code);
+        }
         break;
       }
 
@@ -530,9 +532,10 @@ export class GoTranspiler {
     }
 
     const resolved = genericArgs[position];
-    if (!resolved || resolved.kind === "Any") return { goType: "any", cast: "" };
+    if (!resolved || resolved.kind === "Any" || resolved.kind === "Void") return { goType: "any", cast: "" };
 
     const goType = this.goType(resolved);
+    if (!goType) return { goType: "any", cast: "" };
     return { goType, cast: `.(${goType})` };
   }
 
@@ -704,6 +707,24 @@ export class GoTranspiler {
         return `${this.transpileExpr(member.object)} <- ${this.transpileExpr(expr.args[0]!)}`;
       } else if (member.property === "recv") {
         return `<-${this.transpileExpr(member.object)}`;
+      }
+
+      // Método de instância de módulo nativo: `pool.query(sql, params)`
+      const objType = this.types.get(member.object);
+      if (objType && objType.kind === "Struct") {
+        const nativeType = this.nativeTypes.get(objType.name);
+        const methodSig = nativeType?.methods?.find((m) => m.name === member.property);
+        if (methodSig) {
+          const args = expr.args
+            .map((a) => {
+              if (a.kind === "ArrayLiteral") {
+                return `[]any{${a.elements.map((e) => this.transpileExpr(e)).join(", ")}}`;
+              }
+              return this.transpileExpr(a);
+            })
+            .join(", ");
+          return `${this.transpileExpr(member.object)}.${member.property}(${args})`;
+        }
       }
     }
 

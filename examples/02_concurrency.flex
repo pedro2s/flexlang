@@ -13,7 +13,7 @@ impl Worker {
 }
 
 func main() {
-    let mut c = Channel.new();
+    let mut c: Channel<String> = Channel.new();
     let w1 = Worker { id: 1 };
     
     scope {

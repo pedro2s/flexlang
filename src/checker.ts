@@ -423,7 +423,9 @@ export class TypeChecker {
              const mEnv = new TypeEnvironment(env);
              mEnv.define("self", { kind: "Struct", name: stmt.structName, genericArgs: [] }, true);
              for (const param of m.parameters) {
-                 mEnv.define(param.name, this.resolveTypeNode(param.typeAnnotation), !!param.isMut);
+                 if (param.name !== "self") {
+                     mEnv.define(param.name, this.resolveTypeNode(param.typeAnnotation), !!param.isMut);
+                 }
              }
              this.checkStmt(m.body, mEnv);
         }
@@ -577,7 +579,9 @@ export class TypeChecker {
         return arrType.kind === "Array" ? arrType.elementType : { kind: "Any" };
 
       case "StructExpr":
-        // Checagem básica
+        for (const prop of expr.properties) {
+          this.checkExpr(prop.value, env);
+        }
         return { kind: "Struct", name: expr.structName, genericArgs: [] };
 
       case "MemberExpr":
@@ -673,7 +677,8 @@ export class TypeChecker {
             // valor, e `recv` devolve o tipo do canal — semânticas que uma
             // assinatura de módulo nativo não expressa.
             if (expr.caller.object.kind === "Identifier" && expr.caller.object.symbol === "Channel" && expr.caller.property === "new") {
-                return { kind: "Struct", name: "Channel", genericArgs: [{ kind: "Any" }] };
+                const genericArgs = expected && expected.kind === "Struct" && expected.name === "Channel" ? expected.genericArgs : [{ kind: "Any" } as FlexType];
+                return { kind: "Struct", name: "Channel", genericArgs };
             }
 
             // `req.json()` (RFC-004): o `T` de `Result<T, String>` não vem de
