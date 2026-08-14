@@ -1,7 +1,7 @@
 {
   "name": "flexlang",
   "version": "1.0.0",
-  "description": "",
+  "description": "A linguagem definitiva para Backends Escaláveis, Seguros e Altamente Performáticos.",
   "main": "index.js",
   "bin": {
     "flex": "./src/cli.ts"
@@ -12,8 +12,14 @@
     "test:http": "npx tsx tests/http_integration.ts",
     "test:db": "npx tsx tests/postgres_integration.ts"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "compiler",
+    "programming-language",
+    "golang",
+    "concurrency",
+    "backend"
+  ],
+  "author": "Pedro Santana <pedromanu27@gmail.com>",
   "license": "ISC",
   "type": "module",
   "devDependencies": {
