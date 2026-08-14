@@ -1,6 +1,6 @@
 # RFC-006: Sistema de Módulos Locais (Multi-arquivo)
 
-> **Status:** Draft · **Prioridade:** P0 — bloqueante · **Depende de:** nada (pode andar em paralelo às RFC-001/002)
+> **Status:** Implementado · **Prioridade:** P0 — bloqueante · **Depende de:** nada (pode andar em paralelo às RFC-001/002)
 > **Relacionado:** Seção 8, Estágio A do [roadmap arquitetural](../../flexlang_architecture_roadmap.md) (esta RFC é a implementação desse estágio)
 
 ## Resumo

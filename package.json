@@ -7,7 +7,6 @@
     "flex": "./src/cli.ts"
   },
   "scripts": {
-    "start": "tsx src/index.ts",
     "test": "npx tsx tests/runner.ts",
     "test:parity": "npx tsx tests/parity_runner.ts",
     "test:http": "npx tsx tests/http_integration.ts",

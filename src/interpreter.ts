@@ -2,6 +2,7 @@ import type { Stmt, Expr, FunctionDeclaration } from "./ast";
 import { builtinEnums, isBuiltinType, isSuccessVariant } from "./stdlib";
 import { registry } from "./modules/registry";
 import { NATIVE_TAG, isNativeObject, modulePath, nativeMethod } from "./modules/types";
+import { type ModuleGraph, isLocalModule } from "./loader";
 
 class Environment {
   private variables: Map<string, any> = new Map();
@@ -93,9 +94,18 @@ export class Interpreter {
     }
   }
 
-  public async run(program: Stmt[]) {
-    for (const stmt of program) {
-      await this.evaluateStmt(stmt, this.globalEnv);
+  public async run(program: Stmt[] | ModuleGraph) {
+    if (Array.isArray(program)) {
+      for (const stmt of program) {
+        await this.evaluateStmt(stmt, this.globalEnv);
+      }
+    } else {
+      for (const filePath of program.order) {
+        const sourceFile = program.files.get(filePath)!;
+        for (const stmt of sourceFile.ast) {
+          await this.evaluateStmt(stmt, this.globalEnv);
+        }
+      }
     }
   }
 
@@ -215,6 +225,10 @@ export class Interpreter {
         break;
 
       case "ImportDeclaration": {
+        if (isLocalModule(stmt.moduleName)) {
+          // Módulos locais têm suas declarações avaliadas na ordem topológica
+          break;
+        }
         // O módulo nativo injeta seus valores no ambiente (RFC-003)
         const path = modulePath(stmt.moduleName);
         const mod = registry.get(path);

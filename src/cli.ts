@@ -3,8 +3,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { execSync } from "child_process";
-import { Lexer } from "./lexer";
-import { Parser } from "./parser";
+import { loadModuleGraph } from "./loader";
 import { TypeChecker } from "./checker";
 import { Interpreter } from "./interpreter";
 import { GoTranspiler } from "./transpiler";
@@ -33,23 +32,19 @@ async function main() {
         process.exit(1);
     }
     
-    const code = fs.readFileSync(filePath, "utf-8");
-    const lexer = new Lexer(code);
-    const tokens = lexer.tokenize();
-    const parser = new Parser(tokens);
-    const ast = parser.parse();
+    const graph = loadModuleGraph(filePath);
     
     const checker = new TypeChecker();
-    const types = checker.check(ast);
+    const types = checker.check(graph);
 
     if (command === "run") {
         console.log(`[flex] Running ${filePath} in interpreted mode...\n`);
         const interpreter = new Interpreter();
-        await interpreter.run(ast);
+        await interpreter.run(graph);
     } else if (command === "build") {
         console.log(`[flex] Transpiling ${filePath} to Go...`);
         const transpiler = new GoTranspiler();
-        const goCode = transpiler.transpile(ast, types);
+        const goCode = transpiler.transpile(graph, types);
         
         const baseName = path.basename(filePath, ".flex");
         const outGo = `${baseName}.go`;

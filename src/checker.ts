@@ -17,6 +17,11 @@ import {
   type NativeSignature,
   type NativeType,
 } from "./modules/types";
+import {
+  type ModuleGraph,
+  isLocalModule,
+  resolveModuleFilePath,
+} from "./loader";
 
 // --- Representação Interna de Tipos do TypeChecker ---
 export type FlexType =
@@ -78,51 +83,189 @@ export class TypeChecker {
 
   /**
    * Checa o programa e devolve a anotação de tipos de cada expressão.
+   * Aceita tanto uma lista de statements (arquivo único) quanto um ModuleGraph (multi-arquivo).
    * O retorno é aditivo: quem só quer validar pode continuar ignorando-o.
    */
-  public check(stmts: Stmt[]): TypeMap {
+  public check(program: Stmt[] | ModuleGraph): TypeMap {
     // Result<T, E> e Option<T> existem em todo programa, sem import e sem declaração.
     for (const builtin of builtinEnums()) {
       this.enums.set(builtin.name, builtin);
     }
 
-    // Primeira Passagem (Pass 1): Registrar declarações (Hoisting de Structs e Funcs)
-    for (const stmt of stmts) {
-      if (
-        (stmt.kind === "StructDeclaration" ||
-          stmt.kind === "EnumDeclaration" ||
-          stmt.kind === "TraitDeclaration") &&
-        isBuiltinType(stmt.name)
-      ) {
-        throw new Error(
-          `TypeError: '${stmt.name}' is a built-in type and cannot be redeclared`,
-        );
+    const graph: ModuleGraph = Array.isArray(program)
+      ? {
+          entryPath: "main.flex",
+          files: new Map([
+            [
+              "main.flex",
+              {
+                filePath: "main.flex",
+                ast: program,
+                imports: program.filter((s): s is ImportDeclaration => s.kind === "ImportDeclaration"),
+                declarations: program.filter(
+                  (s) =>
+                    s.kind === "StructDeclaration" ||
+                    s.kind === "FunctionDeclaration" ||
+                    s.kind === "EnumDeclaration" ||
+                    s.kind === "TraitDeclaration" ||
+                    s.kind === "ImplDeclaration",
+                ),
+                localDependencies: [],
+              },
+            ],
+          ]),
+          order: ["main.flex"],
+        }
+      : program;
+
+    // Tabelas de declarações próprias de cada arquivo no grafo
+    const fileOwnSymbols = new Map<
+      string,
+      {
+        structs: Map<string, StructDeclaration>;
+        functions: Map<string, FunctionDeclaration>;
+        enums: Map<string, EnumDeclaration>;
+        traits: Map<string, TraitDeclaration>;
+        nativeTypes: Map<string, NativeType>;
+      }
+    >();
+
+    // Primeira Passagem (Pass 1 - Parte A): Registrar declarações top-level de cada arquivo
+    for (const [filePath, sourceFile] of graph.files.entries()) {
+      const fileStructs = new Map<string, StructDeclaration>();
+      const fileFunctions = new Map<string, FunctionDeclaration>();
+      const fileEnums = new Map<string, EnumDeclaration>();
+      const fileTraits = new Map<string, TraitDeclaration>();
+      const fileNativeTypes = new Map<string, NativeType>();
+
+      for (const stmt of sourceFile.ast) {
+        if (
+          (stmt.kind === "StructDeclaration" ||
+            stmt.kind === "EnumDeclaration" ||
+            stmt.kind === "TraitDeclaration") &&
+          isBuiltinType(stmt.name)
+        ) {
+          throw new Error(
+            `TypeError: '${stmt.name}' is a built-in type and cannot be redeclared`,
+          );
+        }
+
+        if (stmt.kind === "StructDeclaration") {
+          fileStructs.set(stmt.name, stmt);
+        } else if (stmt.kind === "FunctionDeclaration") {
+          fileFunctions.set(stmt.name, stmt);
+        } else if (stmt.kind === "EnumDeclaration") {
+          fileEnums.set(stmt.name, stmt);
+        } else if (stmt.kind === "TraitDeclaration") {
+          fileTraits.set(stmt.name, stmt);
+        } else if (stmt.kind === "ImportDeclaration") {
+          if (!isLocalModule(stmt.moduleName)) {
+            const path = modulePath(stmt.moduleName);
+            const mod = registry.get(path);
+            if (!mod) {
+              throw new Error(`ImportError: Module '${path}' not found`);
+            }
+            for (const nativeType of mod.types) {
+              fileStructs.set(nativeType.name, nativeStructDeclaration(nativeType));
+              fileNativeTypes.set(nativeType.name, nativeType);
+            }
+          }
+        }
       }
 
-      if (stmt.kind === "StructDeclaration") {
-        this.structs.set(stmt.name, stmt);
-      } else if (stmt.kind === "FunctionDeclaration") {
-        this.functions.set(stmt.name, stmt);
-      } else if (stmt.kind === "EnumDeclaration") {
-        this.enums.set(stmt.name, stmt);
-      } else if (stmt.kind === "TraitDeclaration") {
-        this.traits.set(stmt.name, stmt);
-      } else if (stmt.kind === "ImportDeclaration") {
-        const path = modulePath(stmt.moduleName);
-        const mod = registry.get(path);
-        if (!mod) {
-             throw new Error(`ImportError: Module '${path}' not found`);
-        }
-        for (const nativeType of mod.types) {
-             this.structs.set(nativeType.name, nativeStructDeclaration(nativeType));
-             this.nativeTypes.set(nativeType.name, nativeType);
-        }
-      }
+      fileOwnSymbols.set(filePath, {
+        structs: fileStructs,
+        functions: fileFunctions,
+        enums: fileEnums,
+        traits: fileTraits,
+        nativeTypes: fileNativeTypes,
+      });
     }
 
-    // Segunda Passagem (Pass 2): Checagem profunda
-    for (const stmt of stmts) {
-      this.checkStmt(stmt, this.env);
+    // Primeira Passagem (Pass 1 - Parte B): Montar o escopo visível de cada arquivo com base nos imports
+    const fileScopes = new Map<
+      string,
+      {
+        structs: Map<string, StructDeclaration>;
+        functions: Map<string, FunctionDeclaration>;
+        enums: Map<string, EnumDeclaration>;
+        traits: Map<string, TraitDeclaration>;
+        nativeTypes: Map<string, NativeType>;
+      }
+    >();
+
+    for (const [filePath, sourceFile] of graph.files.entries()) {
+      const own = fileOwnSymbols.get(filePath)!;
+      const visibleStructs = new Map<string, StructDeclaration>(own.structs);
+      const visibleFunctions = new Map<string, FunctionDeclaration>(own.functions);
+      const visibleEnums = new Map<string, EnumDeclaration>(this.enums); // Enums embutidos (Result, Option)
+      for (const [k, v] of own.enums) visibleEnums.set(k, v);
+      const visibleTraits = new Map<string, TraitDeclaration>(own.traits);
+      const visibleNativeTypes = new Map<string, NativeType>(own.nativeTypes);
+
+      for (const stmt of sourceFile.ast) {
+        if (stmt.kind === "ImportDeclaration" && isLocalModule(stmt.moduleName)) {
+          const targetPath = resolveModuleFilePath(filePath, stmt.moduleName, graph.files);
+          const targetSymbols = fileOwnSymbols.get(targetPath);
+          if (!targetSymbols) {
+            throw new Error(`ImportError: Module '${modulePath(stmt.moduleName)}' not found`);
+          }
+
+          for (const sym of stmt.imports) {
+            let found = false;
+            if (targetSymbols.structs.has(sym)) {
+              visibleStructs.set(sym, targetSymbols.structs.get(sym)!);
+              if (targetSymbols.nativeTypes.has(sym)) {
+                visibleNativeTypes.set(sym, targetSymbols.nativeTypes.get(sym)!);
+              }
+              found = true;
+            }
+            if (targetSymbols.functions.has(sym)) {
+              visibleFunctions.set(sym, targetSymbols.functions.get(sym)!);
+              found = true;
+            }
+            if (targetSymbols.enums.has(sym)) {
+              visibleEnums.set(sym, targetSymbols.enums.get(sym)!);
+              found = true;
+            }
+            if (targetSymbols.traits.has(sym)) {
+              visibleTraits.set(sym, targetSymbols.traits.get(sym)!);
+              found = true;
+            }
+
+            if (!found) {
+              throw new Error(
+                `ImportError: Symbol '${sym}' not found in module '${modulePath(stmt.moduleName)}'`,
+              );
+            }
+          }
+        }
+      }
+
+      fileScopes.set(filePath, {
+        structs: visibleStructs,
+        functions: visibleFunctions,
+        enums: visibleEnums,
+        traits: visibleTraits,
+        nativeTypes: visibleNativeTypes,
+      });
+    }
+
+    // Segunda Passagem (Pass 2): Checagem profunda na ordem topológica
+    for (const filePath of graph.order) {
+      const sourceFile = graph.files.get(filePath)!;
+      const scope = fileScopes.get(filePath)!;
+
+      this.structs = scope.structs;
+      this.functions = scope.functions;
+      this.enums = scope.enums;
+      this.traits = scope.traits;
+      this.nativeTypes = scope.nativeTypes;
+
+      const fileEnv = new TypeEnvironment(this.env);
+      for (const stmt of sourceFile.ast) {
+        this.checkStmt(stmt, fileEnv);
+      }
     }
 
     return this.typeMap;
@@ -358,7 +501,13 @@ export class TypeChecker {
       case "BooleanLiteral":
         return { kind: "Bool" };
       case "StringLiteral":
+        return { kind: "String" };
       case "StringInterpolationExpr":
+        for (const part of expr.parts) {
+          if (typeof part !== "string") {
+            this.checkExpr(part, env);
+          }
+        }
         return { kind: "String" };
         
       case "Identifier":

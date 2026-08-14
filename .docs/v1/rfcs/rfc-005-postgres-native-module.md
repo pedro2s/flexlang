@@ -1,6 +1,6 @@
 # RFC-005: Módulo Nativo `db/postgres`
 
-> **Status:** Draft · **Prioridade:** P0 — bloqueante · **Depende de:** RFC-002, RFC-003
+> **Status:** Implementado · **Prioridade:** P0 — bloqueante · **Depende de:** RFC-002, RFC-003
 > **Relacionado:** RFC-009 (parametrização obrigatória de query é requisito de segurança, não só de design de API)
 
 ## Resumo

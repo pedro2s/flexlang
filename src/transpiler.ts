@@ -8,9 +8,11 @@ import type {
   StructDeclaration,
 } from "./ast";
 import type { FlexType, TypeMap } from "./checker";
+import * as path from "path";
 import { builtinEnums, isBuiltinType, successVariant } from "./stdlib";
 import { registry } from "./modules/registry";
 import { modulePath, type NativeType } from "./modules/types";
+import { type ModuleGraph, isLocalModule } from "./loader";
 
 /**
  * Identificadores legítimos em FlexLang que o Go não aceita: palavras reservadas
@@ -55,7 +57,7 @@ export class GoTranspiler {
 
   constructor() {}
 
-  public transpile(program: Stmt[], types?: TypeMap): string {
+  public transpile(program: Stmt[] | ModuleGraph, types?: TypeMap): string {
     this.out = "";
     this.indentLevel = 0;
     this.tmpCount = 0;
@@ -76,46 +78,91 @@ export class GoTranspiler {
       this.enums.set(builtin.name, builtin);
     }
 
+    const graph: ModuleGraph = Array.isArray(program)
+      ? {
+          entryPath: "main.flex",
+          files: new Map([
+            [
+              "main.flex",
+              {
+                filePath: "main.flex",
+                ast: program,
+                imports: [],
+                declarations: [],
+                localDependencies: [],
+              },
+            ],
+          ]),
+          order: ["main.flex"],
+        }
+      : program;
+
     const declarations: Stmt[] = [];
     const mainStatements: Stmt[] = [];
+    // Mapeia símbolo global para o arquivo que o declarou, para detecção de colisão
+    const declaredSymbols = new Map<string, string>();
+
+    const checkDuplicateSymbol = (name: string, filePath: string) => {
+      if (declaredSymbols.has(name) && declaredSymbols.get(name) !== filePath) {
+        const fileA = path.basename(declaredSymbols.get(name)!);
+        const fileB = path.basename(filePath);
+        throw new Error(
+          `CompileError: Duplicate symbol '${name}' declared across modules ('${fileA}' and '${fileB}')`,
+        );
+      }
+      declaredSymbols.set(name, filePath);
+    };
 
     // Separa declaracoes de escopo global (structs, funcs) do corpo do programa
     // e registra os nomes declarados (necessário para resolver tipos ao emitir).
-    for (const stmt of program) {
-      switch (stmt.kind) {
-        case "ImportDeclaration": {
-          this.importedModules.add(stmt.moduleName);
-          const mod = registry.get(modulePath(stmt.moduleName));
-          for (const nativeType of mod?.types ?? []) {
-            this.nativeTypes.set(nativeType.name, nativeType);
+    for (const filePath of graph.order) {
+      const sourceFile = graph.files.get(filePath)!;
+      for (const stmt of sourceFile.ast) {
+        switch (stmt.kind) {
+          case "ImportDeclaration": {
+            if (isLocalModule(stmt.moduleName)) {
+              // Imports locais não geram import no código Go compilado
+              break;
+            }
+            this.importedModules.add(stmt.moduleName);
+            const mod = registry.get(modulePath(stmt.moduleName));
+            for (const nativeType of mod?.types ?? []) {
+              this.nativeTypes.set(nativeType.name, nativeType);
+            }
+            // O módulo pode referenciar Result/Option direto no seu boilerplate Go
+            // (ex: net/http, RFC-004) sem que o programa do usuário os use em
+            // nenhum outro lugar — sem isso o cabeçalho não emitiria a definição.
+            for (const builtinName of mod?.usesBuiltins ?? []) {
+              this.markBuiltinUse(builtinName);
+            }
+            break;
           }
-          // O módulo pode referenciar Result/Option direto no seu boilerplate Go
-          // (ex: net/http, RFC-004) sem que o programa do usuário os use em
-          // nenhum outro lugar — sem isso o cabeçalho não emitiria a definição.
-          for (const builtinName of mod?.usesBuiltins ?? []) {
-            this.markBuiltinUse(builtinName);
-          }
-          break;
+          case "EnumDeclaration":
+            checkDuplicateSymbol(stmt.name, filePath);
+            this.enums.set(stmt.name, stmt);
+            declarations.push(stmt);
+            break;
+          case "StructDeclaration":
+            checkDuplicateSymbol(stmt.name, filePath);
+            this.structNames.add(stmt.name);
+            this.structDecls.set(stmt.name, stmt);
+            declarations.push(stmt);
+            break;
+          case "TraitDeclaration":
+            checkDuplicateSymbol(stmt.name, filePath);
+            this.traitNames.add(stmt.name);
+            declarations.push(stmt);
+            break;
+          case "FunctionDeclaration":
+            checkDuplicateSymbol(stmt.name, filePath);
+            declarations.push(stmt);
+            break;
+          case "ImplDeclaration":
+            declarations.push(stmt);
+            break;
+          default:
+            mainStatements.push(stmt);
         }
-        case "EnumDeclaration":
-          this.enums.set(stmt.name, stmt);
-          declarations.push(stmt);
-          break;
-        case "StructDeclaration":
-          this.structNames.add(stmt.name);
-          this.structDecls.set(stmt.name, stmt);
-          declarations.push(stmt);
-          break;
-        case "TraitDeclaration":
-          this.traitNames.add(stmt.name);
-          declarations.push(stmt);
-          break;
-        case "FunctionDeclaration":
-        case "ImplDeclaration":
-          declarations.push(stmt);
-          break;
-        default:
-          mainStatements.push(stmt);
       }
     }
 

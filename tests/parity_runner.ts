@@ -13,8 +13,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { execFileSync } from "child_process";
-import { Lexer } from "../src/lexer";
-import { Parser } from "../src/parser";
+import { loadModuleGraph } from "../src/loader";
 import { Interpreter } from "../src/interpreter";
 import { TypeChecker } from "../src/checker";
 import { GoTranspiler } from "../src/transpiler";
@@ -103,17 +102,17 @@ async function runParity() {
   console.log(`\nParity gate: ${flexFiles.length} testes (interpretado vs compilado)\n`);
 
   for (const file of flexFiles) {
-    const sourceCode = fs.readFileSync(path.join(testsDir, file), "utf-8");
+    const flexPath = path.join(testsDir, file);
+    const sourceCode = fs.readFileSync(flexPath, "utf-8");
     const { mode, reason } = parityMode(sourceCode);
 
-    // --- Front-end: lexer, parser e checker são compartilhados pelos dois modos ---
-    let ast;
+    // --- Front-end: loader e checker são compartilhados pelos dois modos ---
+    let graph;
     let types;
     try {
-      const parser = new Parser(new Lexer(sourceCode).tokenize());
-      ast = parser.parse();
+      graph = loadModuleGraph(flexPath);
       const checker = new TypeChecker();
-      types = checker.check(ast);
+      types = checker.check(graph);
     } catch (e: any) {
       // O programa é rejeitado antes do codegen: os dois modos falham de forma
       // idêntica por construção, então não há Go para comparar.
@@ -128,7 +127,7 @@ async function runParity() {
       const interpreter = new Interpreter((msg: string) => {
         interpreted += msg + "\n";
       });
-      await interpreter.run(ast);
+      await interpreter.run(graph);
     } catch (e: any) {
       interpreted += e.message + "\n";
     }
@@ -140,7 +139,7 @@ async function runParity() {
 
     let goCode: string;
     try {
-      goCode = new GoTranspiler().transpile(ast, types);
+      goCode = new GoTranspiler().transpile(graph, types);
     } catch (e: any) {
       console.log(`${red("[FAIL]")} ${file} — transpiler falhou: ${e.message}`);
       failed++;

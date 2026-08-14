@@ -1,7 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
-import { Lexer } from "../src/lexer";
-import { Parser } from "../src/parser";
+import { loadModuleGraph } from "../src/loader";
 import { Interpreter } from "../src/interpreter";
 import { TypeChecker } from "../src/checker";
 import { registry } from "../src/modules/registry";
@@ -25,24 +24,19 @@ async function runTests() {
     const flexPath = path.join(testsDir, file);
     const outPath = path.join(testsDir, file.replace(".flex", ".out"));
     
-    const sourceCode = fs.readFileSync(flexPath, "utf-8");
-    
     let capturedOutput = "";
     const stdout = (msg: string) => {
       capturedOutput += msg + "\n";
     };
 
     try {
-      const lexer = new Lexer(sourceCode);
-      const tokens = lexer.tokenize();
-      const parser = new Parser(tokens);
-      const ast = parser.parse();
+      const graph = loadModuleGraph(flexPath);
       
       const typeChecker = new TypeChecker();
-      typeChecker.check(ast);
+      typeChecker.check(graph);
 
       const interpreter = new Interpreter(stdout);
-      await interpreter.run(ast);
+      await interpreter.run(graph);
     } catch (e: any) {
       // Capture errors in output as well!
       capturedOutput += e.message + "\n";
