@@ -1,5 +1,6 @@
 import type { NativeModule } from "./types";
 import { httpModule } from "./http";
+import { postgresModule } from "./postgres";
 
 export class ModuleRegistry {
   private modules = new Map<string, NativeModule>();
@@ -21,3 +22,5 @@ export class ModuleRegistry {
 export const registry = new ModuleRegistry();
 
 registry.register(httpModule);
+registry.register(postgresModule);
+

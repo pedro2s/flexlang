@@ -587,6 +587,20 @@ export class GoTranspiler {
 
       case "TryExpr":
         return this.transpileTry(expr);
+
+      case "LambdaExpr": {
+        // Lambda vira closure literal em Go: func(params) { body }
+        const params = expr.parameters
+          .map((p) => `${this.goIdent(p.name)} ${this.transpileType(p.typeAnnotation)}`)
+          .join(", ");
+        const bodyCode = this.capture(() => {
+          this.funcDepth++;
+          this.transpileStmts(expr.body.body);
+          this.funcDepth--;
+        });
+        // Emitido inline — quem consome (ex: transpileCall) envolve na chamada
+        return `func(${params}) {\n${bodyCode}${"  ".repeat(this.indentLevel)}}`;
+      }
     }
   }
 
@@ -601,7 +615,7 @@ export class GoTranspiler {
       }
 
       // Construtor estático de módulo nativo: `Server.new(x)` -> `NewServer(x)`,
-      // a convenção que o boilerplate Go de cada módulo segue.
+      // `Pool.connect(x)` -> `Pool_connect(x)`
       if (member.object.kind === "Identifier") {
         const isStatic = this.nativeTypes
           .get(member.object.symbol)
@@ -609,6 +623,10 @@ export class GoTranspiler {
         if (isStatic && member.property === "new") {
           const args = expr.args.map((a) => this.transpileExpr(a)).join(", ");
           return `New${member.object.symbol}(${args})`;
+        }
+        if (isStatic) {
+          const args = expr.args.map((a) => this.transpileExpr(a)).join(", ");
+          return `${member.object.symbol}_${member.property}(${args})`;
         }
       }
 
@@ -1039,6 +1057,9 @@ export class GoTranspiler {
         break;
       case "TryExpr":
         this.walkExpr(expr.expression, visit);
+        break;
+      case "LambdaExpr":
+        for (const s of expr.body.body) this.walkStmt(s, visit);
         break;
       default:
         break;

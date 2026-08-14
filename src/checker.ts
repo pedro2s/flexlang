@@ -654,6 +654,19 @@ export class TypeChecker {
         }
         return { kind: "Any" };
 
+      case "LambdaExpr": {
+        // Lambda: |param: Type, ...| { body }
+        // Checa o corpo da lambda em um ambiente com os parâmetros definidos.
+        // O tipo da lambda em si é Any — limitação conhecida, igual a closures
+        // passadas como variável (o checker não modela tipos de função).
+        const lambdaEnv = new TypeEnvironment(env);
+        for (const param of expr.parameters) {
+          lambdaEnv.define(param.name, this.resolveTypeNode(param.typeAnnotation), !!param.isMut);
+        }
+        this.checkStmt(expr.body, lambdaEnv);
+        return { kind: "Any" };
+      }
+
       default:
         return { kind: "Any" };
     }

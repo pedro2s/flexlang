@@ -42,6 +42,7 @@ export class Lexer {
     [TokenType.Assign, /^=/],
     [TokenType.And, /^&&/],
     [TokenType.Or, /^\|\|/],
+    [TokenType.Pipe, /^\|/],
     [TokenType.Bang, /^!/],
     [TokenType.Modulo, /^%/],
     [TokenType.Plus, /^\+/],

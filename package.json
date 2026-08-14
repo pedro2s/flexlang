@@ -10,7 +10,8 @@
     "start": "tsx src/index.ts",
     "test": "npx tsx tests/runner.ts",
     "test:parity": "npx tsx tests/parity_runner.ts",
-    "test:http": "npx tsx tests/http_integration.ts"
+    "test:http": "npx tsx tests/http_integration.ts",
+    "test:db": "npx tsx tests/postgres_integration.ts"
   },
   "keywords": [],
   "author": "",
@@ -18,8 +19,12 @@
   "type": "module",
   "devDependencies": {
     "@types/node": "^26.2.0",
+    "@types/pg": "^8.21.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.23.12",
     "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "pg": "^8.23.0"
   }
 }

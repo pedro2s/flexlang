@@ -554,6 +554,18 @@ export class Interpreter {
           default:
             throw new Error(`Unknown operator ${expr.operator}`);
         }
+      case "LambdaExpr": {
+        // Lambda vira uma FlexFunction com uma FunctionDeclaration sintética.
+        // O closure captura o ambiente atual, exatamente como funções nomeadas.
+        const syntheticDecl: FunctionDeclaration = {
+          kind: "FunctionDeclaration",
+          name: "__lambda",
+          parameters: expr.parameters,
+          returnType: undefined,
+          body: expr.body,
+        };
+        return new FlexFunction(syntheticDecl, env);
+      }
       default:
         throw new Error(`Expression not implemented in the interpreter`);
     }

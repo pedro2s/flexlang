@@ -21,6 +21,7 @@ import {
   type SpawnStmt,
   type TraitDeclaration,
   type ImportDeclaration,
+  type LambdaExpr,
 } from "./ast";
 import { Lexer } from "./lexer";
 
@@ -214,7 +215,12 @@ export class Parser {
     const args: Expr[] = [];
     if (this.current().type !== TokenType.RParen) {
       do {
-        args.push(this.parseExpression());
+        // Lambda inline como argumento: db.transaction(|tx| { ... })
+        if (this.current().type === TokenType.Pipe || this.current().type === TokenType.Or) {
+          args.push(this.parseLambdaExpr());
+        } else {
+          args.push(this.parseExpression());
+        }
       } while (
         this.current().type === TokenType.Comma &&
         this.consume(TokenType.Comma)
@@ -757,8 +763,41 @@ export class Parser {
       const expr = this.parseExpression();
       this.consume(TokenType.RParen);
       return expr;
+    } else if (token.type === TokenType.Pipe || token.type === TokenType.Or) {
+      // Lambda expression: |param: Type, ...| { body }
+      // Nota: || (Or) é tratado como lambda sem parâmetros
+      return this.parseLambdaExpr();
     } else {
       throw new Error(`SyntaxError: Invalid expression '${token.value}'`);
     }
+  }
+
+  /**
+   * Parseia uma lambda expression: |param1: Type1, param2: Type2| { body }
+   * Os parâmetros têm tipagem obrigatória, igual a funções normais.
+   */
+  private parseLambdaExpr(): LambdaExpr {
+    const parameters: Parameter[] = [];
+
+    // || (token Or) significa lambda sem parâmetros: || { body }
+    if (this.current().type === TokenType.Or) {
+      this.consume(TokenType.Or);
+      // Sem parâmetros — o || já consumiu ambos os pipes
+    } else {
+      this.consume(TokenType.Pipe);
+      if (this.current().type !== TokenType.Pipe) {
+        do {
+          const isMut = this.match(TokenType.Mut);
+          const paramName = this.consume(TokenType.Identifier).value;
+          this.consume(TokenType.Colon);
+          const typeAnnotation = this.parseTypeAnnotation();
+          parameters.push({ name: paramName, typeAnnotation, isMut });
+        } while (this.match(TokenType.Comma));
+      }
+      this.consume(TokenType.Pipe);
+    }
+
+    const body = this.parseBlock();
+    return { kind: "LambdaExpr", parameters, body };
   }
 }

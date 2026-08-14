@@ -54,6 +54,7 @@ export enum TokenType {
   RBracket = "RBRACKET", // ]
   True = "TRUE", // true
   False = "FALSE", // false
+  Pipe = "PIPE", // | (delimitador de parâmetros de lambda)
 }
 
 export interface Token {
@@ -99,7 +100,8 @@ export type Expr =
   | ArrayLiteral
   | IndexExpr
   | TryExpr
-  | AssignmentExpr;
+  | AssignmentExpr
+  | LambdaExpr;
 
 export interface BooleanLiteral {
   kind: "BooleanLiteral";
@@ -343,4 +345,10 @@ export interface SpawnStmt {
 export interface TryExpr {
   kind: "TryExpr";
   expression: Expr;
+}
+
+export interface LambdaExpr {
+  kind: "LambdaExpr";
+  parameters: Parameter[];
+  body: BlockStmt;
 }
