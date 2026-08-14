@@ -702,6 +702,34 @@ export class Parser {
       }
       this.consume(TokenType.RBracket);
       return { kind: "ArrayLiteral", elements };
+    } else if (token.type === TokenType.LBrace) {
+      this.consume(TokenType.LBrace);
+      const properties: { key: string; value: Expr }[] = [];
+
+      while (
+        this.current().type !== TokenType.RBrace &&
+        this.current().type !== TokenType.EOF
+      ) {
+        let key: string;
+        if (this.current().type === TokenType.String) {
+          key = this.consume(TokenType.String).value.slice(1, -1);
+        } else if (this.current().type === TokenType.Identifier) {
+          key = this.consume(TokenType.Identifier).value;
+        } else {
+          throw new Error(`SyntaxError: Expected string or identifier as Map key, got ${this.current().value}`);
+        }
+
+        this.consume(TokenType.Colon);
+        const value = this.parseExpression();
+        properties.push({ key, value });
+
+        if (this.current().type === TokenType.Comma) {
+          this.consume(TokenType.Comma);
+        }
+      }
+
+      this.consume(TokenType.RBrace);
+      return { kind: "MapLiteral", properties };
     } else if (token.type === TokenType.Identifier) {
       this.consume(TokenType.Identifier);
 

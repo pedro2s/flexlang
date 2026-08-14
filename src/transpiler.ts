@@ -440,6 +440,22 @@ export class GoTranspiler {
         this.emitLine(`go func() {`);
         this.indent();
         this.emitLine(`defer wg.Done()`);
+        this.emitLine(`defer func() {`);
+        this.indent();
+        this.emitLine(`if rec := recover(); rec != nil {`);
+        this.indent();
+        this.emitLine(`entry := map[string]any{`);
+        this.emitLine(`  "level": "error",`);
+        this.emitLine(`  "msg":   "panic in spawned task",`);
+        this.emitLine(`  "panic": fmt.Sprintf("%v", rec),`);
+        this.emitLine(`  "ts":    time.Now().Format(time.RFC3339),`);
+        this.emitLine(`}`);
+        this.emitLine(`out, _ := json.Marshal(entry)`);
+        this.emitLine(`fmt.Println(string(out))`);
+        this.dedent();
+        this.emitLine(`}`);
+        this.dedent();
+        this.emitLine(`}()`);
         this.transpileStmts(stmt.body.body);
         this.dedent();
         this.emitLine(`}()`);
@@ -618,6 +634,13 @@ export class GoTranspiler {
 
       case "CallExpr":
         return this.transpileCall(expr);
+
+      case "MapLiteral": {
+        const props = expr.properties
+          .map((p) => `"${p.key}": ${this.transpileExpr(p.value)}`)
+          .join(", ");
+        return `map[string]any{${props}}`;
+      }
 
       case "StructExpr": {
         // Só structs do usuário (não tipos nativos como ServerConfig) usam campo
@@ -1116,6 +1139,9 @@ export class GoTranspiler {
         expr.elements.forEach((e) => this.walkExpr(e, visit));
         break;
       case "StructExpr":
+        expr.properties.forEach((p) => this.walkExpr(p.value, visit));
+        break;
+      case "MapLiteral":
         expr.properties.forEach((p) => this.walkExpr(p.value, visit));
         break;
       case "StringInterpolationExpr":

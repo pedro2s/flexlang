@@ -1,6 +1,6 @@
 # RFC-008: Observabilidade e Prontidão Operacional
 
-> **Status:** Draft · **Prioridade:** P0 — bloqueante · **Depende de:** RFC-004 (hooks entram na superfície do `Server`)
+> **Status:** IMPLEMENTADO · **Prioridade:** P0 — bloqueante · **Depende de:** RFC-004 (hooks entram na superfície do `Server`)
 
 ## Resumo
 

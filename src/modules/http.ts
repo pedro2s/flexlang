@@ -147,6 +147,7 @@ class FlexResponse {
 class FlexServer {
   readonly [NATIVE_TAG] = "Server";
   private routes: CompiledRoute[] = [];
+  private shutdownHooks: unknown[] = [];
   private server: http.Server;
   private maxBodySize: number;
 
@@ -167,7 +168,18 @@ class FlexServer {
     return null;
   }
 
+  on_shutdown(handler: unknown): null {
+    this.shutdownHooks.push(handler);
+    return null;
+  }
+
   private dispatch(req: http.IncomingMessage, res: http.ServerResponse): void {
+    if (req.method === "GET" && req.url === "/healthz") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "ok" }));
+      return;
+    }
+
     const url = new URL(req.url ?? "/", "http://localhost");
     const requestSegments = pathSegments(url.pathname);
 
@@ -225,6 +237,21 @@ class FlexServer {
   start(): Promise<never> {
     const port = parseInt(this.addr.replace(":", ""), 10);
     this.server.listen(port, () => console.log(`[FlexLang] Server listening on ${this.addr}`));
+
+    const shutdown = async () => {
+      console.log(`[FlexLang] Shutting down server...`);
+      for (const hook of this.shutdownHooks) {
+        await this.interpreter.callFunction(hook, []).catch(e => console.error(e));
+      }
+      this.server.close(() => {
+        process.exit(0);
+      });
+      setTimeout(() => process.exit(1), 10000);
+    };
+
+    process.on("SIGINT", shutdown);
+    process.on("SIGTERM", shutdown);
+
     // Promessa que nunca resolve: mantém o interpretador vivo enquanto serve
     return new Promise(() => {});
   }
@@ -336,6 +363,7 @@ const GO_BOILERPLATE = [
   "  Addr   string",
   "  routes []flexRoute",
   "  config ServerConfig",
+  "  shutdownHooks []func()",
   "}",
   "",
   "func NewServer(addr string, cfg ...*ServerConfig) *Server {",
@@ -347,11 +375,38 @@ const GO_BOILERPLATE = [
   "  return &Server{Addr: addr, config: conf}",
   "}",
   "",
+  "func (s *Server) on_shutdown(handler func()) {",
+  "  s.shutdownHooks = append(s.shutdownHooks, handler)",
+  "}",
+  "",
   "func (s *Server) route(path string, handler func(Request, *Response)) {",
   "  s.routes = append(s.routes, flexRoute{segments: flexSegments(path), handler: handler})",
   "}",
   "",
   "func (s *Server) dispatch(w http.ResponseWriter, r *http.Request) {",
+  "  defer func() {",
+  "    if rec := recover(); rec != nil {",
+  '      entry := map[string]any{',
+  '        "level": "error",',
+  '        "msg":   "panic recovered",',
+  '        "panic": fmt.Sprintf("%v", rec),',
+  '        "ts":    time.Now().Format(time.RFC3339),',
+  '      }',
+  '      out, _ := json.Marshal(entry)',
+  '      fmt.Println(string(out))',
+  '      w.Header().Set("Content-Type", "application/json")',
+  '      w.WriteHeader(500)',
+  '      json.NewEncoder(w).Encode(map[string]string{"error": "internal server error"})',
+  "    }",
+  "  }()",
+  "",
+  '  if r.Method == "GET" && r.URL.Path == "/healthz" {',
+  '    w.Header().Set("Content-Type", "application/json")',
+  "    w.WriteHeader(200)",
+  '    json.NewEncoder(w).Encode(map[string]string{"status": "ok"})',
+  "    return",
+  "  }",
+  "",
   "  reqSegments := flexSegments(r.URL.Path)",
   "  for _, route := range s.routes {",
   "    params, ok := flexMatchRoute(route, reqSegments)",
@@ -381,7 +436,27 @@ const GO_BOILERPLATE = [
   "    Handler:     mux,",
   "    ReadTimeout: time.Duration(s.config.read_timeout) * time.Millisecond,",
   "  }",
-  "  httpServer.ListenAndServe()",
+  "",
+  "  go func() {",
+  "    if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {",
+  '      fmt.Printf("HTTP server error: %v\\n", err)',
+  "    }",
+  "  }()",
+  "",
+  "  quit := make(chan os.Signal, 1)",
+  "  signal.Notify(quit, os.Interrupt, syscall.SIGTERM)",
+  "  <-quit",
+  "",
+  "  ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)",
+  "  defer cancel()",
+  "",
+  "  for _, hook := range s.shutdownHooks {",
+  "    hook()",
+  "  }",
+  "",
+  "  if err := httpServer.Shutdown(ctx); err != nil {",
+  '    fmt.Printf("HTTP server shutdown error: %v\\n", err)',
+  "  }",
   "}",
   "// ---------------------------------",
 ].join("\n");
@@ -402,6 +477,7 @@ export const httpModule: NativeModule = {
       ],
       methods: [
         { name: "route", arity: 2, returns: { kind: "Void" } },
+        { name: "on_shutdown", arity: 1, returns: { kind: "Void" } },
         { name: "start", arity: 0, returns: { kind: "Void" } },
       ],
     },
@@ -471,7 +547,7 @@ export const httpModule: NativeModule = {
   }),
 
   goCodegen: {
-    imports: ["net/http", "net/url", "encoding/json", "io", "strconv", "strings", "time"],
+    imports: ["net/http", "net/url", "encoding/json", "io", "strconv", "strings", "time", "context", "os", "os/signal", "syscall", "fmt"],
     boilerplate: GO_BOILERPLATE,
   },
 };

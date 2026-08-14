@@ -180,7 +180,17 @@ export class Interpreter {
         const spawnEnv = new Environment(env);
         // Dispara a rotina assincronamente e não aguarda aqui! (Goroutine style)
         const task = (async () => {
-             await this.evaluateStmt(stmt.body, spawnEnv);
+             try {
+                 await this.evaluateStmt(stmt.body, spawnEnv);
+             } catch (e: any) {
+                 const entry = {
+                     level: "error",
+                     msg: "panic in spawned task",
+                     panic: e.message || String(e),
+                     ts: new Date().toISOString(),
+                 };
+                 console.log(JSON.stringify(entry));
+             }
         })();
         promisesList.push(task);
         break;
@@ -321,6 +331,13 @@ export class Interpreter {
         } else {
           throw new Error(`SyntaxError: Invalid assignment target`);
         }
+
+      case "MapLiteral":
+        const mapObj = new Map<string, any>();
+        for (const prop of expr.properties) {
+          mapObj.set(prop.key, await this.evaluateExpr(prop.value, env));
+        }
+        return mapObj;
 
       case "StructExpr":
         // 1. Validar se o molde da Struct existe na memória (Type Checking em tempo de execução)

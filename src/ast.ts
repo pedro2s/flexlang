@@ -101,7 +101,8 @@ export type Expr =
   | IndexExpr
   | TryExpr
   | AssignmentExpr
-  | LambdaExpr;
+  | LambdaExpr
+  | MapLiteral;
 
 export interface BooleanLiteral {
   kind: "BooleanLiteral";
@@ -351,4 +352,9 @@ export interface LambdaExpr {
   kind: "LambdaExpr";
   parameters: Parameter[];
   body: BlockStmt;
+}
+
+export interface MapLiteral {
+  kind: "MapLiteral";
+  properties: { key: string; value: Expr }[];
 }

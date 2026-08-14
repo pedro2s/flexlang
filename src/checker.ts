@@ -31,6 +31,7 @@ export type FlexType =
   | { kind: "Array"; elementType: FlexType }
   | { kind: "Struct"; name: string; genericArgs: FlexType[] }
   | { kind: "Enum"; name: string; genericArgs: FlexType[] }
+  | { kind: "Map" }
   | { kind: "Void" }
   | { kind: "Any" }; // Usado quando falha a inferência para evitar de dar 'cascade' de erros
 
@@ -584,6 +585,12 @@ export class TypeChecker {
         }
         return { kind: "Struct", name: expr.structName, genericArgs: [] };
 
+      case "MapLiteral":
+        for (const prop of expr.properties) {
+          this.checkExpr(prop.value, env);
+        }
+        return { kind: "Map" };
+
       case "MemberExpr":
         if (expr.object.kind === "Identifier" && this.enums.has(expr.object.symbol)) {
              const enumName = expr.object.symbol;
@@ -974,6 +981,7 @@ export class TypeChecker {
       case "Bool": return "Bool";
       case "Any": return "Any";
       case "Void": return "Void";
+      case "Map": return "Map";
       case "Array": return `[${this.typeToString(type.elementType)}]`;
       case "Struct":
         if (type.genericArgs.length > 0) {
