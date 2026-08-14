@@ -1,6 +1,6 @@
 # RFC-007: CLI Toolchain v1
 
-> **Status:** Draft · **Prioridade:** P0 (exceto `flex fmt`, que é P1) · **Depende de:** RFC-001, RFC-002, RFC-006
+> **Status:** Implementado · **Prioridade:** P0 (exceto `flex fmt`, que é P1) · **Depende de:** RFC-001, RFC-002, RFC-006
 
 ## Resumo
 
