@@ -137,23 +137,22 @@ export class TypeChecker {
 
   private checkStmt(stmt: Stmt, env: TypeEnvironment): void {
     switch (stmt.kind) {
-      case "VarDeclaration":
-        const valueType = this.checkExpr(stmt.value, env);
-        let declaredType: FlexType | undefined = undefined;
+      case "VarDeclaration": {
+        // Anotação resolvida ANTES de checar o valor: alguns nós (ex: `req.json()`,
+        // RFC-004) precisam saber o tipo esperado no site de chamada para resolver
+        // seu próprio tipo de retorno — não dá para inferir de baixo pra cima
+        // porque `json()` não tem argumento nenhum que carregue essa informação.
+        const expected = stmt.typeAnnotation ? this.resolveTypeNode(stmt.typeAnnotation) : undefined;
+        const valueType = this.checkExpr(stmt.value, env, expected);
 
-        if (stmt.typeAnnotation) {
-          declaredType = this.resolveTypeNode(stmt.typeAnnotation);
-          if (!this.isTypeAssignable(declaredType, valueType)) {
-            throw new Error(
-              `TypeError: Cannot assign value of type '${this.typeToString(valueType)}' to variable '${stmt.name}' of type '${this.typeToString(declaredType)}'`,
-            );
-          }
-        } else {
-          // Inferência Local
-          declaredType = valueType;
+        if (expected && !this.isTypeAssignable(expected, valueType)) {
+          throw new Error(
+            `TypeError: Cannot assign value of type '${this.typeToString(valueType)}' to variable '${stmt.name}' of type '${this.typeToString(expected)}'`,
+          );
         }
-        env.define(stmt.name, declaredType, stmt.isMut);
+        env.define(stmt.name, expected ?? valueType, stmt.isMut);
         break;
+      }
 
       case "ScopeStmt":
         if (stmt.deadline) {
@@ -339,13 +338,20 @@ export class TypeChecker {
 
   // =========== CHECAGEM DE EXPRESSÕES ===========
 
-  private checkExpr(expr: Expr, env: TypeEnvironment): FlexType {
-    const type = this.inferExpr(expr, env);
+  /**
+   * @param expected tipo esperado pelo contexto que envolve `expr` (hoje só
+   *                  populado por `VarDeclaration` com anotação). A grande
+   *                  maioria dos casos de `inferExpr` ignora esse parâmetro —
+   *                  só quem precisa dele (o `req.json()` do RFC-004, via `TryExpr`
+   *                  e `CallExpr`) o consome.
+   */
+  private checkExpr(expr: Expr, env: TypeEnvironment, expected?: FlexType): FlexType {
+    const type = this.inferExpr(expr, env, expected);
     this.typeMap.set(expr, type);
     return type;
   }
 
-  private inferExpr(expr: Expr, env: TypeEnvironment): FlexType {
+  private inferExpr(expr: Expr, env: TypeEnvironment, expected?: FlexType): FlexType {
     switch (expr.kind) {
       case "NumericLiteral":
         return { kind: "Int" };
@@ -443,7 +449,12 @@ export class TypeChecker {
                  genericArgs: (enumDecl.typeParams ?? []).map(() => ({ kind: "Any" }) as FlexType),
              };
         }
-        // Pula checagem complexa por enquanto
+        // Não valida o campo em si (limitação conhecida — "pula checagem
+        // complexa"), mas registra o tipo do OBJETO no TypeMap: o transpiler
+        // precisa saber se é um struct do usuário para decidir a capitalização
+        // do campo em Go (json.Marshal/Unmarshal só enxerga campo exportado —
+        // RFC-004, onde structs passam a de fato trafegar como JSON).
+        this.checkExpr(expr.object, env);
         return { kind: "Any" };
 
       case "CallExpr":
@@ -514,6 +525,30 @@ export class TypeChecker {
             // assinatura de módulo nativo não expressa.
             if (expr.caller.object.kind === "Identifier" && expr.caller.object.symbol === "Channel" && expr.caller.property === "new") {
                 return { kind: "Struct", name: "Channel", genericArgs: [{ kind: "Any" }] };
+            }
+
+            // `req.json()` (RFC-004): o `T` de `Result<T, String>` não vem de
+            // nenhum argumento (a chamada não tem argumento nenhum) — só do
+            // contexto (`let body: T = req.json()?;`). Por isso é tratado à parte
+            // da tabela genérica de `NativeSignature`, que não modela retorno
+            // dependente do site de chamada.
+            if (expr.caller.property === "json" && expr.args.length === 0) {
+                const objType = this.checkExpr(expr.caller.object, env);
+                if (objType.kind === "Struct" && objType.name === "Request") {
+                    let payloadType: FlexType = { kind: "Any" };
+                    if (expected) {
+                        if (expected.kind === "Enum" && expected.name === "Result" && expected.genericArgs[0]) {
+                            payloadType = expected.genericArgs[0];
+                        } else if (expected.kind !== "Void") {
+                            payloadType = expected;
+                        }
+                    }
+                    return {
+                        kind: "Enum",
+                        name: "Result",
+                        genericArgs: [payloadType, { kind: "String" }],
+                    };
+                }
             }
 
             // Construtor estático de módulo nativo: `Server.new(...)`
@@ -588,7 +623,10 @@ export class TypeChecker {
         return assignValueType;
         
       case "TryExpr":
-        const tryType = this.checkExpr(expr.expression, env);
+        // `expected` repassado como está: para quem consome (`req.json()`), o
+        // tipo esperado da expressão INTEIRA (o valor já desembrulhado pelo `?`)
+        // é o mesmo tipo esperado da chamada por trás do `?`.
+        const tryType = this.checkExpr(expr.expression, env, expected);
         if (tryType.kind === "Any") return { kind: "Any" };
 
         // Checagem estrutural: `?` é uma operação sobre os tipos embutidos, não
@@ -665,10 +703,11 @@ export class TypeChecker {
     args: Expr[],
     env: TypeEnvironment,
   ): FlexType {
-    if (args.length !== signature.arity) {
-      throw new Error(
-        `TypeError: ${label} expects exactly ${signature.arity} argument${signature.arity === 1 ? "" : "s"}, got ${args.length}`,
-      );
+    const min = signature.minArity ?? signature.arity ?? 0;
+    const max = signature.maxArity ?? signature.arity ?? min;
+    if (args.length < min || args.length > max) {
+      const expected = min === max ? `exactly ${min} argument${min === 1 ? "" : "s"}` : `between ${min} and ${max} arguments`;
+      throw new Error(`TypeError: ${label} expects ${expected}, got ${args.length}`);
     }
     for (const arg of args) {
       this.checkExpr(arg, env);

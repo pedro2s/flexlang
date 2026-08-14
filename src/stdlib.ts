@@ -59,3 +59,32 @@ export function isSuccessVariant(enumName: string, variantName: string): boolean
   if (!decl) return false;
   return successVariant(decl)?.name === variantName;
 }
+
+/**
+ * Forma runtime de uma variante de enum, como o interpretador já produz em
+ * `MemberExpr`/`CallExpr` de construtor. Módulos nativos que precisam devolver
+ * `Result`/`Option` (ex: `net/http`, RFC-004) constroem o valor direto por aqui,
+ * em vez de duplicar o shape `{ kind: "EnumVariant", ... }` em cada módulo.
+ */
+export interface EnumVariantValue {
+  kind: "EnumVariant";
+  enumName: string;
+  variantName: string;
+  payload: unknown[];
+}
+
+export function resultOk(value: unknown): EnumVariantValue {
+  return { kind: "EnumVariant", enumName: "Result", variantName: "Ok", payload: [value] };
+}
+
+export function resultErr(message: unknown): EnumVariantValue {
+  return { kind: "EnumVariant", enumName: "Result", variantName: "Err", payload: [message] };
+}
+
+export function optionSome(value: unknown): EnumVariantValue {
+  return { kind: "EnumVariant", enumName: "Option", variantName: "Some", payload: [value] };
+}
+
+export function optionNone(): EnumVariantValue {
+  return { kind: "EnumVariant", enumName: "Option", variantName: "None", payload: [] };
+}

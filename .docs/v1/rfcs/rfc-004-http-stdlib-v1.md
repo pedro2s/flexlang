@@ -1,6 +1,6 @@
 # RFC-004: `net/http` v1 — Superfície de Produção
 
-> **Status:** Draft · **Prioridade:** P0 — bloqueante · **Depende de:** RFC-002, RFC-003
+> **Status:** Implementado · **Prioridade:** P0 — bloqueante · **Depende de:** RFC-002, RFC-003
 > **Depende também de:** RFC-008 (hooks de shutdown/logging entram na mesma superfície de `Server`)
 
 ## Resumo
@@ -78,10 +78,26 @@ O boilerplate hoje hardcoded em `transpiler.ts:36-54` migra para o `goCodegen.bo
 
 ## Critério de Aceite
 
-- [ ] Rotas com parâmetro nomeado (`:id`) funcionam em modo interpretado e compilado.
-- [ ] `req.json()`, `req.param_int()`, `req.query()` implementados e cobertos por teste de integração.
-- [ ] `res.error()` produz um formato de erro JSON consistente.
-- [ ] Timeout e limite de corpo têm valores padrão sem configuração explícita.
+- [x] Rotas com parâmetro nomeado (`:id`) funcionam em modo interpretado e compilado.
+- [x] `req.json()`, `req.param_int()`, `req.query()` implementados e cobertos por teste de integração.
+- [x] `res.error()` produz um formato de erro JSON consistente.
+- [x] Timeout e limite de corpo têm valores padrão sem configuração explícita.
+
+## Estado da Implementação
+
+Entregue em `src/modules/http.ts` (reescrito por completo), com apoio de mudanças pontuais em `src/checker.ts`, `src/transpiler.ts`, `src/modules/types.ts` e `src/stdlib.ts`. Cobertura: golden tests `tests/23_http_v1.flex` (superfície feliz — parser/checker/transpiler) e `tests/24_http_arity.flex` (erro de aridade de `Server.new`), mais um teste de integração real novo, `tests/http_integration.ts` (`npm run test:http`), que sobe o servidor de verdade nos dois modos (portas diferentes) e compara status/corpo de 7 cenários via `fetch` — path param válido/inválido, query, corpo JSON válido/malformado, corpo acima de `max_body_size` (413) e rota inexistente (404). Os três motores continuam sem nenhuma citação a `"net/http"` por nome (RFC-003 se mantém de pé).
+
+Cinco desvios em relação ao desenho original, todos por razões concretas encontradas na implementação:
+
+1. **Erro é `String`, não `ApiError`.** `req.param_int`/`req.json` devolvem `Result<T, String>`. `ApiError` no PRD é um enum de **domínio do usuário** (declarado pelo programa, como `enum ApiError { NotFound(String), ... }`), não um tipo da stdlib — RFC-002 deliberadamente não introduziu um tipo de erro HTTP embutido. Nada impede o usuário de casar o `String` devolvido dentro do seu próprio `ApiError.ValidationError(msg)`.
+2. **`ServerConfig.read_timeout` é `Int` (milissegundos), não `Duration`.** `Duration` não existe em nenhum lugar da linguagem hoje — nem `scope(deadline)` o usa (`checker.ts` já comenta "idealmente exigiríamos um tipo Duration, mas por hora Int serve"). Introduzir `Duration` é trabalho novo de stdlib, fora do recorte desta RFC; `ServerConfig` segue a mesma convenção que já existe.
+3. **`req.json()` sem sintaxe genérica explícita.** O `T` de `Result<T, String>` vem do tipo declarado no contexto — `let body: CreateUserInput = req.json()?;` ou `let r: Result<CreateUserInput, String> = req.json();`. Sem contexto (`let x = req.json();`), `T` fica `Any`, no mesmo espírito da limitação já documentada na RFC-002 para `Result.Ok(x)` solto. O checker resolve isso com um parâmetro `expected` opcional, propagado só por `VarDeclaration` e `TryExpr` — o resto do checker ignora o parâmetro.
+4. **Handlers de rota continuam `Void` (sem `?` direto no corpo).** `server.route(path, handler)` compila para Go como um `func(Request, *Response)` — e **todo** handler registrado no mesmo servidor precisa compartilhar essa assinatura exata (Go não tem union de tipo de função). Não dá para deixar alguns handlers devolverem `Result` e outros não. Por isso `req.param_int(...)?`/`req.json()?` diretamente no handler não é suportado; o padrão recomendado é uma função auxiliar com retorno `Result`/`Option` (onde `?` funciona normalmente, sem mudança nenhuma no checker) e o handler faz `match` no resultado dela — é o que `tests/fixtures/http_v1_server.flex` demonstra (`parse_create_user`).
+5. **Roteamento no Go não usa o pattern-matching nativo do `http.ServeMux` 1.22+.** O desenho original (Seção 5) propunha mapear `:id` para `{id}` e deixar o `ServeMux` do Go resolver. Na prática o `ServeMux` usa uma regra de precedência por especificidade (padrão mais específico vence, não ordem de registro), diferente da varredura linear mais simples implementada no interpretador — isso quebraria a paridade em qualquer conjunto de rotas ambíguas. O boilerplate Go em vez disso implementa o **mesmo algoritmo** do interpretador (lista de rotas compiladas em segmentos, primeira que casa na ordem de registro vence), registrado como um único handler catch-all no `ServeMux`. Limitação conhecida, igual nos dois modos: rotas ambíguas resolvem por ordem de registro, e barra dupla/final é normalizada (segmentos vazios descartados).
+
+Um efeito colateral necessário, fora do escopo original da RFC mas bloqueante para ela funcionar de verdade: **campos de struct do usuário agora são emitidos em Go como identificador exportado** (`Name`, não `name`), com uma tag `\`json:"name"\`` preservando o nome original na serialização. Sem isso, `encoding/json.Marshal`/`Unmarshal` do Go ignora silenciosamente campo não-exportado — `res.json(user)` viraria `{}` em modo compilado, e `req.json()` nunca preencheria nada, com o interpretador (que usa `Map`) continuando a funcionar normalmente. É uma lacuna pré-existente do transpiler que nenhum teste anterior expunha, porque nenhum struct de verdade tinha trafegado por JSON antes desta RFC. A correção é pontual: `MemberExpr` agora consulta o tipo do objeto (que o checker passou a registrar no `TypeMap`, mudança aditiva) para decidir se `objeto.propriedade` é um campo (capitalizado) ou o alvo de uma chamada de método (continua minúsculo) — chamadas de método e tipos nativos (`req`, `res`, `server`) não são afetados.
+
+Por fim, `Response` precisou de semântica de referência em Go (`*Response`, via um novo campo `goPointer` em `NativeType`) — com receiver por valor, `res.status(201); res.json(x);` em dois statements separados perderia a mutação do status no Go (embora funcionasse no interpretador, onde objetos são sempre referência), quebrando paridade silenciosamente. `Request` continua por valor (é só leitura).
 
 ## Riscos e Alternativas Consideradas
 

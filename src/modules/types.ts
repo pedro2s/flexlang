@@ -12,10 +12,18 @@ import type { Interpreter } from "../interpreter";
  * superfície de tipos, o seu binding em modo interpretado e o Go que injeta.
  */
 
-/** Assinatura de um método nativo, para o checker validar a chamada. */
+/**
+ * Assinatura de um método nativo, para o checker validar a chamada.
+ *
+ * `arity` é a aridade exata (caso comum). `minArity`/`maxArity` cobrem aridade
+ * variável — hoje só `Server.new(addr, config?)` (RFC-004), cujo `ServerConfig`
+ * é opcional.
+ */
 export interface NativeSignature {
   name: string;
-  arity: number;
+  arity?: number;
+  minArity?: number;
+  maxArity?: number;
   returns: FlexType;
 }
 
@@ -27,6 +35,14 @@ export interface NativeType {
   statics?: NativeSignature[];
   /** Métodos de instância: `server.route(...)`. */
   methods?: NativeSignature[];
+  /**
+   * Este tipo precisa de semântica de referência em Go (`*Tipo`), não de valor.
+   * Caso de uso: `Response` (RFC-004) — `res.status(201).json(x)` e `res.json(x)`
+   * em statements separados precisam mutar o MESMO valor, como já acontece no
+   * interpretador (objetos JS são sempre referência). Sem isso, um receiver por
+   * valor em Go perderia mutações entre statements não encadeados.
+   */
+  goPointer?: boolean;
 }
 
 export interface NativeModule {
@@ -35,6 +51,15 @@ export interface NativeModule {
 
   /** O que o TypeChecker pré-registra ao ver o import. */
   types: NativeType[];
+
+  /**
+   * Embutidos (`Result`/`Option`) que o boilerplate Go deste módulo referencia
+   * diretamente (ex: `req.param_int` devolve `Result`). O transpiler não sabe o
+   * que cada módulo faz por dentro do seu boilerplate — precisa que o módulo
+   * declare essa dependência para emitir a definição no cabeçalho, mesmo que o
+   * programa do usuário não use `Result`/`Option` em nenhum outro lugar.
+   */
+  usesBuiltins?: string[];
 
   /** Valores injetados no ambiente do interpretador quando o módulo é importado. */
   runtimeBinding: (interpreter: Interpreter) => Record<string, unknown>;

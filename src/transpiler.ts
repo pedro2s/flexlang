@@ -5,6 +5,7 @@ import type {
   EnumDeclaration,
   FunctionDeclaration,
   Parameter,
+  StructDeclaration,
 } from "./ast";
 import type { FlexType, TypeMap } from "./checker";
 import { builtinEnums, isBuiltinType, successVariant } from "./stdlib";
@@ -32,6 +33,11 @@ export class GoTranspiler {
   // Tabelas de declarações, preenchidas antes de emitir qualquer código.
   private enums = new Map<string, EnumDeclaration>();
   private structNames = new Set<string>();
+  // Declaração completa (não só o nome) de cada struct do usuário: o transpiler
+  // precisa saber a lista de campos para decidir, em um MemberExpr, se
+  // `expr.property` é um campo (capitalizado em Go, ver `goFieldName`) ou uma
+  // chamada de método (fica minúsculo) — só campos passam por `encoding/json`.
+  private structDecls = new Map<string, StructDeclaration>();
   private traitNames = new Set<string>();
 
   // Tipos embutidos (Result/Option) referenciados pelo programa: só esses são
@@ -58,6 +64,7 @@ export class GoTranspiler {
     this.importedModules.clear();
     this.enums.clear();
     this.structNames.clear();
+    this.structDecls.clear();
     this.traitNames.clear();
     this.usedBuiltins.clear();
     this.nativeTypes.clear();
@@ -82,6 +89,12 @@ export class GoTranspiler {
           for (const nativeType of mod?.types ?? []) {
             this.nativeTypes.set(nativeType.name, nativeType);
           }
+          // O módulo pode referenciar Result/Option direto no seu boilerplate Go
+          // (ex: net/http, RFC-004) sem que o programa do usuário os use em
+          // nenhum outro lugar — sem isso o cabeçalho não emitiria a definição.
+          for (const builtinName of mod?.usesBuiltins ?? []) {
+            this.markBuiltinUse(builtinName);
+          }
           break;
         }
         case "EnumDeclaration":
@@ -90,6 +103,7 @@ export class GoTranspiler {
           break;
         case "StructDeclaration":
           this.structNames.add(stmt.name);
+          this.structDecls.set(stmt.name, stmt);
           declarations.push(stmt);
           break;
         case "TraitDeclaration":
@@ -234,7 +248,12 @@ export class GoTranspiler {
         this.emitLine(`type ${this.goIdent(stmt.name)} struct {`);
         this.indent();
         for (const prop of stmt.properties) {
-          this.emitLine(`${this.goIdent(prop.name)} ${this.transpileType(prop.typeAnnotation)}`);
+          // Campo exportado (maiúsculo): sem isso, json.Marshal/Unmarshal do Go
+          // ignora silenciosamente o campo (reflection não enxerga não-exportado).
+          // A tag preserva o nome original no JSON, igual ao modo interpretado.
+          this.emitLine(
+            `${this.goFieldName(prop.name)} ${this.transpileType(prop.typeAnnotation)} \`json:"${prop.name}"\``,
+          );
         }
         this.dedent();
         this.emitLine(`}`);
@@ -545,14 +564,17 @@ export class GoTranspiler {
         if (expr.object.kind === "Identifier" && this.enums.has(expr.object.symbol)) {
           return this.variantValueName(expr.object.symbol, expr.property);
         }
-        return `${this.transpileExpr(expr.object)}.${this.goIdent(expr.property)}`;
+        return `${this.transpileExpr(expr.object)}.${this.goMemberName(expr.object, expr.property)}`;
 
       case "CallExpr":
         return this.transpileCall(expr);
 
       case "StructExpr": {
+        // Só structs do usuário (não tipos nativos como ServerConfig) usam campo
+        // exportado — ver `goFieldName`/StructDeclaration.
+        const isUserStruct = this.structNames.has(expr.structName);
         const props = expr.properties
-          .map((p) => `${this.goIdent(p.name)}: ${this.transpileExpr(p.value)}`)
+          .map((p) => `${isUserStruct ? this.goFieldName(p.name) : this.goIdent(p.name)}: ${this.transpileExpr(p.value)}`)
           .join(", ");
         return `&${this.goIdent(expr.structName)}{${props}}`;
       }
@@ -587,6 +609,20 @@ export class GoTranspiler {
         if (isStatic && member.property === "new") {
           const args = expr.args.map((a) => this.transpileExpr(a)).join(", ");
           return `New${member.object.symbol}(${args})`;
+        }
+      }
+
+      // `req.json()` -> `DecodeJSON[T](req)` (RFC-004): Go não tem método
+      // genérico, então o parâmetro de tipo que o checker resolveu para esta
+      // chamada (o `T` de `Result<T, String>`) vira o argumento de tipo de uma
+      // função livre. Sem tipo resolvido (contexto não anotado), decodifica em `any`.
+      if (member.property === "json" && expr.args.length === 0) {
+        const objType = this.types.get(member.object);
+        if (objType?.kind === "Struct" && objType.name === "Request") {
+          const resultType = this.types.get(expr);
+          const payload = resultType?.kind === "Enum" ? resultType.genericArgs[0] : undefined;
+          const goT = payload ? this.goType(payload) : "any";
+          return `DecodeJSON[${goT}](${this.transpileExpr(member.object)})`;
         }
       }
 
@@ -700,6 +736,9 @@ export class GoTranspiler {
           if (this.structNames.has(typeNode.name)) {
             return `*${this.goIdent(typeNode.name)}`; // structs FlexLang são sempre valores por referência
           }
+          if (this.nativeTypes.get(typeNode.name)?.goPointer) {
+            return `*${typeNode.name}`; // tipo nativo que precisa de semântica de referência (ex: Response)
+          }
           return typeNode.name; // tipo injetado pela stdlib (Request, Response, ...)
       }
     }
@@ -743,7 +782,9 @@ export class GoTranspiler {
         if (type.name === "Channel") {
           return `chan ${type.genericArgs[0] ? this.goType(type.genericArgs[0]) : "any"}`;
         }
-        return this.structNames.has(type.name) ? `*${this.goIdent(type.name)}` : type.name;
+        if (this.structNames.has(type.name)) return `*${this.goIdent(type.name)}`;
+        if (this.nativeTypes.get(type.name)?.goPointer) return `*${type.name}`;
+        return type.name;
     }
   }
 
@@ -804,6 +845,30 @@ export class GoTranspiler {
   /** Nome Go seguro para um identificador FlexLang (ver GO_RESERVED). */
   private goIdent(name: string): string {
     return GO_RESERVED.has(name) ? `flex_${name}` : name;
+  }
+
+  /** Primeira letra maiúscula: convenção Go para campo exportado. */
+  private goFieldName(name: string): string {
+    return name.length === 0 ? name : name[0]!.toUpperCase() + name.slice(1);
+  }
+
+  /**
+   * Nome Go de `objectExpr.property`: capitalizado SE `property` é um campo
+   * conhecido de um struct do usuário (ver `goFieldName`); do contrário
+   * (chamada de método, tipo nativo, tipo não resolvido) mantém minúsculo — é
+   * o mesmo `MemberExpr` que renderiza tanto o alvo de uma chamada de método
+   * (`self.speak()`) quanto uma leitura de campo (`self.name`), e só o segundo
+   * caso passa por `encoding/json` no Go.
+   */
+  private goMemberName(objectExpr: Expr, property: string): string {
+    const objType = this.types.get(objectExpr);
+    if (objType?.kind === "Struct") {
+      const decl = this.structDecls.get(objType.name);
+      if (decl?.properties.some((p) => p.name === property)) {
+        return this.goFieldName(property);
+      }
+    }
+    return this.goIdent(property);
   }
 
   // =========== PRECEDÊNCIA ===========
