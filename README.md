@@ -1,11 +1,13 @@
 <div align="center">
-  <h1>🚀 FlexLang</h1>
+  <img src="https://raw.githubusercontent.com/pedro2s/flexlang/main/assets/octans-logo.svg" alt="FlexLang" width="120" height="120" />
+
+  <h1>FlexLang</h1>
   <p><strong>A linguagem definitiva para Backends Escaláveis, Seguros e Altamente Performáticos.</strong></p>
   <p>
     <i>Sintaxe limpa. Semântica rigorosa. Zero Data Races. Compilação nativa Go.</i>
   </p>
   <p>
-    <img src="https://img.shields.io/badge/status-v1.0--preview-blue?style=flat-square" alt="Status" />
+    <img src="https://img.shields.io/npm/v/%40flexlang%2Fcli?style=flat-square&label=npm&color=blue" alt="npm version" />
     <img src="https://img.shields.io/badge/tests-27%2F27%20passing-brightgreen?style=flat-square" alt="Tests" />
     <img src="https://img.shields.io/badge/target-Go%20%7C%20Node.js-informational?style=flat-square" alt="Targets" />
     <img src="https://img.shields.io/badge/license-ISC-green?style=flat-square" alt="License" />
@@ -34,29 +36,39 @@ Esqueça o *Callback Hell* ou funções "coloridas" (`async/await`). Na FlexLang
 
 ## 🚀 Guia de Início Rápido
 
-### Instalação & Dependências
+### Instalação
 
-Clone o repositório e instale as dependências de desenvolvimento:
+```bash
+npm install -g @flexlang/cli
+```
+
+Ou use via `npx`, sem instalar nada globalmente:
+
+```bash
+npx @flexlang/cli run caminho/para/arquivo.flex
+```
+
+### Comandos da CLI (`flex`)
+
+```bash
+# 1. Executar no modo interpretado (desenvolvimento / REPL ágil)
+flex run caminho/para/arquivo.flex
+
+# 2. Compilar para binário nativo executável (produção via Go)
+flex build caminho/para/arquivo.flex
+
+# 3. Executar o binário gerado
+./arquivo
+```
+
+### Contribuindo (build a partir do código-fonte)
 
 ```bash
 git clone https://github.com/pedro2s/flexlang.git
 cd flexlang
 npm install
-```
-
-### Comandos da CLI (`flex`)
-
-A FlexLang inclui uma interface de linha de comando completa:
-
-```bash
-# 1. Executar no modo interpretado (desenvolvimento / REPL ágil)
-./src/cli.ts run caminho/para/arquivo.flex
-
-# 2. Compilar para binário nativo executável (produção via Go)
-./src/cli.ts build caminho/para/arquivo.flex
-
-# 3. Executar o binário gerado
-./arquivo
+npm run build          # gera dist/cli.js
+node dist/cli.js run caminho/para/arquivo.flex
 ```
 
 ---
@@ -241,6 +253,11 @@ npm run test:db
 - 📖 **[RFC-004: net/http v1](./.docs/v1/rfcs/rfc-004-http-stdlib-v1.md)** — Superfície de produção para servidores web.
 - 📖 **[RFC-005: db/postgres](./.docs/v1/rfcs/rfc-005-postgres-native-module.md)** — Driver de banco de dados nativo com pool e transações.
 - 📖 **[RFC-006: Local Module System](./.docs/v1/rfcs/rfc-006-local-module-system.md)** — Resolução e compilação de módulos locais multi-arquivo.
+- 📖 **[RFC-007: CLI Toolchain v1](./.docs/v1/rfcs/rfc-007-cli-toolchain-v1.md)** — `flex init`, `flex test` e o hardening de `flex build`.
+- 📖 **[RFC-008: Observabilidade e Prontidão Operacional](./.docs/v1/rfcs/rfc-008-observability-and-ops-readiness.md)** — Logs estruturados, graceful shutdown e health check.
+- 📖 **[RFC-009: Baseline de Segurança](./.docs/v1/rfcs/rfc-009-security-baseline.md)** — Defaults seguros para produção.
+- 📖 **[RFC-010: CI/CD e Publicação npm](./.docs/v1/rfcs/rfc-010-release-cicd-npm-publish.md)** — Pipeline de release, versionamento e codinomes.
+- 📖 **[Plano de Release](./.docs/v1/release_plan.md)** — Versionamento, codinomes de astronomia e o processo de corte de release.
 
 ---
 
