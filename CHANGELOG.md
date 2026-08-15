@@ -6,7 +6,7 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e o
 
 ## [Não lançado]
 
-## [0.1.0] - AAAA-MM-DD
+## [0.1.0] - 2026-08-14
 
 Primeira versão pública do FlexLang. Implementa as RFCs 001–009 (ver [`.docs/v1/rfcs/`](.docs/v1/rfcs/)): paridade completa entre o modo interpretado e o transpiler Go, `Result`/`Option` nativos, módulos nativos (`net/http`, `db/postgres`), sistema de módulos locais, CLI (`flex init`/`run`/`build`/`test`), e a baseline de observabilidade e segurança para produção.
 
