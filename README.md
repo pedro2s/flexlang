@@ -8,7 +8,7 @@
   </p>
   <p>
     <img src="https://img.shields.io/npm/v/%40flexlang%2Fcli?style=flat-square&label=npm&color=blue" alt="npm version" />
-    <img src="https://img.shields.io/badge/tests-27%2F27%20passing-brightgreen?style=flat-square" alt="Tests" />
+    <img src="https://img.shields.io/github/actions/workflow/status/pedro2s/flexlang/ci.yml?branch=main&style=flat-square&label=tests" alt="Tests" />
     <img src="https://img.shields.io/badge/target-Go%20%7C%20Node.js-informational?style=flat-square" alt="Targets" />
     <img src="https://img.shields.io/badge/license-ISC-green?style=flat-square" alt="License" />
   </p>
@@ -51,15 +51,22 @@ npx @flexlang/cli run caminho/para/arquivo.flex
 ### Comandos da CLI (`flex`)
 
 ```bash
-# 1. Executar no modo interpretado (desenvolvimento / REPL ágil)
-flex run caminho/para/arquivo.flex
+# 1. Criar um novo projeto (gera flex.toml, src/main.flex e um teste de exemplo já passando)
+flex init meu-projeto
+cd meu-projeto
 
-# 2. Compilar para binário nativo executável (produção via Go)
-flex build caminho/para/arquivo.flex
+# 2. Executar no modo interpretado (desenvolvimento ágil; resolve imports locais automaticamente)
+flex run src/main.flex
 
-# 3. Executar o binário gerado
-./arquivo
+# 3. Rodar os testes do projeto (busca *_test.flex recursivamente; gera o .out na primeira vez)
+flex test
+
+# 4. Compilar para binário nativo via Go (saída em ./build/<nome>.go e ./build/<nome>)
+flex build src/main.flex
+./build/main
 ```
+
+> `flex init` grava um `flex.toml` com nome, versão e o caminho de entrada (`entry`) do projeto — hoje isso é só metadado: nenhum comando (`run`/`test`/`build`) lê esse campo ainda, então o caminho do arquivo precisa ser sempre informado explicitamente.
 
 ### Contribuindo (build a partir do código-fonte)
 
@@ -69,6 +76,15 @@ cd flexlang
 npm install
 npm run build          # gera dist/cli.js
 node dist/cli.js run caminho/para/arquivo.flex
+```
+
+A suíte que valida o **compilador em si** — diferente do `flex test` acima, que valida o *seu* projeto — roda via scripts deste repositório:
+
+```bash
+npm test              # suíte golden-file interna (tests/)
+npm run test:parity   # paridade Node (interpretado) vs. Go (compilado) — RFC-001
+npm run test:http     # integração HTTP real
+npm run test:db       # integração PostgreSQL real
 ```
 
 ---
@@ -81,6 +97,7 @@ Suba uma API REST robusta com suporte nativo a rotas dinâmicas, parsing tipado 
 
 ```flexlang
 import { Server, Request, Response } from "net/http";
+import { log } from "core/log";
 
 struct CreateUserDTO {
     name: String,
@@ -90,9 +107,11 @@ struct CreateUserDTO {
 func handle_create_user(req: Request, mut res: Response) {
     match req.json() {
         Result.Ok(dto) => {
+            log.info("user created", { name: dto.name, role: dto.role });
             res.status(201).json(dto);
         },
         Result.Err(msg) => {
+            log.error("invalid payload", { reason: msg });
             res.error(400, "Corpo JSON invalido");
         }
     }
@@ -101,9 +120,18 @@ func handle_create_user(req: Request, mut res: Response) {
 let mut server = Server.new(":8080");
 server.route("/users", handle_create_user);
 
+// Roda antes do processo encerrar (SIGINT/SIGTERM tratados automaticamente)
+server.on_shutdown(|| {
+    log.info("server shutting down", { status: "graceful" });
+});
+
 print("🚀 Servidor online em http://localhost:8080");
 server.start();
 ```
+
+- **`GET /healthz`** já vem registrado por padrão, sem nenhum código adicional — pronto para o health check de qualquer orquestrador (Kubernetes, systemd).
+- Um panic dentro de um handler (ex: acesso a índice fora do array) é **recuperado por request** — derruba só aquela resposta com `500`, nunca o processo inteiro.
+- `log.info`/`log.error` emitem uma linha JSON estruturada por evento, com **mascaramento automático** de campos sensíveis (`password`, `token`, `secret`, `authorization`, `api_key`).
 
 ---
 
@@ -224,23 +252,18 @@ O diretório [**`examples/`**](./examples/) contém exemplos práticos prontos p
 
 ---
 
-## 🧪 Suíte de Testes & Paridade
+## 🧪 Testando seu Projeto FlexLang
 
-O ecossistema FlexLang conta com uma suíte de testes de validação contínua e garantia de paridade entre os runtimes interpretado (Node.js) e compilado (Go):
+Todo projeto criado com `flex init` já nasce com um teste rodando (`tests/health_test.flex` + `tests/health_test.out`). O `flex test` segue a convenção **golden-file**: qualquer arquivo `*_test.flex` é executado e sua saída é comparada com um `.out` de mesmo nome.
 
 ```bash
-# Executar suíte de testes golden
-npm test
-
-# Executar suíte de testes de paridade (Node.js vs Go compilado)
-npm run test:parity
-
-# Executar testes de integração HTTP real
-npm run test:http
-
-# Executar testes de integração PostgreSQL real
-npm run test:db
+flex test                          # roda todo *_test.flex a partir do diretório atual
+flex test tests/                   # limita a busca a um diretório
+flex test tests/health_test.flex   # roda um arquivo específico
 ```
+
+- Se o `.out` correspondente ainda não existir, `flex test` **gera ele automaticamente** na primeira execução (marcado como `[GENERATED]`) — a saída vira a expectativa a partir dali.
+- O comando sai com código de erro (`exit 1`) se qualquer teste falhar — pronto para usar como gate de CI no seu próprio projeto.
 
 ---
 
