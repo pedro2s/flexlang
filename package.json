@@ -1,6 +1,6 @@
 {
   "name": "@flexlang/cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A linguagem definitiva para Backends Escaláveis, Seguros e Altamente Performáticos.",
   "main": "index.js",
   "bin": {
