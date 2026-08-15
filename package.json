@@ -1,12 +1,26 @@
 {
-  "name": "flexlang",
-  "version": "1.0.0",
+  "name": "@flexlang/cli",
+  "version": "0.1.0",
   "description": "A linguagem definitiva para Backends Escaláveis, Seguros e Altamente Performáticos.",
   "main": "index.js",
   "bin": {
-    "flex": "./src/cli.ts"
+    "flex": "./dist/cli.js"
   },
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pedro2s/flexlang.git"
+  },
+  "bugs": {
+    "url": "https://github.com/pedro2s/flexlang/issues"
+  },
+  "homepage": "https://github.com/pedro2s/flexlang#readme",
   "scripts": {
+    "build": "tsup src/cli.ts --format esm --target node22 --clean --shims",
+    "prepublishOnly": "npm run build",
+    "start": "tsx src/index.ts",
     "test": "npx tsx tests/runner.ts",
     "test:parity": "npx tsx tests/parity_runner.ts",
     "test:http": "npx tsx tests/http_integration.ts",
@@ -26,6 +40,7 @@
     "@types/node": "^26.2.0",
     "@types/pg": "^8.21.0",
     "ts-node": "^10.9.2",
+    "tsup": "^8.5.1",
     "tsx": "^4.23.12",
     "typescript": "^7.0.2"
   },

@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_call: {} # permite que release.yml reuse este gate antes de publicar
 
 jobs:
   test:

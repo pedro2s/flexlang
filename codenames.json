@@ -1,0 +1,4 @@
+{
+  "_comment": "Mapeamento MAJOR.MINOR -> codinome. Editado manualmente por quem corta a release. Ver .docs/v1/release_plan.md, Secao 1.1. Sem entrada aqui = sem codinome no titulo da release (esperado para toda a trilha 0.x).",
+  "1.0": "Orion"
+}

@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write # criar a GitHub Release
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # histórico completo: necessário p/ contribuidores e changelog
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Verifica que a tag bate com package.json
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag v$TAG_VERSION não bate com package.json ($PKG_VERSION). Rode 'npm version' antes de taguear (ver .docs/v1/release_plan.md, Seção 5)."
+            exit 1
+          fi
+
+      - run: npm run build
+
+      - name: Publica @flexlang/cli no npm
+        run: |
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            # tag de pré-release (ex: v0.1.0-rc.1) não vira 'latest'
+            npm publish --access public --tag rc
+          else
+            npm publish --access public
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Gera as notas de release (estilo Bun)
+        id: notes
+        run: node scripts/generate-release-notes.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cria a GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.notes.outputs.title }}
+          body_path: release-notes.md
+          prerelease: ${{ contains(github.ref_name, '-') }}
