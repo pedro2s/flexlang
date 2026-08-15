@@ -262,5 +262,7 @@ npm run test:db
 ---
 
 <div align="center">
+  <img src="https://raw.githubusercontent.com/pedro2s/flexlang/main/assets/octans-mascot.jpeg" alt="Octans, o mascote da FlexLang" width="420" />
+  <p><strong>Octans</strong> — o mascote da FlexLang, batizado em homenagem à constelação austral que também inspira o esquema de codinomes de versão.</p>
   <p><i>"Faça simples, faça robusto. Construa com FlexLang."</i></p>
 </div>
