@@ -3,6 +3,7 @@ import { builtinEnums, isBuiltinType, isSuccessVariant } from "./stdlib";
 import { registry } from "./modules/registry";
 import { NATIVE_TAG, isNativeObject, modulePath, nativeMethod } from "./modules/types";
 import { type ModuleGraph, isLocalModule } from "./loader";
+import { TypeChecker, type TypeMap } from "./checker";
 
 class Environment {
   private variables: Map<string, any> = new Map();
@@ -86,15 +87,31 @@ class FlexChannel {
 export class Interpreter {
   // Ambiente para armazenar variáveis na memória
   private globalEnv = new Environment();
+  private types: TypeMap = new Map();
 
-  constructor(private stdout: (msg: string) => void = console.log) {
+  constructor(
+    private stdout: (msg: string) => void = console.log,
+    types?: TypeMap,
+  ) {
+    if (types) this.types = types;
     // Result e Option existem em todo programa, sem declaração (RFC-002).
     for (const builtin of builtinEnums()) {
       this.globalEnv.define(builtin.name, builtin);
     }
   }
 
-  public async run(program: Stmt[] | ModuleGraph) {
+  public async run(program: Stmt[] | ModuleGraph, types?: TypeMap) {
+    if (types) {
+      this.types = types;
+    } else if (this.types.size === 0) {
+      try {
+        const checker = new TypeChecker();
+        this.types = checker.check(program);
+      } catch {
+        // Se a checagem estática falhar, prossegue sem type map
+      }
+    }
+
     if (Array.isArray(program)) {
       for (const stmt of program) {
         await this.evaluateStmt(stmt, this.globalEnv);
@@ -267,7 +284,7 @@ export class Interpreter {
         break;
       case "PrintStmt":
         const output = await this.evaluateExpr(stmt.value, env);
-        this.stdout(String(output));
+        this.stdout(this.formatOutput(output));
         break;
       case "BlockStmt":
         // Cria um NOVO escopo isolado que herda do ambiente pai
@@ -417,6 +434,17 @@ export class Interpreter {
               }
           }
           
+          // Suporte a métodos de conversão em números primitivos (Float/Int)
+          if (typeof objectInstanceCall === "number") {
+              if (expr.caller.property === "to_float") {
+                  return objectInstanceCall;
+              }
+              if (expr.caller.property === "to_int") {
+                  return Math.trunc(objectInstanceCall);
+              }
+              throw new Error(`TypeError: Method '${expr.caller.property}' not found on number`);
+          }
+
           // Se for Enum, repassa para a lógica geral de Call abaixo que captura __isEnumConstructor
           if (typeof objectInstanceCall === "object" && objectInstanceCall !== null && objectInstanceCall.kind === "EnumDeclaration") {
               // Pula o bloco if de método.
@@ -501,7 +529,7 @@ export class Interpreter {
             if (typeof p === "string") {
                 parts.push(p);
             } else {
-                parts.push(String(await this.evaluateExpr(p, env)));
+                parts.push(this.formatOutput(await this.evaluateExpr(p, env)));
             }
         }
         return parts.join("");
@@ -572,9 +600,21 @@ export class Interpreter {
             return left - right;
           case "*":
             return left * right;
-          case "/":
+          case "/": {
+            const exprType = this.types.get(expr);
+            const isIntDivision = exprType ? exprType.kind === "Int" : (Number.isInteger(left) && Number.isInteger(right));
+            if (isIntDivision) {
+              if (right === 0) {
+                throw new Error("RuntimeError: division by zero");
+              }
+              return Math.trunc(left / right);
+            }
             return left / right;
+          }
           case "%":
+            if (right === 0) {
+              throw new Error("RuntimeError: division by zero");
+            }
             return left % right;
           case "==":
             return left === right;
@@ -606,5 +646,13 @@ export class Interpreter {
       default:
         throw new Error(`Expression not implemented in the interpreter`);
     }
+  }
+
+  private formatOutput(val: any): string {
+    if (val === Infinity) return "+Inf";
+    if (val === -Infinity) return "-Inf";
+    if (typeof val === "number" && isNaN(val)) return "NaN";
+    if (Object.is(val, -0)) return "0";
+    return String(val);
   }
 }

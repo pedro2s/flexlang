@@ -289,6 +289,7 @@ export interface BinaryExpr {
 export interface NumericLiteral {
   kind: "NumericLiteral";
   value: number;
+  isFloat?: boolean;
 }
 
 export interface StringLiteral {

@@ -1,6 +1,6 @@
 # RFC-013: Tipo `Float` e Paridade Aritmética
 
-> **Status:** Draft · **Prioridade:** P0 — bloqueante · **Depende de:** nada
+> **Status:** Implementado · **Prioridade:** P0 — bloqueante · **Depende de:** nada
 > **Toca:** `src/lexer.ts`, `src/ast.ts`, `src/parser.ts`, `src/checker.ts`, `src/interpreter.ts`, `src/transpiler.ts`
 > **Corrige:** violação da promessa de paridade do ADR-001/RFC-001
 
@@ -141,12 +141,12 @@ A ausência de teste foi a causa raiz. A cobertura nova é a entrega mais import
 
 ## Critério de aceite
 
-- [ ] `Float` existe como tipo, com literais e anotação (`let preco: Float = 19.90`).
-- [ ] `7 / 2` produz `3` nos **dois** modos.
-- [ ] Literais numéricos se adaptam ao contexto; variáveis de tipos diferentes não.
-- [ ] `%` com `Float` é erro de compilação, não Go inválido.
-- [ ] Divisão inteira por zero falha nos dois modos.
-- [ ] Toda a bateria do §5 no parity gate, verde.
+- [x] `Float` existe como tipo, com literais e anotação (`let preco: Float = 19.90`).
+- [x] `7 / 2` produz `3` nos **dois** modos.
+- [x] Literais numéricos se adaptam ao contexto; variáveis de tipos diferentes não.
+- [x] `%` com `Float` é erro de compilação, não Go inválido.
+- [x] Divisão inteira por zero falha nos dois modos.
+- [x] Toda a bateria do §5 no parity gate, verde.
 
 ## Alternativas consideradas
 

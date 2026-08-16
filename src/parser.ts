@@ -643,7 +643,11 @@ export class Parser {
 
     if (token.type === TokenType.Number) {
       this.consume(TokenType.Number);
-      return { kind: "NumericLiteral", value: parseFloat(token.value) };
+      return {
+        kind: "NumericLiteral",
+        value: parseFloat(token.value),
+        isFloat: token.value.includes("."),
+      };
     } else if (token.type === TokenType.String) {
       this.consume(TokenType.String);
       const content = token.value.slice(1, -1);

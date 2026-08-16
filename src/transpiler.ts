@@ -278,9 +278,18 @@ export class GoTranspiler {
 
       case "VarDeclaration": {
         // Como o TypeChecker já validou a mutabilidade, no Go será apenas uma variável comum
-        // Usamos a inferência nativa do Go :=
-        const value = this.transpileExpr(stmt.value);
-        this.emitLine(`${this.goIdent(stmt.name)} := ${value}`);
+        // Usamos a inferência nativa do Go := ou var quando necessário para float
+        const declaredType = stmt.typeAnnotation ? this.transpileType(stmt.typeAnnotation) : undefined;
+        const resolvedType = this.types.get(stmt.value);
+        const isFloatContext = declaredType === "float64" || resolvedType?.kind === "Float";
+
+        if (isFloatContext && stmt.value.kind === "NumericLiteral" && !stmt.value.isFloat) {
+          const value = this.transpileExpr(stmt.value);
+          this.emitLine(`var ${this.goIdent(stmt.name)} float64 = ${value}`);
+        } else {
+          const value = this.transpileExpr(stmt.value);
+          this.emitLine(`${this.goIdent(stmt.name)} := ${value}`);
+        }
         this.emitDiscardIfUnused(stmt.name, rest);
         break;
       }
@@ -598,8 +607,13 @@ export class GoTranspiler {
 
   private transpileExpr(expr: Expr): string {
     switch (expr.kind) {
-      case "NumericLiteral":
+      case "NumericLiteral": {
+        if (expr.isFloat) {
+          const str = String(expr.value);
+          return str.includes(".") || str.includes("e") || str.includes("E") ? str : `${str}.0`;
+        }
         return String(expr.value);
+      }
       case "BooleanLiteral":
         return expr.value ? "true" : "false";
       case "StringLiteral":
@@ -684,6 +698,14 @@ export class GoTranspiler {
   private transpileCall(expr: Extract<Expr, { kind: "CallExpr" }>): string {
     if (expr.caller.kind === "MemberExpr") {
       const member = expr.caller;
+
+      // Conversões numéricas explícitas: to_float() -> float64(...) e to_int() -> int(...)
+      if (member.property === "to_float") {
+        return `float64(${this.transpileExpr(member.object)})`;
+      }
+      if (member.property === "to_int") {
+        return `int(${this.transpileExpr(member.object)})`;
+      }
 
       // Construtor de variante de enum: Status.Sucesso("msg") -> Status_Sucesso_new("msg")
       if (member.object.kind === "Identifier" && this.enums.has(member.object.symbol)) {
@@ -833,6 +855,8 @@ export class GoTranspiler {
       switch (typeNode.name) {
         case "Int":
           return "int";
+        case "Float":
+          return "float64";
         case "String":
           return "string";
         case "Bool":
@@ -878,6 +902,8 @@ export class GoTranspiler {
     switch (type.kind) {
       case "Int":
         return "int";
+      case "Float":
+        return "float64";
       case "String":
         return "string";
       case "Bool":

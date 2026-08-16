@@ -26,6 +26,7 @@ import {
 // --- Representação Interna de Tipos do TypeChecker ---
 export type FlexType =
   | { kind: "Int" }
+  | { kind: "Float" }
   | { kind: "String" }
   | { kind: "Bool" }
   | { kind: "Array"; elementType: FlexType }
@@ -500,7 +501,10 @@ export class TypeChecker {
   private inferExpr(expr: Expr, env: TypeEnvironment, expected?: FlexType): FlexType {
     switch (expr.kind) {
       case "NumericLiteral":
-        return { kind: "Int" };
+        if (expected?.kind === "Float") {
+          return { kind: "Float" };
+        }
+        return expr.isFloat ? { kind: "Float" } : { kind: "Int" };
       case "BooleanLiteral":
         return { kind: "Bool" };
       case "StringLiteral":
@@ -529,19 +533,55 @@ export class TypeChecker {
         throw new Error(`ReferenceError: Identifier '${expr.symbol}' not found`);
 
       case "BinaryExpr":
-        const leftType = this.checkExpr(expr.left, env);
-        const rightType = this.checkExpr(expr.right, env);
+        let leftType = this.checkExpr(expr.left, env, expected);
+        let rightType = this.checkExpr(expr.right, env, expected);
         
-        // Verificaçôes simplificadas de relacional e igualdade
+        // Promoção de literais numéricos untyped (RFC-013 §4.3)
+        if (leftType.kind === "Float" && rightType.kind === "Int") {
+          if (expr.right.kind === "NumericLiteral" || (expr.right.kind === "UnaryExpr" && expr.right.argument.kind === "NumericLiteral")) {
+            rightType = { kind: "Float" };
+            this.typeMap.set(expr.right, rightType);
+          }
+        } else if (leftType.kind === "Int" && rightType.kind === "Float") {
+          if (expr.left.kind === "NumericLiteral" || (expr.left.kind === "UnaryExpr" && expr.left.argument.kind === "NumericLiteral")) {
+            leftType = { kind: "Float" };
+            this.typeMap.set(expr.left, leftType);
+          }
+        }
+
+        // Operador módulo (%) só aceita Int (RFC-013 §4.6)
+        if (expr.operator === "%") {
+          if (leftType.kind === "Float" || rightType.kind === "Float") {
+            throw new Error(`TypeError: Operator % is not supported for Float. Use to_int()`);
+          }
+          if ((leftType.kind !== "Int" && leftType.kind !== "Any") || (rightType.kind !== "Int" && rightType.kind !== "Any")) {
+            throw new Error(`TypeError: Operator % requires Ints, got ${this.typeToString(leftType)} and ${this.typeToString(rightType)}`);
+          }
+          return { kind: "Int" };
+        }
+
+        // Comparações relacionais e de igualdade
         if (["==", "!=", "<", "<=", ">", ">="].includes(expr.operator)) {
-            return { kind: "Bool" };
+          if ((leftType.kind === "Float" && rightType.kind === "Int") || (leftType.kind === "Int" && rightType.kind === "Float")) {
+            throw new Error(`TypeError: Operator ${expr.operator} requires operands of the same type (${this.typeToString(leftType)} and ${this.typeToString(rightType)})`);
+          }
+          return { kind: "Bool" };
         }
         
-        // Matemático
-        if ((leftType.kind !== "Int" && leftType.kind !== "Any") || (rightType.kind !== "Int" && rightType.kind !== "Any")) {
-          throw new Error(`TypeError: Operator ${expr.operator} requires Ints, got ${this.typeToString(leftType)} and ${this.typeToString(rightType)}`);
+        // Operadores matemáticos (+, -, *, /)
+        if (leftType.kind === "Float" && rightType.kind === "Float") {
+          return { kind: "Float" };
         }
-        return { kind: "Int" };
+        if (leftType.kind === "Int" && rightType.kind === "Int") {
+          return { kind: "Int" };
+        }
+        if (leftType.kind === "Any") {
+          return rightType.kind === "Float" ? { kind: "Float" } : (rightType.kind === "Int" ? { kind: "Int" } : { kind: "Any" });
+        }
+        if (rightType.kind === "Any") {
+          return leftType.kind === "Float" ? { kind: "Float" } : (leftType.kind === "Int" ? { kind: "Int" } : { kind: "Any" });
+        }
+        throw new Error(`TypeError: Operator ${expr.operator} requires operands of the same type (${this.typeToString(leftType)} and ${this.typeToString(rightType)})`);
 
       case "LogicalExpr":
         this.checkExpr(expr.left, env);
@@ -549,12 +589,14 @@ export class TypeChecker {
         return { kind: "Bool" };
 
       case "UnaryExpr":
-        const uType = this.checkExpr(expr.argument, env);
+        const uType = this.checkExpr(expr.argument, env, expected);
         if (expr.operator === "!" && uType.kind !== "Bool") {
            throw new Error(`TypeError: ! operator requires Bool`);
         }
-        if (expr.operator === "-" && uType.kind !== "Int") {
-           throw new Error(`TypeError: - operator requires Int`);
+        if (expr.operator === "-") {
+           if (uType.kind !== "Int" && uType.kind !== "Float" && uType.kind !== "Any") {
+             throw new Error(`TypeError: - operator requires Int or Float`);
+           }
         }
         return uType;
 
@@ -723,6 +765,28 @@ export class TypeChecker {
             }
 
             const callerType = this.checkExpr(expr.caller.object, env);
+            if (callerType.kind === "Int") {
+                if (expr.caller.property === "to_float") {
+                    if (expr.args.length !== 0) throw new Error("TypeError: to_float expects 0 arguments");
+                    return { kind: "Float" };
+                }
+                if (expr.caller.property === "to_int") {
+                    if (expr.args.length !== 0) throw new Error("TypeError: to_int expects 0 arguments");
+                    return { kind: "Int" };
+                }
+                throw new Error(`TypeError: Method '${expr.caller.property}' not found on type Int`);
+            }
+            if (callerType.kind === "Float") {
+                if (expr.caller.property === "to_int") {
+                    if (expr.args.length !== 0) throw new Error("TypeError: to_int expects 0 arguments");
+                    return { kind: "Int" };
+                }
+                if (expr.caller.property === "to_float") {
+                    if (expr.args.length !== 0) throw new Error("TypeError: to_float expects 0 arguments");
+                    return { kind: "Float" };
+                }
+                throw new Error(`TypeError: Method '${expr.caller.property}' not found on type Float`);
+            }
             if (callerType.kind === "Struct" && callerType.name === "Channel") {
                 if (expr.caller.property === "send") {
                     if (expr.args.length !== 1) throw new Error("TypeError: Channel.send expects exactly 1 argument");
@@ -845,6 +909,7 @@ export class TypeChecker {
         const bound = subst?.get(node.name);
         if (bound) return bound;
         if (node.name === "Int") return { kind: "Int" };
+        if (node.name === "Float") return { kind: "Float" };
         if (node.name === "String") return { kind: "String" };
         if (node.name === "Bool") return { kind: "Bool" };
         if (this.enums.has(node.name)) return { kind: "Enum", name: node.name, genericArgs: [] };
@@ -977,6 +1042,7 @@ export class TypeChecker {
   private typeToString(type: FlexType): string {
     switch (type.kind) {
       case "Int": return "Int";
+      case "Float": return "Float";
       case "String": return "String";
       case "Bool": return "Bool";
       case "Any": return "Any";
