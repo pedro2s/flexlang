@@ -8,6 +8,7 @@ import { TypeChecker } from "./checker";
 import { Interpreter } from "./interpreter";
 import { GoTranspiler } from "./transpiler";
 import { FlexError, formatDiagnostic } from "./diagnostics";
+import { FileWatcher } from "./watcher";
 
 // Versão atual do compilador FlexLang
 const FLEX_VERSION = "0.2.0";
@@ -16,10 +17,11 @@ function printUsage() {
     console.log(`🚀 FlexLang CLI
 
 Usage:
-  flex init <name>        - Creates a new FlexLang project
-  flex run <file.flex>    - Interprets and runs the file locally via Node.js
-  flex build <file.flex>  - Transpiles to Go and compiles to a native binary
-  flex test [path]        - Runs golden file tests (matches *_test.flex)
+  flex init <name>               - Creates a new FlexLang project
+  flex run [file.flex]           - Interprets and runs the file (or entry from flex.toml)
+  flex run --watch [file.flex]   - Runs in watch mode, reloading on any file changes
+  flex build [file.flex]         - Transpiles to Go and compiles to a native binary
+  flex test [path]               - Runs golden file tests (matches *_test.flex)
 `);
 }
 
@@ -80,7 +82,48 @@ main();
     console.log(`\nNext steps:`);
     console.log(`  cd ${projectName}`);
     console.log(`  flex test`);
-    console.log(`  flex run src/main.flex`);
+    console.log(`  flex run`);
+}
+
+/**
+ * Resolve o caminho de entrada:
+ * 1. Argumento explícito (se fornecido)
+ * 2. Campo `entry` do `flex.toml` (do diretório atual ou ancestrais)
+ * 3. Erro solicitando um dos dois
+ */
+export function resolveEntryPath(argPath?: string, cwd: string = process.cwd()): string {
+    if (argPath) {
+        const resolved = path.resolve(cwd, argPath);
+        if (!fs.existsSync(resolved)) {
+            console.error(`Error: File '${argPath}' not found.`);
+            process.exit(1);
+        }
+        return resolved;
+    }
+
+    let dir = path.resolve(cwd);
+    const root = path.parse(dir).root;
+    while (true) {
+        const tomlPath = path.join(dir, "flex.toml");
+        if (fs.existsSync(tomlPath)) {
+            const content = fs.readFileSync(tomlPath, "utf-8");
+            const match = content.match(/entry\s*=\s*"([^"]+)"/);
+            if (match) {
+                const entryRel = match[1];
+                const entryResolved = path.resolve(dir, entryRel);
+                if (!fs.existsSync(entryResolved)) {
+                    console.error(`Error: Entry file '${entryRel}' defined in '${tomlPath}' not found.`);
+                    process.exit(1);
+                }
+                return entryResolved;
+            }
+        }
+        if (dir === root) break;
+        dir = path.dirname(dir);
+    }
+
+    console.error("Error: Missing file path and no 'flex.toml' with 'entry' found. Usage: flex run [flags] [file.flex]");
+    process.exit(1);
 }
 
 /**
@@ -121,14 +164,24 @@ function compareVersions(a: string, b: string): number {
     return 0;
 }
 
-async function runRun(filePath: string) {
-    if (!filePath) {
-        console.error("Error: Missing file path. Usage: flex run <file.flex>");
-        process.exit(1);
+async function runRun(args: string[]) {
+    let isWatch = false;
+    let explicitPath: string | undefined = undefined;
+
+    for (const arg of args) {
+        if (arg === "--watch" || arg === "-w") {
+            isWatch = true;
+        } else if (!arg.startsWith("-")) {
+            explicitPath = arg;
+        }
     }
-    if (!fs.existsSync(filePath)) {
-        console.error(`Error: File '${filePath}' not found.`);
-        process.exit(1);
+
+    const filePath = resolveEntryPath(explicitPath);
+
+    if (isWatch) {
+        const watcher = new FileWatcher(filePath);
+        await watcher.start();
+        return;
     }
 
     checkFlexVersion(filePath);
@@ -142,15 +195,15 @@ async function runRun(filePath: string) {
     await interpreter.run(graph);
 }
 
-async function runBuild(filePath: string) {
-    if (!filePath) {
-        console.error("Error: Missing file path. Usage: flex build <file.flex>");
-        process.exit(1);
+async function runBuild(args: string[]) {
+    let explicitPath: string | undefined = undefined;
+    for (const arg of args) {
+        if (!arg.startsWith("-")) {
+            explicitPath = arg;
+        }
     }
-    if (!fs.existsSync(filePath)) {
-        console.error(`Error: File '${filePath}' not found.`);
-        process.exit(1);
-    }
+
+    const filePath = resolveEntryPath(explicitPath);
 
     checkFlexVersion(filePath);
 
@@ -298,15 +351,16 @@ async function main() {
     }
     
     const command = args[0];
+    const restArgs = args.slice(1);
     
     if (command === "init") {
-        await runInit(args[1]);
+        await runInit(restArgs[0]);
     } else if (command === "run") {
-        await runRun(args[1]);
+        await runRun(restArgs);
     } else if (command === "build") {
-        await runBuild(args[1]);
+        await runBuild(restArgs);
     } else if (command === "test") {
-        await runTest(args[1]);
+        await runTest(restArgs[0]);
     } else {
         console.error(`Unknown command: ${command}`);
         printUsage();

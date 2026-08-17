@@ -1,6 +1,6 @@
 # RFC-012: `flex run --watch` e Entrada de Projeto
 
-> **Status:** Draft · **Prioridade:** P0 — bloqueante · **Depende de:** nada
+> **Status:** Implementado · **Prioridade:** P0 — bloqueante · **Depende de:** nada
 > **Toca:** `src/cli.ts`, e um `src/watcher.ts` novo
 
 ## Resumo
