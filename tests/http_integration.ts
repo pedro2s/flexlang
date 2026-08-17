@@ -153,6 +153,86 @@ async function runScenarios(base: string): Promise<void> {
   }
 
   {
+    // 1. Middleware não-bloqueante injeta header de resposta
+    const res = await fetch(`${base}/users/42`);
+    const mwHeader = res.headers.get("x-global-mw");
+    check("Middleware não-bloqueante adiciona header de resposta", mwHeader === "active", mwHeader ?? "null");
+  }
+
+  {
+    // 2. Middleware bloqueante responde 403 e encerra cadeia
+    const res = await fetch(`${base}/users/42`, { headers: { "X-Block-Me": "yes" } });
+    const body = await res.json();
+    check("Middleware bloqueante interrompe cadeia -> 403", res.status === 403, String(res.status));
+    check("Middleware bloqueante corpo do erro", body.error === "blocked by middleware", JSON.stringify(body));
+  }
+
+  {
+    // 3. /healthz é isento da cadeia de middlewares
+    const res = await fetch(`${base}/healthz`, { headers: { "X-Block-Me": "yes" } });
+    const body = await res.json();
+    check("GET /healthz isento de middleware -> 200", res.status === 200, String(res.status));
+    check("GET /healthz corpo {status: ok}", body.status === "ok", JSON.stringify(body));
+  }
+
+  {
+    // 4. Middleware bloqueante roda antes de 404 (protege rotas inexistentes)
+    const res = await fetch(`${base}/rota_inexistente`, { headers: { "X-Block-Me": "yes" } });
+    check("Middleware bloqueante antes de 404 -> 403", res.status === 403, String(res.status));
+  }
+
+  {
+    // 5. req.header e res.header com case-sensitivity e case-insensitivity
+    const res = await fetch(`${base}/headers`, { headers: { "Authorization": "Bearer token123" } });
+    const body = await res.json();
+    const echoHeader = res.headers.get("x-echo-auth");
+    check("req.header lê header com Title-Case -> 200", res.status === 200, String(res.status));
+    check("req.header valor correto", body === "Bearer token123", JSON.stringify(body));
+    check("res.header emite cabeçalho de resposta customizado", echoHeader === "Bearer token123", echoHeader ?? "null");
+  }
+
+  {
+    // 6. req.header case-insensitivity com header em lowercase
+    const res = await fetch(`${base}/headers`, { headers: { "authorization": "Bearer lower456" } });
+    const body = await res.json();
+    check("req.header lê header em lowercase -> 200", res.status === 200, String(res.status));
+    check("req.header valor correto em lowercase", body === "Bearer lower456", JSON.stringify(body));
+  }
+
+  {
+    // 7. CORS: Requisição simples com origem permitida
+    const res = await fetch(`${base}/users/42`, { headers: { "Origin": "http://example.com" } });
+    const allowOrigin = res.headers.get("access-control-allow-origin");
+    const vary = res.headers.get("vary");
+    check("CORS origem permitida emite Access-Control-Allow-Origin", allowOrigin === "http://example.com", allowOrigin ?? "null");
+    check("CORS emite Vary: Origin", vary === "Origin", vary ?? "null");
+  }
+
+  {
+    // 8. CORS: Origem não permitida não emite Access-Control-Allow-Origin
+    const res = await fetch(`${base}/users/42`, { headers: { "Origin": "http://evil.com" } });
+    const allowOrigin = res.headers.get("access-control-allow-origin");
+    check("CORS origem não permitida não emite header CORS", allowOrigin === null, allowOrigin ?? "present");
+  }
+
+  {
+    // 9. CORS: Preflight OPTIONS com origem permitida
+    const res = await fetch(`${base}/users/42`, {
+      method: "OPTIONS",
+      headers: { "Origin": "http://example.com" },
+    });
+    const allowOrigin = res.headers.get("access-control-allow-origin");
+    const allowMethods = res.headers.get("access-control-allow-methods") ?? "";
+    const allowHeaders = res.headers.get("access-control-allow-headers") ?? "";
+    const maxAge = res.headers.get("access-control-max-age");
+    check("CORS preflight OPTIONS -> 204", res.status === 204, String(res.status));
+    check("CORS preflight Access-Control-Allow-Origin", allowOrigin === "http://example.com", allowOrigin ?? "null");
+    check("CORS preflight Access-Control-Allow-Methods", allowMethods.includes("GET") && allowMethods.includes("POST"), allowMethods);
+    check("CORS preflight Access-Control-Allow-Headers", allowHeaders.includes("Authorization"), allowHeaders);
+    check("CORS preflight Access-Control-Max-Age", maxAge === "3600", maxAge ?? "null");
+  }
+
+  {
     const res = await fetch(`${base}/users`, { method: "POST", body: "{not json" });
     const body = await res.json();
     check("POST /users com JSON malformado -> 400", res.status === 400, String(res.status));

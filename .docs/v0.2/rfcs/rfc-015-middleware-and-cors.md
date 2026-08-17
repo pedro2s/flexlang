@@ -1,6 +1,6 @@
 # RFC-015: Middleware, Headers e CORS
 
-> **Status:** Draft · **Prioridade:** P1 · **Depende de:** RFC-011 (o despacho por verbo é onde a cadeia se encaixa)
+> **Status:** Implementado · **Prioridade:** P1 · **Depende de:** RFC-011 (o despacho por verbo é onde a cadeia se encaixa)
 > **Toca:** `src/modules/http.ts`
 
 ## Resumo

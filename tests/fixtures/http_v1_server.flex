@@ -1,8 +1,4 @@
-// Fixture do teste de integracao HTTP (tests/http_integration.ts, RFC-004).
-// "__PORT__" e substituido pelo runner antes de interpretar/transpilar: o mesmo
-// arquivo sobe em modo interpretado e compilado, em portas diferentes.
-
-import { Server, Request, Response } from "net/http";
+import { Server, Request, Response, ServerConfig, CorsConfig } from "net/http";
 
 struct CreateUserInput {
     name: String,
@@ -26,11 +22,7 @@ func get_user(req: Request, mut res: Response) {
     }
 }
 
-// Handlers registrados via server.route() ficam com assinatura Void (o Go do
-// mux precisa de um tipo de função uniforme para toda rota) — por isso o `?`
-// (que exige retorno Result/Option) mora numa função auxiliar, e o handler só
-// faz match no resultado dela. E' aqui que o T de `req.json()` fica concreto
-// (CreateUserInput), exercitando o DecodeJSON[T] do transpiler (RFC-004).
+// Handlers registrados via server.get/post etc.
 func parse_create_user(req: Request) -> Result<CreateUserInput, String> {
     let body: CreateUserInput = req.json()?;
     return Result.Ok(body);
@@ -80,19 +72,61 @@ func delete_user(req: Request, mut res: Response) {
     }
 }
 
+func echo_headers(req: Request, mut res: Response) {
+    let mut auth = "missing";
+    match req.header("authorization") {
+        Option.Some(a) {
+            auth = a;
+        },
+        Option.None {
+            auth = "missing";
+        }
+    }
+    res.header("X-Echo-Auth", auth).status(200).json(auth);
+}
+
 func trigger_panic(req: Request, mut res: Response) {
     let arr = [1];
     print(arr[100]);
+}
+
+// Middleware 1: Adiciona cabeçalho X-Global-Mw e não encerra
+func mw_add_header(req: Request, mut res: Response) {
+    res.header("X-Global-Mw", "active");
+}
+
+// Middleware 2: Se requisição tiver header X-Block-Me, responde 403 e encerra
+func mw_blocker(req: Request, mut res: Response) {
+    match req.header("X-Block-Me") {
+        Option.Some(val) {
+            res.error(403, "blocked by middleware");
+        },
+        Option.None {
+            // segue
+        }
+    }
 }
 
 let mut server = Server.new(":__PORT__", ServerConfig {
     read_timeout: 5000,
     max_body_size: 64,
 });
+
+server.cors(CorsConfig {
+    allow_origins: ["http://example.com", "http://app.test"],
+    allow_methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers: ["Authorization", "Content-Type", "X-Custom-Header"],
+    max_age: 3600,
+});
+
+server.use(mw_add_header);
+server.use(mw_blocker);
+
 server.get("/users/:id", get_user);
 server.put("/users/:id", update_user);
 server.patch("/users/:id", patch_user);
 server.delete("/users/:id", delete_user);
 server.post("/users", create_user);
+server.get("/headers", echo_headers);
 server.get("/panic", trigger_panic);
 server.start();

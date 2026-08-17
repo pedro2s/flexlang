@@ -62,14 +62,26 @@ function flexValueToJson(_key: string, value: unknown): unknown {
   return value instanceof Map ? Object.fromEntries(value) : value;
 }
 
+interface FlexCorsConfig {
+  allow_origins: string[];
+  allow_methods: string[];
+  allow_headers: string[];
+  max_age: number;
+}
+
 class FlexRequest {
   readonly [NATIVE_TAG] = "Request";
 
   constructor(
-    private readonly params: Record<string, string>,
+    private params: Record<string, string>,
     private readonly queryParams: URLSearchParams,
     private readonly rawBody: string,
+    private readonly rawHeaders: Record<string, string | string[] | undefined> = {},
   ) {}
+
+  setParams(params: Record<string, string>): void {
+    this.params = params;
+  }
 
   param(name: string): string {
     return this.params[name] ?? "";
@@ -80,6 +92,13 @@ class FlexRequest {
     if (raw === undefined) return resultErr(`missing path parameter '${name}'`);
     if (!INT_PATTERN.test(raw)) return resultErr(`path parameter '${name}' is not an Int`);
     return resultOk(parseInt(raw, 10));
+  }
+
+  header(name: string) {
+    const raw = this.rawHeaders[name.toLowerCase()];
+    if (raw === undefined) return optionNone();
+    if (Array.isArray(raw)) return optionSome(raw.join(", "));
+    return optionSome(String(raw));
   }
 
   query(name: string) {
@@ -107,6 +126,7 @@ class FlexResponse {
   readonly [NATIVE_TAG] = "Response";
   private statusCode = 200;
   private written = false;
+  private responseHeaders: Record<string, string> = {};
 
   constructor(
     private readonly raw: http.ServerResponse,
@@ -116,6 +136,20 @@ class FlexResponse {
   status(code: number): FlexResponse {
     this.statusCode = code;
     return this;
+  }
+
+  header(name: string, value: string): FlexResponse {
+    if (this.written) return this;
+    this.responseHeaders[name] = value;
+    return this;
+  }
+
+  getHeaders(): Record<string, string> {
+    return { ...this.responseHeaders };
+  }
+
+  isWritten(): boolean {
+    return this.written;
   }
 
   json(data: unknown): null {
@@ -140,7 +174,10 @@ class FlexResponse {
     // mas o interpretador tem estado suficiente para simplesmente ignorar.
     if (this.written) return;
     this.written = true;
-    this.raw.writeHead(status, { "Content-Type": "application/json" });
+    this.raw.writeHead(status, {
+      "Content-Type": "application/json",
+      ...this.responseHeaders,
+    });
     if (this.isHead) {
       this.raw.end();
     } else {
@@ -155,6 +192,8 @@ class FlexResponse {
 class FlexServer {
   readonly [NATIVE_TAG] = "Server";
   private routes: CompiledRoute[] = [];
+  private middlewares: unknown[] = [];
+  private corsConfig: FlexCorsConfig | null = null;
   private shutdownHooks: unknown[] = [];
   private server: http.Server;
   private maxBodySize: number;
@@ -169,6 +208,25 @@ class FlexServer {
 
     this.server = http.createServer((req, res) => this.dispatch(req, res));
     this.server.requestTimeout = readTimeoutMs;
+  }
+
+  use(middleware: unknown): null {
+    this.middlewares.push(middleware);
+    return null;
+  }
+
+  cors(config: Map<string, unknown>): null {
+    const getArray = (k: string): string[] => {
+      const val = config.get(k);
+      return Array.isArray(val) ? val.map(String) : [];
+    };
+    this.corsConfig = {
+      allow_origins: getArray("allow_origins"),
+      allow_methods: getArray("allow_methods"),
+      allow_headers: getArray("allow_headers"),
+      max_age: positiveOr(config.get("max_age"), 0),
+    };
+    return null;
   }
 
   get(path: string, handler: unknown): null {
@@ -212,18 +270,95 @@ class FlexServer {
     const requestSegments = pathSegments(url.pathname);
     const reqMethod = (req.method || "GET").toUpperCase();
 
-    // 1. Casamento exato método + path (ou HEAD atendido pelo handler de GET)
-    for (const route of this.routes) {
-      if (route.method !== reqMethod && !(reqMethod === "HEAD" && route.method === "GET")) {
-        continue;
-      }
-      const params = matchRoute(route, requestSegments);
-      if (!params) continue;
+    this.readBody(req, res, async (body) => {
+      if (body === null) return; // já respondeu 413
+      const request = new FlexRequest({}, url.searchParams, body, req.headers);
+      const response = new FlexResponse(res, reqMethod === "HEAD");
 
-      this.readBody(req, res, (body) => {
-        if (body === null) return; // já respondeu 413
-        const request = new FlexRequest(params, url.searchParams, body);
-        const response = new FlexResponse(res, reqMethod === "HEAD");
+      // CORS
+      let isCorsAllowed = false;
+      let matchingOrigin = "";
+      if (this.corsConfig) {
+        const originHeader = req.headers["origin"];
+        const origin = typeof originHeader === "string" ? originHeader : "";
+        for (const o of this.corsConfig.allow_origins) {
+          if (o === "*") {
+            isCorsAllowed = true;
+            matchingOrigin = "*";
+            break;
+          } else if (origin !== "" && o === origin) {
+            isCorsAllowed = true;
+            matchingOrigin = origin;
+            break;
+          }
+        }
+
+        if (isCorsAllowed) {
+          response.header("Access-Control-Allow-Origin", matchingOrigin);
+          if (matchingOrigin !== "*") {
+            response.header("Vary", "Origin");
+          }
+        }
+      }
+
+      // Preflight OPTIONS para CORS
+      if (reqMethod === "OPTIONS" && this.corsConfig && isCorsAllowed) {
+        response.header("Access-Control-Allow-Methods", this.corsConfig.allow_methods.join(", "));
+        response.header("Access-Control-Allow-Headers", this.corsConfig.allow_headers.join(", "));
+        if (this.corsConfig.max_age > 0) {
+          response.header("Access-Control-Max-Age", String(this.corsConfig.max_age));
+        }
+
+        const allowedMethodsSet = new Set<string>();
+        for (const route of this.routes) {
+          if (matchRoute(route, requestSegments)) {
+            allowedMethodsSet.add(route.method);
+          }
+        }
+        if (allowedMethodsSet.has("GET")) allowedMethodsSet.add("HEAD");
+        allowedMethodsSet.add("OPTIONS");
+
+        const standardOrder = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
+        const allowedMethods = standardOrder.filter((m) => allowedMethodsSet.has(m));
+        if (allowedMethods.length > 0) {
+          response.header("Allow", allowedMethods.join(", "));
+        }
+
+        const outHeaders: Record<string, string> = { ...response.getHeaders() };
+        res.writeHead(204, outHeaders);
+        res.end();
+        return;
+      }
+
+      // 1. Executa cadeia de middlewares na ordem de registro
+      for (const mw of this.middlewares) {
+        try {
+          await this.interpreter.callFunction(mw, [request, response]);
+        } catch (e: any) {
+          const entry = {
+            level: "error",
+            msg: "panic recovered in middleware",
+            panic: e.message || String(e),
+            ts: new Date().toISOString(),
+          };
+          console.log(JSON.stringify(entry));
+          response.errorIfUnwritten(500, "internal server error");
+        }
+        if (response.isWritten()) {
+          return;
+        }
+      }
+
+      // 2. Roteamento: casamento exato método + path (ou HEAD em rotas GET)
+      for (const route of this.routes) {
+        if (route.method !== reqMethod && !(reqMethod === "HEAD" && route.method === "GET")) {
+          continue;
+        }
+        const params = matchRoute(route, requestSegments);
+        if (!params) continue;
+
+        request.setParams(params);
+
         void this.interpreter.callFunction(route.handler, [request, response]).catch((e) => {
           const entry = {
             level: "error",
@@ -234,44 +369,42 @@ class FlexServer {
           console.log(JSON.stringify(entry));
           response.errorIfUnwritten(500, "internal server error");
         });
-      });
-      return;
-    }
-
-    // 2. Se nenhuma casou, busca se o path existe com outros verbos
-    const allowedMethodsSet = new Set<string>();
-    for (const route of this.routes) {
-      if (matchRoute(route, requestSegments)) {
-        allowedMethodsSet.add(route.method);
-      }
-    }
-
-    if (allowedMethodsSet.size > 0) {
-      if (allowedMethodsSet.has("GET")) {
-        allowedMethodsSet.add("HEAD");
-      }
-      allowedMethodsSet.add("OPTIONS");
-
-      const standardOrder = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
-      const allowedMethods = standardOrder.filter((m) => allowedMethodsSet.has(m));
-      const allowHeader = allowedMethods.join(", ");
-
-      if (reqMethod === "OPTIONS") {
-        res.writeHead(204, { "Allow": allowHeader });
-        res.end();
         return;
       }
 
-      res.writeHead(405, {
-        "Content-Type": "application/json",
-        "Allow": allowHeader,
-      });
-      res.end(JSON.stringify({ error: "method not allowed" }));
-      return;
-    }
+      // 3. Se nenhuma casou, busca se o path existe com outros verbos
+      const allowedMethodsSet = new Set<string>();
+      for (const route of this.routes) {
+        if (matchRoute(route, requestSegments)) {
+          allowedMethodsSet.add(route.method);
+        }
+      }
 
-    res.writeHead(404, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "not found" }));
+      if (allowedMethodsSet.size > 0) {
+        if (allowedMethodsSet.has("GET")) {
+          allowedMethodsSet.add("HEAD");
+        }
+        allowedMethodsSet.add("OPTIONS");
+
+        const standardOrder = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
+        const allowedMethods = standardOrder.filter((m) => allowedMethodsSet.has(m));
+        const allowHeader = allowedMethods.join(", ");
+
+        if (reqMethod === "OPTIONS") {
+          response.header("Allow", allowHeader);
+          const outHeaders: Record<string, string> = { ...response.getHeaders() };
+          res.writeHead(204, outHeaders);
+          res.end();
+          return;
+        }
+
+        response.header("Allow", allowHeader);
+        response.status(405).error(405, "method not allowed");
+        return;
+      }
+
+      response.status(404).error(404, "not found");
+    });
   }
 
   /** Lê o corpo respeitando `max_body_size`; responde 413 e aborta se estourar,
@@ -329,19 +462,43 @@ class FlexServer {
 }
 
 const GO_BOILERPLATE = [
-  "// --- FlexLang HTTP Boilerplate (RFC-004 / RFC-011) ---",
+  "// --- FlexLang HTTP Boilerplate (RFC-004 / RFC-011 / RFC-015) ---",
   "type ServerConfig struct {",
   "  read_timeout  int",
   "  max_body_size int",
   "}",
   "",
+  "type CorsConfig struct {",
+  "  allow_origins []string",
+  "  allow_methods []string",
+  "  allow_headers []string",
+  "  max_age       int",
+  "}",
+  "",
   "type Request struct {",
-  "  params     map[string]string",
+  "  params      map[string]string",
   "  queryParams url.Values",
-  "  body       []byte",
+  "  headers     http.Header",
+  "  body        []byte",
   "}",
   "",
   "func (r Request) param(name string) string { return r.params[name] }",
+  "",
+  "func (r Request) header(name string) Option {",
+  "  v := r.headers.Get(name)",
+  '  if v == "" {',
+  "    for k, vals := range r.headers {",
+  "      if strings.EqualFold(k, name) && len(vals) > 0 {",
+  "        v = vals[0]",
+  "        break",
+  "      }",
+  "    }",
+  '    if v == "" {',
+  "      return Option_None",
+  "    }",
+  "  }",
+  "  return Option_Some_new(v)",
+  "}",
   "",
   "func (r Request) param_int(name string) Result {",
   "  raw, present := r.params[name]",
@@ -384,11 +541,19 @@ const GO_BOILERPLATE = [
   "type Response struct {",
   "  raw        http.ResponseWriter",
   "  statusCode int",
+  "  headers    map[string]string",
   "  written    bool",
   "  isHead     bool",
   "}",
   "",
   "func (r *Response) status(code int) *Response { r.statusCode = code; return r }",
+  "",
+  "func (r *Response) header(name string, value string) *Response {",
+  "  if r.written { return r }",
+  "  if r.headers == nil { r.headers = map[string]string{} }",
+  "  r.headers[name] = value",
+  "  return r",
+  "}",
   "",
   "func (r *Response) json(data any) { r.write(r.statusCode, data) }",
   "",
@@ -400,6 +565,9 @@ const GO_BOILERPLATE = [
   "  if r.written { return }",
   "  r.written = true",
   '  r.raw.Header().Set("Content-Type", "application/json")',
+  "  for k, v := range r.headers {",
+  "    r.raw.Header().Set(k, v)",
+  "  }",
   "  r.raw.WriteHeader(status)",
   "  if !r.isHead {",
   "    json.NewEncoder(r.raw).Encode(data)",
@@ -435,9 +603,11 @@ const GO_BOILERPLATE = [
   "}",
   "",
   "type Server struct {",
-  "  Addr   string",
-  "  routes []flexRoute",
-  "  config ServerConfig",
+  "  Addr          string",
+  "  routes        []flexRoute",
+  "  middlewares   []func(Request, *Response)",
+  "  corsConfig    *CorsConfig",
+  "  config        ServerConfig",
   "  shutdownHooks []func()",
   "}",
   "",
@@ -452,6 +622,14 @@ const GO_BOILERPLATE = [
   "",
   "func (s *Server) on_shutdown(handler func()) {",
   "  s.shutdownHooks = append(s.shutdownHooks, handler)",
+  "}",
+  "",
+  "func (s *Server) use(middleware func(Request, *Response)) {",
+  "  s.middlewares = append(s.middlewares, middleware)",
+  "}",
+  "",
+  "func (s *Server) cors(cfg *CorsConfig) {",
+  "  s.corsConfig = cfg",
   "}",
   "",
   "func (s *Server) get(path string, handler func(Request, *Response)) {",
@@ -499,25 +677,93 @@ const GO_BOILERPLATE = [
   "  }",
   "",
   "  reqSegments := flexSegments(r.URL.Path)",
+  "  body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, int64(s.config.max_body_size)))",
+  "  if err != nil {",
+  '    w.Header().Set("Content-Type", "application/json")',
+  "    w.WriteHeader(413)",
+  '    json.NewEncoder(w).Encode(map[string]string{"error": "request body too large"})',
+  "    return",
+  "  }",
+  "  req := Request{params: map[string]string{}, queryParams: r.URL.Query(), headers: r.Header, body: body}",
+  '  res := &Response{raw: w, statusCode: 200, headers: map[string]string{}, isHead: r.Method == "HEAD"}',
+  "",
+  "  // CORS",
+  "  isCorsAllowed := false",
+  "  matchingOrigin := \"\"",
+  "  if s.corsConfig != nil {",
+  '    origin := r.Header.Get("Origin")',
+  "    for _, o := range s.corsConfig.allow_origins {",
+  '      if o == "*" {',
+  "        isCorsAllowed = true",
+  '        matchingOrigin = "*"',
+  "        break",
+  '      } else if origin != "" && o == origin {',
+  "        isCorsAllowed = true",
+  "        matchingOrigin = origin",
+  "        break",
+  "      }",
+  "    }",
+  "    if isCorsAllowed {",
+  '      res.header("Access-Control-Allow-Origin", matchingOrigin)',
+  '      if matchingOrigin != "*" {',
+  '        res.header("Vary", "Origin")',
+  "      }",
+  "    }",
+  "  }",
+  "",
+  '  if r.Method == "OPTIONS" && s.corsConfig != nil && isCorsAllowed {',
+  '    w.Header().Set("Access-Control-Allow-Origin", matchingOrigin)',
+  '    if matchingOrigin != "*" {',
+  '      w.Header().Set("Vary", "Origin")',
+  "    }",
+  '    w.Header().Set("Access-Control-Allow-Methods", strings.Join(s.corsConfig.allow_methods, ", "))',
+  '    w.Header().Set("Access-Control-Allow-Headers", strings.Join(s.corsConfig.allow_headers, ", "))',
+  "    if s.corsConfig.max_age > 0 {",
+  '      w.Header().Set("Access-Control-Max-Age", strconv.Itoa(s.corsConfig.max_age))',
+  "    }",
+  "    allowedMap := map[string]bool{}",
+  "    for _, route := range s.routes {",
+  "      if _, ok := flexMatchRoute(route, reqSegments); ok {",
+  "        allowedMap[route.method] = true",
+  "      }",
+  "    }",
+  '    if allowedMap["GET"] { allowedMap["HEAD"] = true }',
+  '    allowedMap["OPTIONS"] = true',
+  '    standardOrder := []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}',
+  "    allowedMethods := []string{}",
+  "    for _, m := range standardOrder {",
+  "      if allowedMap[m] {",
+  "        allowedMethods = append(allowedMethods, m)",
+  "      }",
+  "    }",
+  '    if len(allowedMethods) > 0 {',
+  '      w.Header().Set("Allow", strings.Join(allowedMethods, ", "))',
+  "    }",
+  "    w.WriteHeader(204)",
+  "    return",
+  "  }",
+  "",
+  "  // 1. Executa middlewares",
+  "  for _, mw := range s.middlewares {",
+  "    mw(req, res)",
+  "    if res.written {",
+  "      return",
+  "    }",
+  "  }",
+  "",
+  "  // 2. Roteamento: casamento exato",
   "  for _, route := range s.routes {",
   "    if route.method != r.Method && !(r.Method == \"HEAD\" && route.method == \"GET\") {",
   "      continue",
   "    }",
   "    params, ok := flexMatchRoute(route, reqSegments)",
   "    if !ok { continue }",
-  "    body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, int64(s.config.max_body_size)))",
-  "    if err != nil {",
-  '      w.Header().Set("Content-Type", "application/json")',
-  "      w.WriteHeader(413)",
-  '      json.NewEncoder(w).Encode(map[string]string{"error": "request body too large"})',
-  "      return",
-  "    }",
-  "    req := Request{params: params, queryParams: r.URL.Query(), body: body}",
-  '    res := &Response{raw: w, statusCode: 200, isHead: r.Method == "HEAD"}',
+  "    req.params = params",
   "    route.handler(req, res)",
   "    return",
   "  }",
   "",
+  "  // 3. Verifica outros métodos no mesmo path",
   "  allowedMap := map[string]bool{}",
   "  for _, route := range s.routes {",
   "    if _, ok := flexMatchRoute(route, reqSegments); ok {",
@@ -541,21 +787,20 @@ const GO_BOILERPLATE = [
   '    allowHeader := strings.Join(allowedMethods, ", ")',
   "",
   '    if r.Method == "OPTIONS" {',
-  '      w.Header().Set("Allow", allowHeader)',
+  '      res.header("Allow", allowHeader)',
+  "      for k, v := range res.headers {",
+  "        w.Header().Set(k, v)",
+  "      }",
   "      w.WriteHeader(204)",
   "      return",
   "    }",
   "",
-  '    w.Header().Set("Content-Type", "application/json")',
-  '    w.Header().Set("Allow", allowHeader)',
-  "    w.WriteHeader(405)",
-  '    json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed"})',
+  '    res.header("Allow", allowHeader)',
+  '    res.status(405).error(405, "method not allowed")',
   "    return",
   "  }",
   "",
-  '  w.Header().Set("Content-Type", "application/json")',
-  "  w.WriteHeader(404)",
-  '  json.NewEncoder(w).Encode(map[string]string{"error": "not found"})',
+  '  res.status(404).error(404, "not found")',
   "}",
   "",
   "func (s *Server) start() {",
@@ -606,6 +851,8 @@ export const httpModule: NativeModule = {
         },
       ],
       methods: [
+        { name: "use", arity: 1, returns: { kind: "Void" } },
+        { name: "cors", arity: 1, returns: { kind: "Void" } },
         { name: "get", arity: 2, returns: { kind: "Void" } },
         { name: "post", arity: 2, returns: { kind: "Void" } },
         { name: "put", arity: 2, returns: { kind: "Void" } },
@@ -634,17 +881,19 @@ export const httpModule: NativeModule = {
           arity: 1,
           returns: { kind: "Enum", name: "Option", genericArgs: [{ kind: "Int" }] },
         },
-        // "json" fica de fora de propósito: seu retorno depende do tipo esperado
-        // no site de chamada (RFC-004) — tratado como caso especial no checker.
+        {
+          name: "header",
+          arity: 1,
+          returns: { kind: "Enum", name: "Option", genericArgs: [{ kind: "String" }] },
+        },
       ],
     },
     {
       name: "Response",
-      // Precisa de semântica de referência: `res.status(x)` e `res.json(x)` em
-      // statements separados têm que mutar o mesmo valor (ver `goPointer` em types.ts).
       goPointer: true,
       methods: [
         { name: "status", arity: 1, returns: { kind: "Struct", name: "Response", genericArgs: [] } },
+        { name: "header", arity: 2, returns: { kind: "Struct", name: "Response", genericArgs: [] } },
         { name: "json", arity: 1, returns: { kind: "Void" } },
         { name: "error", arity: 2, returns: { kind: "Void" } },
       ],
@@ -656,6 +905,15 @@ export const httpModule: NativeModule = {
         { name: "max_body_size", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
       ],
     },
+    {
+      name: "CorsConfig",
+      properties: [
+        { name: "allow_origins", typeAnnotation: { kind: "ArrayTypeNode", elementType: { kind: "NamedTypeNode", name: "String" } } },
+        { name: "allow_methods", typeAnnotation: { kind: "ArrayTypeNode", elementType: { kind: "NamedTypeNode", name: "String" } } },
+        { name: "allow_headers", typeAnnotation: { kind: "ArrayTypeNode", elementType: { kind: "NamedTypeNode", name: "String" } } },
+        { name: "max_age", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
+      ],
+    },
   ],
 
   usesBuiltins: ["Result", "Option"],
@@ -665,17 +923,22 @@ export const httpModule: NativeModule = {
       [NATIVE_TAG]: "Server",
       new: (addr: string, config?: Map<string, unknown>) => new FlexServer(addr, interpreter, config),
     },
-    // ServerConfig precisa existir no ambiente do interpretador como uma
-    // "StructDeclaration" para `ServerConfig { ... }` (StructExpr) funcionar —
-    // o checker já a conhece via `nativeStructDeclaration`, mas o interpretador
-    // resolve nomes de struct em tempo de execução separadamente (ver `evaluateExpr`
-    // caso "StructExpr" em interpreter.ts).
     ServerConfig: {
       kind: "StructDeclaration",
       name: "ServerConfig",
       properties: [
         { name: "read_timeout", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
         { name: "max_body_size", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
+      ],
+    },
+    CorsConfig: {
+      kind: "StructDeclaration",
+      name: "CorsConfig",
+      properties: [
+        { name: "allow_origins", typeAnnotation: { kind: "ArrayTypeNode", elementType: { kind: "NamedTypeNode", name: "String" } } },
+        { name: "allow_methods", typeAnnotation: { kind: "ArrayTypeNode", elementType: { kind: "NamedTypeNode", name: "String" } } },
+        { name: "allow_headers", typeAnnotation: { kind: "ArrayTypeNode", elementType: { kind: "NamedTypeNode", name: "String" } } },
+        { name: "max_age", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
       ],
     },
   }),
