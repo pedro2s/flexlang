@@ -9,10 +9,10 @@ enum Status {
 
 func descreve(s: Status) -> Void {
     match s {
-        Status.Ativo => {
+        Status.Ativo {
             print("ativo");
         },
-        Status.Inativo => {
+        Status.Inativo {
             print("inativo");
         }
     }

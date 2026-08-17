@@ -23,7 +23,7 @@ func handle_health(req: Request, mut res: Response) {
 func handle_get_user(req: Request, mut res: Response) {
     let id_res = req.param_int("id");
     match id_res {
-        Result.Ok(id) => {
+        Result.Ok(id) {
             if id == 1 {
                 let user = User { id: 1, name: "Alice", role: "admin" };
                 res.json(user);
@@ -36,7 +36,7 @@ func handle_get_user(req: Request, mut res: Response) {
                 }
             }
         },
-        Result.Err(e) => {
+        Result.Err(e) {
             res.error(400, "ID de usuario invalido");
         }
     }
@@ -45,10 +45,10 @@ func handle_get_user(req: Request, mut res: Response) {
 // 3. Rota de Criacao com Body JSON Tipado
 func handle_create_user(req: Request, mut res: Response) {
     match req.json() {
-        Result.Ok(dto) => {
+        Result.Ok(dto) {
             res.status(201).json(dto);
         },
-        Result.Err(err) => {
+        Result.Err(err) {
             res.error(400, "Corpo JSON malformatado ou invalido");
         }
     }

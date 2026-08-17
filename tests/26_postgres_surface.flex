@@ -9,10 +9,10 @@ import { Pool } from "db/postgres";
 // Pool.connect retorna Result<Pool, String>
 // Sem banco real, vai dar Err — testamos o match sobre o resultado
 match Pool.connect("postgres://localhost:5432/inexistente") {
-    Result.Ok(db) => {
+    Result.Ok(db) {
         print("conectado");
     },
-    Result.Err(msg) => {
+    Result.Err(msg) {
         print("erro esperado");
     }
 }

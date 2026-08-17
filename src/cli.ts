@@ -9,6 +9,9 @@ import { Interpreter } from "./interpreter";
 import { GoTranspiler } from "./transpiler";
 import { FlexError, formatDiagnostic } from "./diagnostics";
 
+// Versão atual do compilador FlexLang
+const FLEX_VERSION = "0.2.0";
+
 function printUsage() {
     console.log(`🚀 FlexLang CLI
 
@@ -41,6 +44,7 @@ async function runInit(projectName: string) {
 name = "${projectName}"
 version = "0.1.0"
 entry = "src/main.flex"
+flex_version = "${FLEX_VERSION}"
 `;
     fs.writeFileSync(path.join(projectDir, "flex.toml"), tomlContent);
 
@@ -79,6 +83,44 @@ main();
     console.log(`  flex run src/main.flex`);
 }
 
+/**
+ * Verifica se o flex.toml do projeto especifica uma flex_version compatível.
+ * Se a versão exigida for maior que a do compilador, aborta com erro claro.
+ */
+function checkFlexVersion(filePath: string) {
+    // Procura flex.toml subindo a partir do diretório do arquivo
+    let dir = path.dirname(path.resolve(filePath));
+    const root = path.parse(dir).root;
+    while (dir !== root) {
+        const tomlPath = path.join(dir, "flex.toml");
+        if (fs.existsSync(tomlPath)) {
+            const content = fs.readFileSync(tomlPath, "utf-8");
+            const match = content.match(/flex_version\s*=\s*"([^"]+)"/);
+            if (match) {
+                const required = match[1];
+                if (compareVersions(required, FLEX_VERSION) > 0) {
+                    console.error(`Erro: este projeto requer FlexLang >= ${required}, mas você tem ${FLEX_VERSION}.`);
+                    console.error(`Atualize o compilador ou ajuste flex_version no flex.toml.`);
+                    process.exit(1);
+                }
+            }
+            return;
+        }
+        dir = path.dirname(dir);
+    }
+}
+
+/** Compara duas versões semver simples (MAJOR.MINOR.PATCH). Retorna >0 se a > b. */
+function compareVersions(a: string, b: string): number {
+    const pa = a.split(".").map(Number);
+    const pb = b.split(".").map(Number);
+    for (let i = 0; i < 3; i++) {
+        const diff = (pa[i] ?? 0) - (pb[i] ?? 0);
+        if (diff !== 0) return diff;
+    }
+    return 0;
+}
+
 async function runRun(filePath: string) {
     if (!filePath) {
         console.error("Error: Missing file path. Usage: flex run <file.flex>");
@@ -88,6 +130,8 @@ async function runRun(filePath: string) {
         console.error(`Error: File '${filePath}' not found.`);
         process.exit(1);
     }
+
+    checkFlexVersion(filePath);
 
     const graph = loadModuleGraph(filePath);
     const checker = new TypeChecker();
@@ -107,6 +151,8 @@ async function runBuild(filePath: string) {
         console.error(`Error: File '${filePath}' not found.`);
         process.exit(1);
     }
+
+    checkFlexVersion(filePath);
 
     const graph = loadModuleGraph(filePath);
     const checker = new TypeChecker();

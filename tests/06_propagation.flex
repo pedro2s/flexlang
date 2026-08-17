@@ -22,11 +22,11 @@ func calcula() -> Result<Int, String> {
 let res = calcula();
 
 match res {
-    Result.Ok(v) => {
+    Result.Ok(v) {
         print("Sucesso absoluto:");
         print(v);
     },
-    Result.Err(e) => {
+    Result.Err(e) {
         print("Falhou propagando o erro:");
         print(e);
     }

@@ -21,10 +21,10 @@ func main() -> Int {
     print(r.type + r.range);
 
     match Select.Chan(7) {
-        Select.Chan(var) => {
+        Select.Chan(var) {
             print(var);
         },
-        Select.Package => {
+        Select.Package {
             print("sem payload");
         }
     }

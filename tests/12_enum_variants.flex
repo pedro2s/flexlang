@@ -13,23 +13,23 @@ enum Cor {
 
 func descreve(f: Forma, c: Cor) -> Void {
     match f {
-        Forma.Ponto => {
+        Forma.Ponto {
             print("um ponto");
         },
-        Forma.Circulo(raio) => {
+        Forma.Circulo(raio) {
             print("circulo de raio:");
             print(raio);
             // match aninhado dentro de um braco de match
             match c {
-                Cor.Vermelho => {
+                Cor.Vermelho {
                     print("pintado de vermelho");
                 },
-                Cor.Azul => {
+                Cor.Azul {
                     print("pintado de azul");
                 }
             }
         },
-        Forma.Retangulo(largura, altura) => {
+        Forma.Retangulo(largura, altura) {
             print("area do retangulo:");
             print(largura * altura);
         }
@@ -39,13 +39,13 @@ func descreve(f: Forma, c: Cor) -> Void {
 // Braco que ignora completamente o payload da variante
 func conta_lados(f: Forma) -> Int {
     match f {
-        Forma.Ponto => {
+        Forma.Ponto {
             print("sem lados");
         },
-        Forma.Circulo(raio) => {
+        Forma.Circulo(raio) {
             print("circulo nao tem lados");
         },
-        Forma.Retangulo(largura, altura) => {
+        Forma.Retangulo(largura, altura) {
             print("quatro lados");
         }
     }

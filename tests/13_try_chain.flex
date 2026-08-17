@@ -22,11 +22,11 @@ func pipeline(a: Int, b: Int) -> Result<Int, String> {
 
 func mostra(r: Result<Int, String>) -> Void {
     match r {
-        Result.Ok(v) => {
+        Result.Ok(v) {
             print("ok:");
             print(v);
         },
-        Result.Err(e) => {
+        Result.Err(e) {
             print("erro:");
             print(e);
         }

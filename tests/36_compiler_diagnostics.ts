@@ -154,6 +154,37 @@ console.log("\nExecutando testes da RFC-014 (Diagnósticos do Compilador)...\n")
   assert(!output.includes("dist/cli.js"), "Nenhum caminho de dist/ no diagnóstico");
 }
 
+// 7. Diagnóstico amigável ao usar sintaxe legada '=>' no match (RFC-016)
+{
+  const code = `
+  match x {
+    Option.Some(v) => {
+      print(v);
+    },
+    Option.None => {
+      print("none");
+    }
+  }`;
+
+  let caughtError: any = null;
+  try {
+    new Parser(new Lexer(code).tokenize(), "/test.flex").parse();
+  } catch (e: any) {
+    caughtError = e;
+  }
+
+  assert(caughtError instanceof FlexError, "Parser lança FlexError ao encontrar '=>' em match");
+  assert(caughtError?.code === "E1002", "Código do erro é E1002");
+  assert(
+    caughtError?.message.includes("sintaxe '=>' foi removida"),
+    "Mensagem explica remoção da sintaxe '=>'",
+  );
+  assert(
+    caughtError?.help?.includes("remova o '=>'"),
+    "Help sugere remover o '=>' e manter apenas o bloco",
+  );
+}
+
 console.log(`\nTestes de Diagnósticos Finalizados: ${passed} passaram, ${failed} falharam.\n`);
 
 if (failed > 0) {

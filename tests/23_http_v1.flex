@@ -11,20 +11,20 @@ struct CreateUserInput {
 
 func get_user(req: Request, mut res: Response) {
     match req.param_int("id") {
-        Result.Ok(id) => {
+        Result.Ok(id) {
             print("id:");
             print(id);
         },
-        Result.Err(msg) => {
+        Result.Err(msg) {
             res.error(400, msg);
         }
     }
 
     match req.query("page") {
-        Option.Some(page) => {
+        Option.Some(page) {
             print(page);
         },
-        Option.None => {
+        Option.None {
             print("sem pagina");
         }
     }
@@ -32,10 +32,10 @@ func get_user(req: Request, mut res: Response) {
 
 func create_user(req: Request, mut res: Response) {
     match req.json() {
-        Result.Ok(input) => {
+        Result.Ok(input) {
             res.status(201).json(input);
         },
-        Result.Err(msg) => {
+        Result.Err(msg) {
             res.error(400, msg);
         }
     }

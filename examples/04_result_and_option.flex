@@ -31,11 +31,11 @@ func apply_discount(product: Product, discount_percent: Int) -> Result<Int, Stri
 func calculate_checkout_price(id: Int, discount_percent: Int) -> Result<Int, String> {
     let product_opt = find_product_by_id(id);
     match product_opt {
-        Option.Some(prod) => {
+        Option.Some(prod) {
             let final_price = apply_discount(prod, discount_percent)?;
             return Result.Ok(final_price);
         },
-        Option.None => {
+        Option.None {
             return Result.Err("Produto nao encontrado no estoque.");
         }
     }
@@ -45,10 +45,10 @@ func calculate_checkout_price(id: Int, discount_percent: Int) -> Result<Int, Str
 // 1. Caso de Sucesso
 print("--- Testando Checkout com Sucesso ---");
 match calculate_checkout_price(101, 10) {
-    Result.Ok(price) => {
+    Result.Ok(price) {
         print("Preco final com desconto: R$ ${price}");
     },
-    Result.Err(err) => {
+    Result.Err(err) {
         print("Erro: ${err}");
     }
 }
@@ -57,10 +57,10 @@ match calculate_checkout_price(101, 10) {
 print("");
 print("--- Testando Checkout com Desconto Invalido ---");
 match calculate_checkout_price(102, 80) {
-    Result.Ok(price) => {
+    Result.Ok(price) {
         print("Preco final: R$ ${price}");
     },
-    Result.Err(err) => {
+    Result.Err(err) {
         print("Falha controlada: ${err}");
     }
 }
@@ -69,10 +69,10 @@ match calculate_checkout_price(102, 80) {
 print("");
 print("--- Testando Checkout com Produto Inexistente ---");
 match calculate_checkout_price(999, 10) {
-    Result.Ok(price) => {
+    Result.Ok(price) {
         print("Preco final: R$ ${price}");
     },
-    Result.Err(err) => {
+    Result.Err(err) {
         print("Falha controlada: ${err}");
     }
 }

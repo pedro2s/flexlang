@@ -13,10 +13,10 @@ print("=============================================================");
 print("");
 print("--- 1. Consultando Usuario na Camada de Dados ---");
 match find_user_by_id(1) {
-    Option.Some(u) => {
+    Option.Some(u) {
         print(u.display_info());
     },
-    Option.None => {
+    Option.None {
         print("Usuario nao localizado.");
     }
 }
@@ -25,10 +25,10 @@ match find_user_by_id(1) {
 print("");
 print("--- 2. Executando Promocao de Cargo no Servico ---");
 match promote_user_to_admin(2) {
-    Result.Ok(msg) => {
+    Result.Ok(msg) {
         print("Sucesso: ${msg}");
     },
-    Result.Err(err) => {
+    Result.Err(err) {
         print("Falha: ${err}");
     }
 }
@@ -37,10 +37,10 @@ match promote_user_to_admin(2) {
 print("");
 print("--- 3. Tentando Promover Usuario que ja e Admin ---");
 match promote_user_to_admin(1) {
-    Result.Ok(msg) => {
+    Result.Ok(msg) {
         print("Sucesso: ${msg}");
     },
-    Result.Err(err) => {
+    Result.Err(err) {
         print("Regra de Negocio bloqueou: ${err}");
     }
 }
@@ -49,10 +49,10 @@ match promote_user_to_admin(1) {
 print("");
 print("--- 4. Tentando Promover Usuario Inexistente ---");
 match promote_user_to_admin(99) {
-    Result.Ok(msg) => {
+    Result.Ok(msg) {
         print("Sucesso: ${msg}");
     },
-    Result.Err(err) => {
+    Result.Err(err) {
         print("Erro de Validacao: ${err}");
     }
 }

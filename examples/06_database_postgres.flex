@@ -10,7 +10,7 @@ func demo_postgres() {
     let pool_res = Pool.connect(url);
     
     match pool_res {
-        Result.Ok(pool) => {
+        Result.Ok(pool) {
             print("Conectado com sucesso!");
 
             // 1. Criar tabela temporária para testes
@@ -26,11 +26,11 @@ func demo_postgres() {
             print("--- 2. Consultando Dados com Query Parametrizada ---");
             let rows_res = pool.query("SELECT id, name, balance FROM users_demo WHERE balance >= $1 ORDER BY id", [500]);
             match rows_res {
-                Result.Ok(rows) => {
+                Result.Ok(rows) {
                     print("Usuarios encontrados com saldo >= R$ 500:");
                     print(rows);
                 },
-                Result.Err(err) => {
+                Result.Err(err) {
                     print("Erro na consulta: ${err}");
                 }
             }
@@ -40,11 +40,11 @@ func demo_postgres() {
             print("--- 3. Consultando Registro Unico (query_one) ---");
             let user_res = pool.query_one("SELECT id, name, balance FROM users_demo WHERE id = $1", [1]);
             match user_res {
-                Result.Ok(user) => {
+                Result.Ok(user) {
                     print("Usuario encontrado: ");
                     print(user);
                 },
-                Result.Err(err) => {
+                Result.Err(err) {
                     print("Erro no query_one: ${err}");
                 }
             }
@@ -62,15 +62,15 @@ func demo_postgres() {
             });
 
             match tx_res {
-                Result.Ok(v) => {
+                Result.Ok(v) {
                     print("Transferencia de R$ 200 concluida com sucesso via transacao!");
                 },
-                Result.Err(err) => {
+                Result.Err(err) {
                     print("Falha na transacao (rollback automatico executado): ${err}");
                 }
             }
         },
-        Result.Err(err) => {
+        Result.Err(err) {
             print("PostgreSQL nao disponivel em ${url} (${err})");
             print("Para rodar localmente: docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres");
         }

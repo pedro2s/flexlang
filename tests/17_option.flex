@@ -20,11 +20,11 @@ func nome_do_usuario(id: Int) -> Option<String> {
 
 func mostra(id: Int) -> Void {
     match nome_do_usuario(id) {
-        Option.Some(nome) => {
+        Option.Some(nome) {
             print("encontrado:");
             print(nome);
         },
-        Option.None => {
+        Option.None {
             print("nao encontrado");
         }
     }

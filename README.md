@@ -106,11 +106,11 @@ struct CreateUserDTO {
 
 func handle_create_user(req: Request, mut res: Response) {
     match req.json() {
-        Result.Ok(dto) => {
+        Result.Ok(dto) {
             log.info("user created", { name: dto.name, role: dto.role });
             res.status(201).json(dto);
         },
-        Result.Err(msg) => {
+        Result.Err(msg) {
             log.error("invalid payload", { reason: msg });
             res.error(400, "Corpo JSON invalido");
         }
@@ -143,7 +143,7 @@ Conexões gerenciadas por pool, proteção contra SQL Injection com parâmetros 
 import { Pool, Tx } from "db/postgres";
 
 match Pool.connect("postgres://postgres:postgres@localhost:5432/postgres") {
-    Result.Ok(pool) => {
+    Result.Ok(pool) {
         // Query com parâmetro obrigatório $1
         let rows = pool.query("SELECT id, name, balance FROM accounts WHERE balance >= $1", [500])?;
         
@@ -155,7 +155,7 @@ match Pool.connect("postgres://postgres:postgres@localhost:5432/postgres") {
 
         pool.close();
     },
-    Result.Err(err) => {
+    Result.Err(err) {
         print("Falha ao conectar no banco: ${err}");
     }
 }
@@ -211,8 +211,12 @@ func find_user(id: Int) -> Option<User> {
 
 func get_user_name(id: Int) -> Result<String, String> {
     match find_user(id) {
-        Option.Some(u) => Result.Ok(u.name),
-        Option.None => Result.Err("Usuario nao encontrado")
+        Option.Some(u) {
+            return Result.Ok(u.name);
+        },
+        Option.None {
+            return Result.Err("Usuario nao encontrado");
+        }
     }
 }
 ```

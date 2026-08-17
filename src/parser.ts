@@ -487,7 +487,16 @@ export class Parser {
         this.consume(TokenType.RParen);
       }
 
-      this.consume(TokenType.FatArrow);
+      // RFC-016: => foi eliminado — braço entra direto no bloco.
+      // Se alguém usar a sintaxe antiga, emitimos diagnóstico amigável.
+      if (this.current().type === TokenType.FatArrow) {
+        throw new FlexError(
+          "E1002",
+          "sintaxe '=>' foi removida dos braços de match na v0.2 — use diretamente o bloco",
+          this.spanFrom(this.current(), this.current()),
+          "remova o '=>' e mantenha apenas o bloco { ... }",
+        );
+      }
       const body = this.parseBlock();
       arms.push({
         enumName,

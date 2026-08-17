@@ -10,17 +10,17 @@ struct CreateUserInput {
 
 func get_user(req: Request, mut res: Response) {
     match req.param_int("id") {
-        Result.Ok(id) => {
+        Result.Ok(id) {
             match req.query("verbose") {
-                Option.Some(v) => {
+                Option.Some(v) {
                     res.json(v);
                 },
-                Option.None => {
+                Option.None {
                     res.status(200).json(id);
                 }
             }
         },
-        Result.Err(msg) => {
+        Result.Err(msg) {
             res.error(400, msg);
         }
     }
@@ -38,10 +38,10 @@ func parse_create_user(req: Request) -> Result<CreateUserInput, String> {
 
 func create_user(req: Request, mut res: Response) {
     match parse_create_user(req) {
-        Result.Ok(input) => {
+        Result.Ok(input) {
             res.status(201).json(input);
         },
-        Result.Err(msg) => {
+        Result.Err(msg) {
             res.error(400, msg);
         }
     }
