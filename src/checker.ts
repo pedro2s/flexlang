@@ -1014,6 +1014,11 @@ export class TypeChecker {
           }
         }
 
+        // Garante que os argumentos da chamada sejam avaliados e gravados no typeMap
+        for (const arg of expr.args) {
+          this.checkExpr(arg, env);
+        }
+
         return { kind: "Any" };
       }
 

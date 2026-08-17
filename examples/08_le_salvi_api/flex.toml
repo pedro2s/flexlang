@@ -1,0 +1,5 @@
+[project]
+name = "le-salvi-api"
+version = "0.2.0"
+flex_version = "0.2.0"
+entry = "src/main.flex"
