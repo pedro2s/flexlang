@@ -1,6 +1,6 @@
 # RFC-011: Roteamento por Verbo HTTP
 
-> **Status:** Draft · **Prioridade:** P0 — bloqueante · **Depende de:** nada
+> **Status:** Implementado · **Prioridade:** P0 — bloqueante · **Depende de:** nada
 > **Toca:** `src/modules/http.ts` (interpretador + boilerplate Go), `tests/http_integration.ts`
 > **Breaking change:** remove `server.route(path, handler)`
 

@@ -185,6 +185,35 @@ console.log("\nExecutando testes da RFC-014 (Diagnósticos do Compilador)...\n")
   );
 }
 
+// 8. Diagnóstico amigável de migração de server.route -> server.get/post/etc (RFC-011)
+{
+  const code = `
+  import { Server, Request, Response } from "net/http";
+  let mut server = Server.new(":8080");
+  func h(req: Request, mut res: Response) {}
+  server.route("/users", h);
+  `;
+
+  let caughtError: any = null;
+  try {
+    const ast = new Parser(new Lexer(code).tokenize(), "/test.flex").parse();
+    new TypeChecker().check(ast);
+  } catch (e: any) {
+    caughtError = e;
+  }
+
+  assert(caughtError instanceof FlexError, "TypeChecker lança FlexError ao encontrar 'server.route'");
+  assert(caughtError?.code === "E2024", "Código do erro é E2024");
+  assert(
+    caughtError?.message.includes("`server.route` foi removido"),
+    "Mensagem explica remoção de `server.route`",
+  );
+  assert(
+    caughtError?.help?.includes("veja RFC-011"),
+    "Help referencia a RFC-011",
+  );
+}
+
 console.log(`\nTestes de Diagnósticos Finalizados: ${passed} passaram, ${failed} falharam.\n`);
 
 if (failed > 0) {

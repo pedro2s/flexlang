@@ -45,7 +45,7 @@ let mut server = Server.new(":8080", ServerConfig {
     read_timeout: 5000,
     max_body_size: 1000000,
 });
-server.route("/users/:id", get_user);
-server.route("/users", create_user);
+server.get("/users/:id", get_user);
+server.post("/users", create_user);
 
 print("rotas registradas");

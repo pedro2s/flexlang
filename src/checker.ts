@@ -989,8 +989,16 @@ export class TypeChecker {
               return callerType.genericArgs.length > 0 ? callerType.genericArgs[0] : { kind: "Any" };
             }
           }
-          // Método de instância de um tipo nativo: `server.route(...)`
+          // Método de instância de um tipo nativo: `server.get(...)`, etc.
           if (callerType.kind === "Struct") {
+            if (callerType.name === "Server" && expr.caller.property === "route") {
+              throw new FlexError(
+                "E2024",
+                "`server.route` foi removido na v0.2.0 — use `server.get`, `server.post`, `server.put`, `server.patch` ou `server.delete`",
+                expr.span,
+                "veja RFC-011 — o roteamento agora considera o verbo HTTP",
+              );
+            }
             const methodSig = this.nativeTypes
               .get(callerType.name)
               ?.methods?.find((m) => m.name === expr.caller.property);

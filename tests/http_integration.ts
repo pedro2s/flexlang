@@ -102,6 +102,57 @@ async function runScenarios(base: string): Promise<void> {
   }
 
   {
+    const res = await fetch(`${base}/users/10`, { method: "PUT" });
+    const body = await res.json();
+    check("PUT /users/:id -> 200", res.status === 200, String(res.status));
+    check("PUT /users/:id -> corpo correto", body === "user updated", JSON.stringify(body));
+  }
+
+  {
+    const res = await fetch(`${base}/users/10`, { method: "PATCH" });
+    const body = await res.json();
+    check("PATCH /users/:id -> 200", res.status === 200, String(res.status));
+    check("PATCH /users/:id -> corpo correto", body === "user patched", JSON.stringify(body));
+  }
+
+  {
+    const res = await fetch(`${base}/users/10`, { method: "DELETE" });
+    const body = await res.json();
+    check("DELETE /users/:id -> 200", res.status === 200, String(res.status));
+    check("DELETE /users/:id -> corpo correto", body === "user deleted", JSON.stringify(body));
+  }
+
+  {
+    // /users só tem POST registrado. GET /users deve retornar 405 com Allow: POST, OPTIONS
+    const res = await fetch(`${base}/users`, { method: "GET" });
+    const body = await res.json();
+    const allow = res.headers.get("allow") ?? "";
+    check("GET em rota apenas POST -> 405", res.status === 405, String(res.status));
+    check("GET em rota apenas POST -> corpo 'method not allowed'", body.error === "method not allowed", JSON.stringify(body));
+    check("GET em rota apenas POST -> header Allow contém POST", allow.includes("POST"), allow);
+  }
+
+  {
+    // OPTIONS em /users/:id deve retornar 204 com Allow
+    const res = await fetch(`${base}/users/10`, { method: "OPTIONS" });
+    const allow = res.headers.get("allow") ?? "";
+    check("OPTIONS /users/:id -> 204", res.status === 204, String(res.status));
+    check(
+      "OPTIONS /users/:id -> header Allow contém GET, PUT, PATCH, DELETE",
+      allow.includes("GET") && allow.includes("PUT") && allow.includes("PATCH") && allow.includes("DELETE"),
+      allow,
+    );
+  }
+
+  {
+    // HEAD em /users/42 deve retornar 200 sem corpo
+    const res = await fetch(`${base}/users/42`, { method: "HEAD" });
+    const text = await res.text();
+    check("HEAD /users/:id -> 200", res.status === 200, String(res.status));
+    check("HEAD /users/:id -> sem corpo", text === "", text);
+  }
+
+  {
     const res = await fetch(`${base}/users`, { method: "POST", body: "{not json" });
     const body = await res.json();
     check("POST /users com JSON malformado -> 400", res.status === 400, String(res.status));

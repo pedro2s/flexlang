@@ -57,9 +57,9 @@ func handle_create_user(req: Request, mut res: Response) {
 // Configuração e Inicialização do Servidor
 let mut server = Server.new(":8080");
 
-server.route("/health", handle_health);
-server.route("/users/:id", handle_get_user);
-server.route("/users", handle_create_user);
+server.get("/health", handle_health);
+server.get("/users/:id", handle_get_user);
+server.post("/users", handle_create_user);
 
 print("=================================================");
 print("🚀 Servidor FlexLang REST API escutando em :8080");

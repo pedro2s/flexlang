@@ -23,6 +23,7 @@ function pathSegments(path: string): string[] {
 }
 
 interface CompiledRoute {
+  method: string;
   segments: string[];
   handler: unknown;
 }
@@ -107,7 +108,10 @@ class FlexResponse {
   private statusCode = 200;
   private written = false;
 
-  constructor(private readonly raw: http.ServerResponse) {}
+  constructor(
+    private readonly raw: http.ServerResponse,
+    private readonly isHead = false,
+  ) {}
 
   status(code: number): FlexResponse {
     this.statusCode = code;
@@ -137,7 +141,11 @@ class FlexResponse {
     if (this.written) return;
     this.written = true;
     this.raw.writeHead(status, { "Content-Type": "application/json" });
-    this.raw.end(JSON.stringify(data, flexValueToJson));
+    if (this.isHead) {
+      this.raw.end();
+    } else {
+      this.raw.end(JSON.stringify(data, flexValueToJson));
+    }
   }
 }
 
@@ -163,8 +171,28 @@ class FlexServer {
     this.server.requestTimeout = readTimeoutMs;
   }
 
-  route(path: string, handler: unknown): null {
-    this.routes.push({ segments: pathSegments(path), handler });
+  get(path: string, handler: unknown): null {
+    this.routes.push({ method: "GET", segments: pathSegments(path), handler });
+    return null;
+  }
+
+  post(path: string, handler: unknown): null {
+    this.routes.push({ method: "POST", segments: pathSegments(path), handler });
+    return null;
+  }
+
+  put(path: string, handler: unknown): null {
+    this.routes.push({ method: "PUT", segments: pathSegments(path), handler });
+    return null;
+  }
+
+  patch(path: string, handler: unknown): null {
+    this.routes.push({ method: "PATCH", segments: pathSegments(path), handler });
+    return null;
+  }
+
+  delete(path: string, handler: unknown): null {
+    this.routes.push({ method: "DELETE", segments: pathSegments(path), handler });
     return null;
   }
 
@@ -182,15 +210,20 @@ class FlexServer {
 
     const url = new URL(req.url ?? "/", "http://localhost");
     const requestSegments = pathSegments(url.pathname);
+    const reqMethod = (req.method || "GET").toUpperCase();
 
+    // 1. Casamento exato método + path (ou HEAD atendido pelo handler de GET)
     for (const route of this.routes) {
+      if (route.method !== reqMethod && !(reqMethod === "HEAD" && route.method === "GET")) {
+        continue;
+      }
       const params = matchRoute(route, requestSegments);
       if (!params) continue;
 
       this.readBody(req, res, (body) => {
         if (body === null) return; // já respondeu 413
         const request = new FlexRequest(params, url.searchParams, body);
-        const response = new FlexResponse(res);
+        const response = new FlexResponse(res, reqMethod === "HEAD");
         void this.interpreter.callFunction(route.handler, [request, response]).catch((e) => {
           const entry = {
             level: "error",
@@ -202,6 +235,38 @@ class FlexServer {
           response.errorIfUnwritten(500, "internal server error");
         });
       });
+      return;
+    }
+
+    // 2. Se nenhuma casou, busca se o path existe com outros verbos
+    const allowedMethodsSet = new Set<string>();
+    for (const route of this.routes) {
+      if (matchRoute(route, requestSegments)) {
+        allowedMethodsSet.add(route.method);
+      }
+    }
+
+    if (allowedMethodsSet.size > 0) {
+      if (allowedMethodsSet.has("GET")) {
+        allowedMethodsSet.add("HEAD");
+      }
+      allowedMethodsSet.add("OPTIONS");
+
+      const standardOrder = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
+      const allowedMethods = standardOrder.filter((m) => allowedMethodsSet.has(m));
+      const allowHeader = allowedMethods.join(", ");
+
+      if (reqMethod === "OPTIONS") {
+        res.writeHead(204, { "Allow": allowHeader });
+        res.end();
+        return;
+      }
+
+      res.writeHead(405, {
+        "Content-Type": "application/json",
+        "Allow": allowHeader,
+      });
+      res.end(JSON.stringify({ error: "method not allowed" }));
       return;
     }
 
@@ -264,7 +329,7 @@ class FlexServer {
 }
 
 const GO_BOILERPLATE = [
-  "// --- FlexLang HTTP Boilerplate (RFC-004) ---",
+  "// --- FlexLang HTTP Boilerplate (RFC-004 / RFC-011) ---",
   "type ServerConfig struct {",
   "  read_timeout  int",
   "  max_body_size int",
@@ -320,6 +385,7 @@ const GO_BOILERPLATE = [
   "  raw        http.ResponseWriter",
   "  statusCode int",
   "  written    bool",
+  "  isHead     bool",
   "}",
   "",
   "func (r *Response) status(code int) *Response { r.statusCode = code; return r }",
@@ -335,10 +401,13 @@ const GO_BOILERPLATE = [
   "  r.written = true",
   '  r.raw.Header().Set("Content-Type", "application/json")',
   "  r.raw.WriteHeader(status)",
-  "  json.NewEncoder(r.raw).Encode(data)",
+  "  if !r.isHead {",
+  "    json.NewEncoder(r.raw).Encode(data)",
+  "  }",
   "}",
   "",
   "type flexRoute struct {",
+  "  method   string",
   "  segments []string",
   "  handler  func(Request, *Response)",
   "}",
@@ -385,8 +454,24 @@ const GO_BOILERPLATE = [
   "  s.shutdownHooks = append(s.shutdownHooks, handler)",
   "}",
   "",
-  "func (s *Server) route(path string, handler func(Request, *Response)) {",
-  "  s.routes = append(s.routes, flexRoute{segments: flexSegments(path), handler: handler})",
+  "func (s *Server) get(path string, handler func(Request, *Response)) {",
+  '  s.routes = append(s.routes, flexRoute{method: "GET", segments: flexSegments(path), handler: handler})',
+  "}",
+  "",
+  "func (s *Server) post(path string, handler func(Request, *Response)) {",
+  '  s.routes = append(s.routes, flexRoute{method: "POST", segments: flexSegments(path), handler: handler})',
+  "}",
+  "",
+  "func (s *Server) put(path string, handler func(Request, *Response)) {",
+  '  s.routes = append(s.routes, flexRoute{method: "PUT", segments: flexSegments(path), handler: handler})',
+  "}",
+  "",
+  "func (s *Server) patch(path string, handler func(Request, *Response)) {",
+  '  s.routes = append(s.routes, flexRoute{method: "PATCH", segments: flexSegments(path), handler: handler})',
+  "}",
+  "",
+  "func (s *Server) delete(path string, handler func(Request, *Response)) {",
+  '  s.routes = append(s.routes, flexRoute{method: "DELETE", segments: flexSegments(path), handler: handler})',
   "}",
   "",
   "func (s *Server) dispatch(w http.ResponseWriter, r *http.Request) {",
@@ -415,6 +500,9 @@ const GO_BOILERPLATE = [
   "",
   "  reqSegments := flexSegments(r.URL.Path)",
   "  for _, route := range s.routes {",
+  "    if route.method != r.Method && !(r.Method == \"HEAD\" && route.method == \"GET\") {",
+  "      continue",
+  "    }",
   "    params, ok := flexMatchRoute(route, reqSegments)",
   "    if !ok { continue }",
   "    body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, int64(s.config.max_body_size)))",
@@ -425,10 +513,46 @@ const GO_BOILERPLATE = [
   "      return",
   "    }",
   "    req := Request{params: params, queryParams: r.URL.Query(), body: body}",
-  "    res := &Response{raw: w, statusCode: 200}",
+  '    res := &Response{raw: w, statusCode: 200, isHead: r.Method == "HEAD"}',
   "    route.handler(req, res)",
   "    return",
   "  }",
+  "",
+  "  allowedMap := map[string]bool{}",
+  "  for _, route := range s.routes {",
+  "    if _, ok := flexMatchRoute(route, reqSegments); ok {",
+  "      allowedMap[route.method] = true",
+  "    }",
+  "  }",
+  "",
+  "  if len(allowedMap) > 0 {",
+  '    if allowedMap["GET"] {',
+  '      allowedMap["HEAD"] = true',
+  "    }",
+  '    allowedMap["OPTIONS"] = true',
+  "",
+  '    standardOrder := []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}',
+  "    allowedMethods := []string{}",
+  "    for _, m := range standardOrder {",
+  "      if allowedMap[m] {",
+  "        allowedMethods = append(allowedMethods, m)",
+  "      }",
+  "    }",
+  '    allowHeader := strings.Join(allowedMethods, ", ")',
+  "",
+  '    if r.Method == "OPTIONS" {',
+  '      w.Header().Set("Allow", allowHeader)',
+  "      w.WriteHeader(204)",
+  "      return",
+  "    }",
+  "",
+  '    w.Header().Set("Content-Type", "application/json")',
+  '    w.Header().Set("Allow", allowHeader)',
+  "    w.WriteHeader(405)",
+  '    json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed"})',
+  "    return",
+  "  }",
+  "",
   '  w.Header().Set("Content-Type", "application/json")',
   "  w.WriteHeader(404)",
   '  json.NewEncoder(w).Encode(map[string]string{"error": "not found"})',
@@ -482,7 +606,11 @@ export const httpModule: NativeModule = {
         },
       ],
       methods: [
-        { name: "route", arity: 2, returns: { kind: "Void" } },
+        { name: "get", arity: 2, returns: { kind: "Void" } },
+        { name: "post", arity: 2, returns: { kind: "Void" } },
+        { name: "put", arity: 2, returns: { kind: "Void" } },
+        { name: "patch", arity: 2, returns: { kind: "Void" } },
+        { name: "delete", arity: 2, returns: { kind: "Void" } },
         { name: "on_shutdown", arity: 1, returns: { kind: "Void" } },
         { name: "start", arity: 0, returns: { kind: "Void" } },
       ],

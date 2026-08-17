@@ -118,7 +118,7 @@ func handle_create_user(req: Request, mut res: Response) {
 }
 
 let mut server = Server.new(":8080");
-server.route("/users", handle_create_user);
+server.post("/users", handle_create_user);
 
 // Roda antes do processo encerrar (SIGINT/SIGTERM tratados automaticamente)
 server.on_shutdown(|| {

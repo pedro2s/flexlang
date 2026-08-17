@@ -9,7 +9,7 @@ func handle_request(req: Request, mut res: Response) {
 
 // Inicia um servidor escutando na porta 8080
 let mut server = Server.new(":8080");
-server.route("/", handle_request);
+server.get("/", handle_request);
 
 print("🚀 Servidor online! Acesse: http://localhost:8080/");
 // server.start(); // Descomente para manter o servidor escutando em background

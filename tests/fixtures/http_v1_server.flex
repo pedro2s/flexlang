@@ -47,6 +47,39 @@ func create_user(req: Request, mut res: Response) {
     }
 }
 
+func update_user(req: Request, mut res: Response) {
+    match req.param_int("id") {
+        Result.Ok(id) {
+            res.status(200).json("user updated");
+        },
+        Result.Err(msg) {
+            res.error(400, msg);
+        }
+    }
+}
+
+func patch_user(req: Request, mut res: Response) {
+    match req.param_int("id") {
+        Result.Ok(id) {
+            res.status(200).json("user patched");
+        },
+        Result.Err(msg) {
+            res.error(400, msg);
+        }
+    }
+}
+
+func delete_user(req: Request, mut res: Response) {
+    match req.param_int("id") {
+        Result.Ok(id) {
+            res.status(200).json("user deleted");
+        },
+        Result.Err(msg) {
+            res.error(400, msg);
+        }
+    }
+}
+
 func trigger_panic(req: Request, mut res: Response) {
     let arr = [1];
     print(arr[100]);
@@ -56,7 +89,10 @@ let mut server = Server.new(":__PORT__", ServerConfig {
     read_timeout: 5000,
     max_body_size: 64,
 });
-server.route("/users/:id", get_user);
-server.route("/users", create_user);
-server.route("/panic", trigger_panic);
+server.get("/users/:id", get_user);
+server.put("/users/:id", update_user);
+server.patch("/users/:id", patch_user);
+server.delete("/users/:id", delete_user);
+server.post("/users", create_user);
+server.get("/panic", trigger_panic);
 server.start();
