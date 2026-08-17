@@ -1,1 +1,6 @@
-TypeError: match is not exhaustive, missing variant 'Suspenso'
+error[E2003]: match is not exhaustive, missing variant 'Suspenso'
+ --> tests/15_match_nao_exaustivo.flex:11:5
+   |
+11 |     match s {
+   |     ^^^^^^^^^
+   |

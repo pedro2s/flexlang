@@ -1,1 +1,6 @@
-TypeError: Cannot return Result<String, Any> from a function that returns Result<Int, String>
+error[E2006]: Cannot return Result<String, Any> from a function that returns Result<Int, String>
+ --> tests/20_result_instanciacao.flex:6:12
+  |
+6 |     return Result.Ok("nao e um Int");
+  |            ^^^^^^^^^^^^^^^^^^^^^^^^^
+  |

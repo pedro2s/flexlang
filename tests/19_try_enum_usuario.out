@@ -1,1 +1,6 @@
-TypeError: ? operator can only be applied to Result or Option, got MeuTipo
+error[E2005]: ? operator can only be applied to Result or Option, got MeuTipo
+ --> tests/19_try_enum_usuario.flex:15:13
+   |
+15 |     let x = produz()?;
+   |             ^^^^^^^^^
+   |

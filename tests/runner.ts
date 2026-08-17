@@ -5,6 +5,7 @@ import { Interpreter } from "../src/interpreter";
 import { TypeChecker } from "../src/checker";
 import { registry } from "../src/modules/registry";
 import { echoModule } from "../src/modules/echo";
+import { FlexError, formatDiagnostic } from "../src/diagnostics";
 
 // Módulo nativo fictício, disponível só para a suíte (RFC-003)
 registry.register(echoModule);
@@ -39,7 +40,11 @@ async function runTests() {
       await interpreter.run(graph);
     } catch (e: any) {
       // Capture errors in output as well!
-      capturedOutput += e.message + "\n";
+      if (e instanceof FlexError) {
+        capturedOutput += formatDiagnostic(e, { isTTY: false }) + "\n";
+      } else {
+        capturedOutput += e.message + "\n";
+      }
     }
 
     if (!fs.existsSync(outPath)) {

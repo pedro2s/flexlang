@@ -1,1 +1,6 @@
-TypeError: Struct 'Dog' does not implement method 'speak' from trait 'Animal'
+error[E2002]: Struct 'Dog' does not implement method 'speak' from trait 'Animal'
+ --> tests/10_traits_fail.flex:11:1
+   |
+11 | impl Animal for Dog {
+   | ^^^^^^^^^^^^^^^^^^^^^
+   |

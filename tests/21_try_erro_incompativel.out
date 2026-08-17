@@ -1,1 +1,6 @@
-TypeError: ? propagates Result<Int, String>, which does not fit the return type Result<Int, Int>
+error[E2007]: ? propagates Result<Int, String>, which does not fit the return type Result<Int, Int>
+ --> tests/21_try_erro_incompativel.flex:9:13
+  |
+9 |     let x = origem()?; // propagaria um Err(String) para um Result<Int, Int>
+  |             ^^^^^^^^^
+  |

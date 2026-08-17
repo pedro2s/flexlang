@@ -1,1 +1,6 @@
-TypeError: Operator * requires operands of the same type (Float and Int)
+error[E2009]: Operator * requires operands of the same type (Float and Int)
+ --> tests/34_float_type_mismatch.flex:4:14
+  |
+4 | let errado = preco * quantidade;
+  |              ^^^^^^^^^^^^^^^^^^
+  |

@@ -1,1 +1,6 @@
-TypeError: 'Result' is a built-in type and cannot be redeclared
+error[E2004]: 'Result' is a built-in type and cannot be redeclared
+ --> tests/18_result_redeclarado.flex:4:1
+  |
+4 | enum Result {
+  | ^^^^^^^^^^^^^
+  |

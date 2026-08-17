@@ -1,1 +1,6 @@
-TypeError: Cannot mutate property of immutable variable 'p'
+error[E3001]: Cannot mutate property of immutable variable 'p'
+ --> tests/04_mutability.flex:15:1
+   |
+15 | p.age = 40;
+   | ^^^^^^^^^^
+   |

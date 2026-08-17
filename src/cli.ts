@@ -7,6 +7,7 @@ import { loadModuleGraph } from "./loader";
 import { TypeChecker } from "./checker";
 import { Interpreter } from "./interpreter";
 import { GoTranspiler } from "./transpiler";
+import { FlexError, formatDiagnostic } from "./diagnostics";
 
 function printUsage() {
     console.log(`🚀 FlexLang CLI
@@ -210,7 +211,11 @@ async function runTest(targetPath: string) {
             const interpreter = new Interpreter(stdout);
             await interpreter.run(graph);
         } catch (e: any) {
-            capturedOutput += e.message + "\n";
+            if (e instanceof FlexError) {
+                capturedOutput += formatDiagnostic(e, { isTTY: false }) + "\n";
+            } else {
+                capturedOutput += e.message + "\n";
+            }
         }
 
         if (!fs.existsSync(outPath)) {
@@ -264,6 +269,16 @@ async function main() {
 }
 
 main().catch((e) => {
-    console.error(e);
+    if (e instanceof FlexError) {
+        console.error(formatDiagnostic(e, { isTTY: process.stderr.isTTY }));
+        process.exit(1);
+    }
+    const isDebug = process.argv.includes("--debug");
+    console.error(`erro interno do compilador: ${e?.message ?? e}\n`);
+    console.error("Isto é um bug da FlexLang, não do seu código.");
+    console.error("Reporte em https://github.com/pedro2s/flexlang/issues (use --debug para a stack completa).\n");
+    if (isDebug && e?.stack) {
+        console.error(e.stack);
+    }
     process.exit(1);
 });

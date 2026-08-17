@@ -1,1 +1,6 @@
-TypeError: Cannot assign value of type 'Int' to variable 'bad' of type 'String'
+error[E2001]: Cannot assign value of type 'Int' to variable 'bad' of type 'String'
+ --> tests/03_checker_base.flex:17:19
+   |
+17 | let bad: String = sum(5, 5);
+   |                   ^^^^^^^^^
+   |

@@ -3,6 +3,7 @@ import * as path from "path";
 import { Lexer } from "./lexer";
 import { Parser } from "./parser";
 import { modulePath } from "./modules/types";
+import { FlexError } from "./diagnostics";
 import type { ImportDeclaration, Stmt } from "./ast";
 
 /**
@@ -128,7 +129,7 @@ export function loadModuleGraph(
     const code = readFile(currentPath);
     const lexer = new Lexer(code);
     const tokens = lexer.tokenize();
-    const parser = new Parser(tokens);
+    const parser = new Parser(tokens, currentPath);
     const ast = parser.parse();
 
     const localDependencies: string[] = [];

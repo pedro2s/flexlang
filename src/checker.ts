@@ -8,6 +8,7 @@ import type {
   TraitDeclaration,
   ImplDeclaration,
   ImportDeclaration,
+  Span,
 } from "./ast";
 import { builtinEnums, isBuiltinType, successVariant } from "./stdlib";
 import { registry } from "./modules/registry";
@@ -22,6 +23,7 @@ import {
   isLocalModule,
   resolveModuleFilePath,
 } from "./loader";
+import { FlexError } from "./diagnostics";
 
 // --- Representação Interna de Tipos do TypeChecker ---
 export type FlexType =
@@ -147,8 +149,10 @@ export class TypeChecker {
             stmt.kind === "TraitDeclaration") &&
           isBuiltinType(stmt.name)
         ) {
-          throw new Error(
-            `TypeError: '${stmt.name}' is a built-in type and cannot be redeclared`,
+          throw new FlexError(
+            "E2004",
+            `'${stmt.name}' is a built-in type and cannot be redeclared`,
+            stmt.span,
           );
         }
 
@@ -165,7 +169,11 @@ export class TypeChecker {
             const path = modulePath(stmt.moduleName);
             const mod = registry.get(path);
             if (!mod) {
-              throw new Error(`ImportError: Module '${path}' not found`);
+              throw new FlexError(
+                "E4002",
+                `ImportError: Module '${path}' not found`,
+                stmt.span,
+              );
             }
             for (const nativeType of mod.types) {
               fileStructs.set(nativeType.name, nativeStructDeclaration(nativeType));
@@ -210,7 +218,11 @@ export class TypeChecker {
           const targetPath = resolveModuleFilePath(filePath, stmt.moduleName, graph.files);
           const targetSymbols = fileOwnSymbols.get(targetPath);
           if (!targetSymbols) {
-            throw new Error(`ImportError: Module '${modulePath(stmt.moduleName)}' not found`);
+            throw new FlexError(
+              "E4002",
+              `ImportError: Module '${modulePath(stmt.moduleName)}' not found`,
+              stmt.span,
+            );
           }
 
           for (const sym of stmt.imports) {
@@ -236,8 +248,10 @@ export class TypeChecker {
             }
 
             if (!found) {
-              throw new Error(
+              throw new FlexError(
+                "E4003",
                 `ImportError: Symbol '${sym}' not found in module '${modulePath(stmt.moduleName)}'`,
+                stmt.span,
               );
             }
           }
@@ -291,8 +305,15 @@ export class TypeChecker {
         const valueType = this.checkExpr(stmt.value, env, expected);
 
         if (expected && !this.isTypeAssignable(expected, valueType)) {
-          throw new Error(
-            `TypeError: Cannot assign value of type '${this.typeToString(valueType)}' to variable '${stmt.name}' of type '${this.typeToString(expected)}'`,
+          const help =
+            expected.kind === "Float" && valueType.kind === "Int"
+              ? "literais decimais são Float — use um literal com ponto (ex: 19.0) ou .to_float()"
+              : undefined;
+          throw new FlexError(
+            "E2001",
+            `Cannot assign value of type '${this.typeToString(valueType)}' to variable '${stmt.name}' of type '${this.typeToString(expected)}'`,
+            stmt.value.span ?? stmt.span,
+            help,
           );
         }
         env.define(stmt.name, expected ?? valueType, stmt.isMut);
@@ -301,11 +322,15 @@ export class TypeChecker {
 
       case "ScopeStmt":
         if (stmt.deadline) {
-            const deadlineType = this.checkExpr(stmt.deadline, env);
-            // Idealmente exigiriamos um tipo Duration, mas por hora Int serve
-            if (deadlineType.kind !== "Int" && deadlineType.kind !== "Any") {
-                 throw new Error(`TypeError: scope deadline must be an Int, got ${this.typeToString(deadlineType)}`);
-            }
+          const deadlineType = this.checkExpr(stmt.deadline, env);
+          // Idealmente exigiriamos um tipo Duration, mas por hora Int serve
+          if (deadlineType.kind !== "Int" && deadlineType.kind !== "Any") {
+            throw new FlexError(
+              "E2026",
+              `scope deadline must be an Int, got ${this.typeToString(deadlineType)}`,
+              stmt.deadline.span ?? stmt.span,
+            );
+          }
         }
         this.inScopeContext++;
         this.checkStmt(stmt.body, env);
@@ -314,7 +339,11 @@ export class TypeChecker {
 
       case "SpawnStmt":
         if (this.inScopeContext === 0) {
-            throw new Error("SyntaxError: 'spawn' can only be called inside a 'scope' block");
+          throw new FlexError(
+            "E5001",
+            "SyntaxError: 'spawn' can only be called inside a 'scope' block",
+            stmt.span,
+          );
         }
         this.checkStmt(stmt.body, env);
         break;
@@ -337,7 +366,11 @@ export class TypeChecker {
       case "IfStmt":
         const condType = this.checkExpr(stmt.condition, env);
         if (condType.kind !== "Bool" && condType.kind !== "Any") {
-          throw new Error(`TypeError: If condition must be Bool, got ${this.typeToString(condType)}`);
+          throw new FlexError(
+            "E2016",
+            `If condition must be Bool, got ${this.typeToString(condType)}`,
+            stmt.condition.span ?? stmt.span,
+          );
         }
         this.checkStmt(stmt.consequent, env);
         if (stmt.alternate) {
@@ -348,7 +381,11 @@ export class TypeChecker {
       case "WhileStmt":
         const wCondType = this.checkExpr(stmt.condition, env);
         if (wCondType.kind !== "Bool" && wCondType.kind !== "Any") {
-          throw new Error(`TypeError: While condition must be Bool, got ${this.typeToString(wCondType)}`);
+          throw new FlexError(
+            "E2017",
+            `While condition must be Bool, got ${this.typeToString(wCondType)}`,
+            stmt.condition.span ?? stmt.span,
+          );
         }
         this.checkStmt(stmt.body, env);
         break;
@@ -357,7 +394,11 @@ export class TypeChecker {
         const startType = this.checkExpr(stmt.start, env);
         const endType = this.checkExpr(stmt.end, env);
         if (startType.kind !== "Int" || endType.kind !== "Int") {
-          throw new Error("TypeError: For loop bounds must be Int");
+          throw new FlexError(
+            "E2018",
+            "For loop bounds must be Int",
+            stmt.span,
+          );
         }
         const forEnv = new TypeEnvironment(env);
         forEnv.define(stmt.iteratorName, { kind: "Int" }, false);
@@ -367,11 +408,11 @@ export class TypeChecker {
       case "FunctionDeclaration":
         // Registra a função local/closure para permitir Type Checking das suas chamadas mais abaixo
         this.functions.set(stmt.name, stmt);
-        
+
         const funcEnv = new TypeEnvironment(env);
         const retType = stmt.returnType ? this.resolveTypeNode(stmt.returnType) : { kind: "Void" } as FlexType;
         funcEnv.define("__RETURN_TYPE__", retType, false);
-        
+
         for (const param of stmt.parameters) {
           funcEnv.define(param.name, this.resolveTypeNode(param.typeAnnotation), !!param.isMut);
         }
@@ -391,8 +432,10 @@ export class TypeChecker {
             returnedType.kind === "Enum" &&
             !this.isTypeAssignable(expectedReturn.type, returnedType)
           ) {
-            throw new Error(
-              `TypeError: Cannot return ${this.typeToString(returnedType)} from a function that returns ${this.typeToString(expectedReturn.type)}`,
+            throw new FlexError(
+              "E2006",
+              `Cannot return ${this.typeToString(returnedType)} from a function that returns ${this.typeToString(expectedReturn.type)}`,
+              stmt.value?.span ?? stmt.span,
             );
           }
         }
@@ -403,81 +446,106 @@ export class TypeChecker {
       case "TraitDeclaration":
         // Hookados no Pass 1
         break;
-        
+
       case "ImplDeclaration":
         if (stmt.traitName) {
-             const trait = this.traits.get(stmt.traitName);
-             if (!trait) throw new Error(`ReferenceError: Trait '${stmt.traitName}' not found`);
-             
-             // Validação da interface
-             for (const tMethod of trait.methods) {
-                  const iMethod = stmt.methods.find(m => m.name === tMethod.name);
-                  if (!iMethod) throw new Error(`TypeError: Struct '${stmt.structName}' does not implement method '${tMethod.name}' from trait '${stmt.traitName}'`);
-                  const iParams = iMethod.parameters.filter(p => p.name !== "self");
-                  if (tMethod.parameters.length !== iParams.length) {
-                       throw new Error(`TypeError: Method '${tMethod.name}' in impl does not match trait signature for parameters count`);
-                  }
-             }
+          const trait = this.traits.get(stmt.traitName);
+          if (!trait) throw new FlexError("E2027", `ReferenceError: Trait '${stmt.traitName}' not found`, stmt.span);
+
+          // Validação da interface
+          for (const tMethod of trait.methods) {
+            const iMethod = stmt.methods.find((m) => m.name === tMethod.name);
+            if (!iMethod)
+              throw new FlexError(
+                "E2002",
+                `Struct '${stmt.structName}' does not implement method '${tMethod.name}' from trait '${stmt.traitName}'`,
+                stmt.span,
+              );
+            const iParams = iMethod.parameters.filter((p) => p.name !== "self");
+            if (tMethod.parameters.length !== iParams.length) {
+              throw new FlexError(
+                "E2028",
+                `Method '${tMethod.name}' in impl does not match trait signature for parameters count`,
+                stmt.span,
+              );
+            }
+          }
         }
-        
+
         // Avaliar corpo dos metodos do Impl
         for (const m of stmt.methods) {
-             const mEnv = new TypeEnvironment(env);
-             mEnv.define("self", { kind: "Struct", name: stmt.structName, genericArgs: [] }, true);
-             for (const param of m.parameters) {
-                 if (param.name !== "self") {
-                     mEnv.define(param.name, this.resolveTypeNode(param.typeAnnotation), !!param.isMut);
-                 }
-             }
-             this.checkStmt(m.body, mEnv);
+          const mEnv = new TypeEnvironment(env);
+          mEnv.define("self", { kind: "Struct", name: stmt.structName, genericArgs: [] }, true);
+          for (const param of m.parameters) {
+            if (param.name !== "self") {
+              mEnv.define(param.name, this.resolveTypeNode(param.typeAnnotation), !!param.isMut);
+            }
+          }
+          this.checkStmt(m.body, mEnv);
         }
         break;
 
       case "MatchStmt":
         const matchValueType = this.checkExpr(stmt.value, env);
         if (matchValueType.kind !== "Enum" && matchValueType.kind !== "Any") {
-            throw new Error(`TypeError: match expression must be an Enum, got ${this.typeToString(matchValueType)}`);
+          throw new FlexError(
+            "E2029",
+            `match expression must be an Enum, got ${this.typeToString(matchValueType)}`,
+            stmt.value.span ?? stmt.span,
+          );
         }
-        
+
         const enumDeclMatch = matchValueType.kind === "Enum" ? this.enums.get(matchValueType.name) : undefined;
         const matchedVariants = new Set<string>();
 
         for (const arm of stmt.arms) {
-            if (enumDeclMatch && arm.enumName !== enumDeclMatch.name) {
-                 throw new Error(`TypeError: match arm is for enum '${arm.enumName}', but matching on '${enumDeclMatch.name}'`);
-            }
-            const eDecl = this.enums.get(arm.enumName);
-            if (!eDecl) throw new Error(`ReferenceError: Enum '${arm.enumName}' not found`);
-            const variant = eDecl.variants.find(v => v.name === arm.variantName);
-            if (!variant) throw new Error(`ReferenceError: Variant '${arm.variantName}' not found`);
-            
-            const payloadTypes = variant.payload || [];
-            if (payloadTypes.length !== arm.binders.length) {
-                 throw new Error(`TypeError: Match arm binds ${arm.binders.length} variables, but variant '${arm.variantName}' has ${payloadTypes.length} fields`);
-            }
-            
-            // Os binders recebem o payload já com T/E trocados pelos tipos concretos
-            // da instanciação sendo casada (ex: Result<Int, String> -> Ok(v): Int).
-            const armSubst = this.genericSubst(
-                eDecl,
-                matchValueType.kind === "Enum" ? matchValueType.genericArgs : [],
+          if (enumDeclMatch && arm.enumName !== enumDeclMatch.name) {
+            throw new FlexError(
+              "E2030",
+              `match arm is for enum '${arm.enumName}', but matching on '${enumDeclMatch.name}'`,
+              arm.span ?? stmt.span,
             );
-            const armEnv = new TypeEnvironment(env);
-            for (let i = 0; i < arm.binders.length; i++) {
-                 armEnv.define(arm.binders[i], this.resolveTypeNode(payloadTypes[i], armSubst), false);
-            }
-            
-            this.checkStmt(arm.body, armEnv);
-            matchedVariants.add(arm.variantName);
+          }
+          const eDecl = this.enums.get(arm.enumName);
+          if (!eDecl) throw new FlexError("E2027", `ReferenceError: Enum '${arm.enumName}' not found`, arm.span ?? stmt.span);
+          const variant = eDecl.variants.find((v) => v.name === arm.variantName);
+          if (!variant) throw new FlexError("E2014", `ReferenceError: Variant '${arm.variantName}' not found`, arm.span ?? stmt.span);
+
+          const payloadTypes = variant.payload || [];
+          if (payloadTypes.length !== arm.binders.length) {
+            throw new FlexError(
+              "E2031",
+              `Match arm binds ${arm.binders.length} variables, but variant '${arm.variantName}' has ${payloadTypes.length} fields`,
+              arm.span ?? stmt.span,
+            );
+          }
+
+          // Os binders recebem o payload já com T/E trocados pelos tipos concretos
+          // da instanciação sendo casada (ex: Result<Int, String> -> Ok(v): Int).
+          const armSubst = this.genericSubst(
+            eDecl,
+            matchValueType.kind === "Enum" ? matchValueType.genericArgs : [],
+          );
+          const armEnv = new TypeEnvironment(env);
+          for (let i = 0; i < arm.binders.length; i++) {
+            armEnv.define(arm.binders[i], this.resolveTypeNode(payloadTypes[i], armSubst), false);
+          }
+
+          this.checkStmt(arm.body, armEnv);
+          matchedVariants.add(arm.variantName);
         }
 
         // Checagem de exhaustiveness
         if (enumDeclMatch) {
-            for (const v of enumDeclMatch.variants) {
-                if (!matchedVariants.has(v.name)) {
-                     throw new Error(`TypeError: match is not exhaustive, missing variant '${v.name}'`);
-                }
+          for (const v of enumDeclMatch.variants) {
+            if (!matchedVariants.has(v.name)) {
+              throw new FlexError(
+                "E2003",
+                `match is not exhaustive, missing variant '${v.name}'`,
+                stmt.span,
+              );
             }
+          }
         }
         break;
     }
@@ -516,34 +584,41 @@ export class TypeChecker {
           }
         }
         return { kind: "String" };
-        
-      case "Identifier":
+
+      case "Identifier": {
         const varInfo = env.get(expr.symbol);
         if (varInfo) {
-            if (varInfo.isMoved) {
-                throw new Error(`TypeError: Use-after-send of moved variable '${expr.symbol}'`);
-            }
-            return varInfo.type;
+          if (varInfo.isMoved) {
+            throw new FlexError("E3002", `Use-after-send of moved variable '${expr.symbol}'`, expr.span);
+          }
+          return varInfo.type;
         }
-        
-        if (this.functions.has(expr.symbol)) {
-            return { kind: "Any" };
-        }
-        
-        throw new Error(`ReferenceError: Identifier '${expr.symbol}' not found`);
 
-      case "BinaryExpr":
+        if (this.functions.has(expr.symbol)) {
+          return { kind: "Any" };
+        }
+
+        throw new FlexError("E2011", `ReferenceError: Identifier '${expr.symbol}' not found`, expr.span);
+      }
+
+      case "BinaryExpr": {
         let leftType = this.checkExpr(expr.left, env, expected);
         let rightType = this.checkExpr(expr.right, env, expected);
-        
+
         // Promoção de literais numéricos untyped (RFC-013 §4.3)
         if (leftType.kind === "Float" && rightType.kind === "Int") {
-          if (expr.right.kind === "NumericLiteral" || (expr.right.kind === "UnaryExpr" && expr.right.argument.kind === "NumericLiteral")) {
+          if (
+            expr.right.kind === "NumericLiteral" ||
+            (expr.right.kind === "UnaryExpr" && expr.right.argument.kind === "NumericLiteral")
+          ) {
             rightType = { kind: "Float" };
             this.typeMap.set(expr.right, rightType);
           }
         } else if (leftType.kind === "Int" && rightType.kind === "Float") {
-          if (expr.left.kind === "NumericLiteral" || (expr.left.kind === "UnaryExpr" && expr.left.argument.kind === "NumericLiteral")) {
+          if (
+            expr.left.kind === "NumericLiteral" ||
+            (expr.left.kind === "UnaryExpr" && expr.left.argument.kind === "NumericLiteral")
+          ) {
             leftType = { kind: "Float" };
             this.typeMap.set(expr.left, leftType);
           }
@@ -552,22 +627,41 @@ export class TypeChecker {
         // Operador módulo (%) só aceita Int (RFC-013 §4.6)
         if (expr.operator === "%") {
           if (leftType.kind === "Float" || rightType.kind === "Float") {
-            throw new Error(`TypeError: Operator % is not supported for Float. Use to_int()`);
+            throw new FlexError(
+              "E2010",
+              "Operator % is not supported for Float. Use to_int()",
+              expr.span,
+              "converta para Int usando .to_int()",
+            );
           }
-          if ((leftType.kind !== "Int" && leftType.kind !== "Any") || (rightType.kind !== "Int" && rightType.kind !== "Any")) {
-            throw new Error(`TypeError: Operator % requires Ints, got ${this.typeToString(leftType)} and ${this.typeToString(rightType)}`);
+          if (
+            (leftType.kind !== "Int" && leftType.kind !== "Any") ||
+            (rightType.kind !== "Int" && rightType.kind !== "Any")
+          ) {
+            throw new FlexError(
+              "E2010",
+              `Operator % requires Ints, got ${this.typeToString(leftType)} and ${this.typeToString(rightType)}`,
+              expr.span,
+            );
           }
           return { kind: "Int" };
         }
 
         // Comparações relacionais e de igualdade
         if (["==", "!=", "<", "<=", ">", ">="].includes(expr.operator)) {
-          if ((leftType.kind === "Float" && rightType.kind === "Int") || (leftType.kind === "Int" && rightType.kind === "Float")) {
-            throw new Error(`TypeError: Operator ${expr.operator} requires operands of the same type (${this.typeToString(leftType)} and ${this.typeToString(rightType)})`);
+          if (
+            (leftType.kind === "Float" && rightType.kind === "Int") ||
+            (leftType.kind === "Int" && rightType.kind === "Float")
+          ) {
+            throw new FlexError(
+              "E2009",
+              `Operator ${expr.operator} requires operands of the same type (${this.typeToString(leftType)} and ${this.typeToString(rightType)})`,
+              expr.span,
+            );
           }
           return { kind: "Bool" };
         }
-        
+
         // Operadores matemáticos (+, -, *, /)
         if (leftType.kind === "Float" && rightType.kind === "Float") {
           return { kind: "Float" };
@@ -576,50 +670,67 @@ export class TypeChecker {
           return { kind: "Int" };
         }
         if (leftType.kind === "Any") {
-          return rightType.kind === "Float" ? { kind: "Float" } : (rightType.kind === "Int" ? { kind: "Int" } : { kind: "Any" });
+          return rightType.kind === "Float"
+            ? { kind: "Float" }
+            : rightType.kind === "Int"
+              ? { kind: "Int" }
+              : { kind: "Any" };
         }
         if (rightType.kind === "Any") {
-          return leftType.kind === "Float" ? { kind: "Float" } : (leftType.kind === "Int" ? { kind: "Int" } : { kind: "Any" });
+          return leftType.kind === "Float"
+            ? { kind: "Float" }
+            : leftType.kind === "Int"
+              ? { kind: "Int" }
+              : { kind: "Any" };
         }
-        throw new Error(`TypeError: Operator ${expr.operator} requires operands of the same type (${this.typeToString(leftType)} and ${this.typeToString(rightType)})`);
+        throw new FlexError(
+          "E2009",
+          `Operator ${expr.operator} requires operands of the same type (${this.typeToString(leftType)} and ${this.typeToString(rightType)})`,
+          expr.span,
+        );
+      }
 
       case "LogicalExpr":
         this.checkExpr(expr.left, env);
         this.checkExpr(expr.right, env);
         return { kind: "Bool" };
 
-      case "UnaryExpr":
+      case "UnaryExpr": {
         const uType = this.checkExpr(expr.argument, env, expected);
         if (expr.operator === "!" && uType.kind !== "Bool") {
-           throw new Error(`TypeError: ! operator requires Bool`);
+          throw new FlexError("E2023", "! operator requires Bool", expr.span);
         }
         if (expr.operator === "-") {
-           if (uType.kind !== "Int" && uType.kind !== "Float" && uType.kind !== "Any") {
-             throw new Error(`TypeError: - operator requires Int or Float`);
-           }
+          if (uType.kind !== "Int" && uType.kind !== "Float" && uType.kind !== "Any") {
+            throw new FlexError("E2023", "- operator requires Int or Float", expr.span);
+          }
         }
         return uType;
+      }
 
-      case "ArrayLiteral":
+      case "ArrayLiteral": {
         if (expr.elements.length === 0) return { kind: "Array", elementType: { kind: "Any" } };
         const firstType = this.checkExpr(expr.elements[0], env);
         // Valida que todos os outros são do mesmo tipo
         for (let i = 1; i < expr.elements.length; i++) {
-            const nextType = this.checkExpr(expr.elements[i], env);
-            if (!this.isTypeAssignable(firstType, nextType)) {
-                 throw new Error("TypeError: Array elements must be of the same type");
-            }
+          const nextType = this.checkExpr(expr.elements[i], env);
+          if (!this.isTypeAssignable(firstType, nextType)) {
+            throw new FlexError("E2021", "Array elements must be of the same type", expr.span);
+          }
         }
         return { kind: "Array", elementType: firstType };
+      }
 
-      case "IndexExpr":
+      case "IndexExpr": {
         const arrType = this.checkExpr(expr.object, env);
         if (arrType.kind !== "Array" && arrType.kind !== "Any") {
-            throw new Error(`TypeError: Cannot index into type ${this.typeToString(arrType)}`);
+          throw new FlexError("E2020", `Cannot index into type ${this.typeToString(arrType)}`, expr.span);
         }
         const idxType = this.checkExpr(expr.index, env);
-        if (idxType.kind !== "Int") throw new Error("TypeError: Array index must be Int");
+        if (idxType.kind !== "Int")
+          throw new FlexError("E2019", "Array index must be Int", expr.index.span ?? expr.span);
         return arrType.kind === "Array" ? arrType.elementType : { kind: "Any" };
+      }
 
       case "StructExpr":
         for (const prop of expr.properties) {
@@ -635,21 +746,26 @@ export class TypeChecker {
 
       case "MemberExpr":
         if (expr.object.kind === "Identifier" && this.enums.has(expr.object.symbol)) {
-             const enumName = expr.object.symbol;
-             const variantName = expr.property;
-             const enumDecl = this.enums.get(enumName)!;
-             const variant = enumDecl.variants.find(v => v.name === variantName);
-             if (!variant) throw new Error(`ReferenceError: Variant '${variantName}' not found in enum '${enumName}'`);
-             
-             if (variant.payload && variant.payload.length > 0) {
-                 throw new Error(`TypeError: Variant '${variantName}' expects ${variant.payload.length} arguments, got 0`);
-             }
-             // Variante sem payload (ex: Option.None) não diz nada sobre T.
-             return {
-                 kind: "Enum",
-                 name: enumName,
-                 genericArgs: (enumDecl.typeParams ?? []).map(() => ({ kind: "Any" }) as FlexType),
-             };
+          const enumName = expr.object.symbol;
+          const variantName = expr.property;
+          const enumDecl = this.enums.get(enumName)!;
+          const variant = enumDecl.variants.find((v) => v.name === variantName);
+          if (!variant)
+            throw new FlexError("E2014", `Variant '${variantName}' not found in enum '${enumName}'`, expr.span);
+
+          if (variant.payload && variant.payload.length > 0) {
+            throw new FlexError(
+              "E2015",
+              `Variant '${variantName}' expects ${variant.payload.length} arguments, got 0`,
+              expr.span,
+            );
+          }
+          // Variante sem payload (ex: Option.None) não diz nada sobre T.
+          return {
+            kind: "Enum",
+            name: enumName,
+            genericArgs: (enumDecl.typeParams ?? []).map(() => ({ kind: "Any" }) as FlexType),
+          };
         }
         // Não valida o campo em si (limitação conhecida — "pula checagem
         // complexa"), mas registra o tipo do OBJETO no TypeMap: o transpiler
@@ -659,195 +775,283 @@ export class TypeChecker {
         this.checkExpr(expr.object, env);
         return { kind: "Any" };
 
-      case "CallExpr":
-        if (expr.caller.kind === "MemberExpr" && expr.caller.object.kind === "Identifier" && this.enums.has(expr.caller.object.symbol)) {
-             const enumName = expr.caller.object.symbol;
-             const variantName = expr.caller.property;
-             
-             const enumDecl = this.enums.get(enumName)!;
-             const variant = enumDecl.variants.find(v => v.name === variantName);
-             if (!variant) throw new Error(`ReferenceError: Variant '${variantName}' not found in enum '${enumName}'`);
-             
-             const payloadTypes = variant.payload || [];
-             if (payloadTypes.length !== expr.args.length) {
-                 throw new Error(`TypeError: Variant '${variantName}' expects ${payloadTypes.length} arguments, got ${expr.args.length}`);
-             }
+      case "CallExpr": {
+        if (
+          expr.caller.kind === "MemberExpr" &&
+          expr.caller.object.kind === "Identifier" &&
+          this.enums.has(expr.caller.object.symbol)
+        ) {
+          const enumName = expr.caller.object.symbol;
+          const variantName = expr.caller.property;
 
-             // Na construção, os parâmetros de tipo ainda são livres: qualquer
-             // argumento serve para T/E, e é dele que a instanciação é inferida.
-             const freeSubst = this.genericSubst(enumDecl, []);
-             const argTypes: FlexType[] = [];
-             for (let i = 0; i < expr.args.length; i++) {
-                 const argType = this.checkExpr(expr.args[i], env);
-                 argTypes.push(argType);
-                 const expectedType = this.resolveTypeNode(payloadTypes[i], freeSubst);
-                 if (!this.isTypeAssignable(expectedType, argType)) {
-                      throw new Error(`TypeError: Argument ${i+1} of variant '${variantName}' must be ${this.typeToString(expectedType)}, got ${this.typeToString(argType)}`);
-                 }
-             }
-             return { kind: "Enum", name: enumName, genericArgs: this.inferGenericArgs(enumDecl, payloadTypes, argTypes) };
+          const enumDecl = this.enums.get(enumName)!;
+          const variant = enumDecl.variants.find((v) => v.name === variantName);
+          if (!variant)
+            throw new FlexError("E2014", `Variant '${variantName}' not found in enum '${enumName}'`, expr.span);
+
+          const payloadTypes = variant.payload || [];
+          if (payloadTypes.length !== expr.args.length) {
+            throw new FlexError(
+              "E2015",
+              `Variant '${variantName}' expects ${payloadTypes.length} arguments, got ${expr.args.length}`,
+              expr.span,
+            );
+          }
+
+          // Na construção, os parâmetros de tipo ainda são livres: qualquer
+          // argumento serve para T/E, e é dele que a instanciação é inferida.
+          const freeSubst = this.genericSubst(enumDecl, []);
+          const argTypes: FlexType[] = [];
+          for (let i = 0; i < expr.args.length; i++) {
+            const argType = this.checkExpr(expr.args[i], env);
+            argTypes.push(argType);
+            const expectedType = this.resolveTypeNode(payloadTypes[i], freeSubst);
+            if (!this.isTypeAssignable(expectedType, argType)) {
+              throw new FlexError(
+                "E2032",
+                `Argument ${i + 1} of variant '${variantName}' must be ${this.typeToString(expectedType)}, got ${this.typeToString(argType)}`,
+                expr.args[i]?.span ?? expr.span,
+              );
+            }
+          }
+          return {
+            kind: "Enum",
+            name: enumName,
+            genericArgs: this.inferGenericArgs(enumDecl, payloadTypes, argTypes),
+          };
         }
-        
+
         if (expr.caller.kind === "Identifier") {
-           const func = this.functions.get(expr.caller.symbol);
-           if (!func) {
-              const struct = this.structs.get(expr.caller.symbol);
-              if (struct) {
-                 return { kind: "Struct", name: struct.name, genericArgs: [] };
-              }
-              // Caso não ache, pode ser uma variável tipo closure/função (que ainda não modelamos forte)
-              // mas para funções nomeadas, falhamos.
-              const varType = env.get(expr.caller.symbol);
-              if (varType) return { kind: "Any" }; // closure call
-              
-              throw new Error(`ReferenceError: Function or Struct '${expr.caller.symbol}' not found`);
-           }
-           
-           if (func.parameters.length !== expr.args.length) {
-              throw new Error(`TypeError: Function '${func.name}' expects ${func.parameters.length} arguments, got ${expr.args.length}`);
-           }
-           
-           for (let i = 0; i < expr.args.length; i++) {
-              const argType = this.checkExpr(expr.args[i], env);
-              const paramType = this.resolveTypeNode(func.parameters[i].typeAnnotation);
-              if (!this.isTypeAssignable(paramType, argType)) {
-                  throw new Error(`TypeError: Argument ${i + 1} of function '${func.name}' must be ${this.typeToString(paramType)}, got ${this.typeToString(argType)}`);
-              }
-           }
-           
-           if (func.returnType) {
-               return this.resolveTypeNode(func.returnType);
-           }
-           return { kind: "Void" };
+          const func = this.functions.get(expr.caller.symbol);
+          if (!func) {
+            const struct = this.structs.get(expr.caller.symbol);
+            if (struct) {
+              return { kind: "Struct", name: struct.name, genericArgs: [] };
+            }
+            // Caso não ache, pode ser uma variável tipo closure/função (que ainda não modelamos forte)
+            // mas para funções nomeadas, falhamos.
+            const varType = env.get(expr.caller.symbol);
+            if (varType) return { kind: "Any" }; // closure call
+
+            throw new FlexError(
+              "E2011",
+              `Function or Struct '${expr.caller.symbol}' not found`,
+              expr.caller.span ?? expr.span,
+            );
+          }
+
+          if (func.parameters.length !== expr.args.length) {
+            throw new FlexError(
+              "E2012",
+              `Function '${func.name}' expects ${func.parameters.length} arguments, got ${expr.args.length}`,
+              expr.span,
+            );
+          }
+
+          for (let i = 0; i < expr.args.length; i++) {
+            const argType = this.checkExpr(expr.args[i], env);
+            const paramType = this.resolveTypeNode(func.parameters[i].typeAnnotation);
+            if (!this.isTypeAssignable(paramType, argType)) {
+              throw new FlexError(
+                "E2013",
+                `Argument ${i + 1} of function '${func.name}' must be ${this.typeToString(paramType)}, got ${this.typeToString(argType)}`,
+                expr.args[i]?.span ?? expr.span,
+              );
+            }
+          }
+
+          if (func.returnType) {
+            return this.resolveTypeNode(func.returnType);
+          }
+          return { kind: "Void" };
         }
-        
+
         if (expr.caller.kind === "MemberExpr") {
-            // Channel é primitivo da linguagem (não vem de import): `send` move o
-            // valor, e `recv` devolve o tipo do canal — semânticas que uma
-            // assinatura de módulo nativo não expressa.
-            if (expr.caller.object.kind === "Identifier" && expr.caller.object.symbol === "Channel" && expr.caller.property === "new") {
-                const genericArgs = expected && expected.kind === "Struct" && expected.name === "Channel" ? expected.genericArgs : [{ kind: "Any" } as FlexType];
-                return { kind: "Struct", name: "Channel", genericArgs };
-            }
+          // Channel é primitivo da linguagem (não vem de import): `send` move o
+          // valor, e `recv` devolve o tipo do canal — semânticas que uma
+          // assinatura de módulo nativo não expressa.
+          if (
+            expr.caller.object.kind === "Identifier" &&
+            expr.caller.object.symbol === "Channel" &&
+            expr.caller.property === "new"
+          ) {
+            const genericArgs =
+              expected && expected.kind === "Struct" && expected.name === "Channel"
+                ? expected.genericArgs
+                : [{ kind: "Any" } as FlexType];
+            return { kind: "Struct", name: "Channel", genericArgs };
+          }
 
-            // `req.json()` (RFC-004): o `T` de `Result<T, String>` não vem de
-            // nenhum argumento (a chamada não tem argumento nenhum) — só do
-            // contexto (`let body: T = req.json()?;`). Por isso é tratado à parte
-            // da tabela genérica de `NativeSignature`, que não modela retorno
-            // dependente do site de chamada.
-            if (expr.caller.property === "json" && expr.args.length === 0) {
-                const objType = this.checkExpr(expr.caller.object, env);
-                if (objType.kind === "Struct" && objType.name === "Request") {
-                    let payloadType: FlexType = { kind: "Any" };
-                    if (expected) {
-                        if (expected.kind === "Enum" && expected.name === "Result" && expected.genericArgs[0]) {
-                            payloadType = expected.genericArgs[0];
-                        } else if (expected.kind !== "Void") {
-                            payloadType = expected;
-                        }
-                    }
-                    return {
-                        kind: "Enum",
-                        name: "Result",
-                        genericArgs: [payloadType, { kind: "String" }],
-                    };
+          // `req.json()` (RFC-004): o `T` de `Result<T, String>` não vem de
+          // nenhum argumento (a chamada não tem argumento nenhum) — só do
+          // contexto (`let body: T = req.json()?;`). Por isso é tratado à parte
+          // da tabela genérica de `NativeSignature`, que não modela retorno
+          // dependente do site de chamada.
+          if (expr.caller.property === "json" && expr.args.length === 0) {
+            const objType = this.checkExpr(expr.caller.object, env);
+            if (objType.kind === "Struct" && objType.name === "Request") {
+              let payloadType: FlexType = { kind: "Any" };
+              if (expected) {
+                if (
+                  expected.kind === "Enum" &&
+                  expected.name === "Result" &&
+                  expected.genericArgs[0]
+                ) {
+                  payloadType = expected.genericArgs[0];
+                } else if (expected.kind !== "Void") {
+                  payloadType = expected;
                 }
+              }
+              return {
+                kind: "Enum",
+                name: "Result",
+                genericArgs: [payloadType, { kind: "String" }],
+              };
             }
+          }
 
-            // Construtor estático de módulo nativo: `Server.new(...)`
-            if (expr.caller.object.kind === "Identifier") {
-                const staticSig = this.nativeTypes
-                    .get(expr.caller.object.symbol)
-                    ?.statics?.find((s) => s.name === expr.caller.property);
-                if (staticSig) {
-                    return this.checkNativeCall(`${expr.caller.object.symbol}.${staticSig.name}`, staticSig, expr.args, env);
-                }
+          // Construtor estático de módulo nativo: `Server.new(...)`
+          if (expr.caller.object.kind === "Identifier") {
+            const staticSig = this.nativeTypes
+              .get(expr.caller.object.symbol)
+              ?.statics?.find((s) => s.name === expr.caller.property);
+            if (staticSig) {
+              return this.checkNativeCall(
+                `${expr.caller.object.symbol}.${staticSig.name}`,
+                staticSig,
+                expr.args,
+                env,
+                expr.span,
+              );
             }
+          }
 
-            const callerType = this.checkExpr(expr.caller.object, env);
-            if (callerType.kind === "Int") {
-                if (expr.caller.property === "to_float") {
-                    if (expr.args.length !== 0) throw new Error("TypeError: to_float expects 0 arguments");
-                    return { kind: "Float" };
-                }
-                if (expr.caller.property === "to_int") {
-                    if (expr.args.length !== 0) throw new Error("TypeError: to_int expects 0 arguments");
-                    return { kind: "Int" };
-                }
-                throw new Error(`TypeError: Method '${expr.caller.property}' not found on type Int`);
+          const callerType = this.checkExpr(expr.caller.object, env);
+          if (callerType.kind === "Int") {
+            if (expr.caller.property === "to_float") {
+              if (expr.args.length !== 0)
+                throw new FlexError("E2012", "to_float expects 0 arguments", expr.span);
+              return { kind: "Float" };
             }
-            if (callerType.kind === "Float") {
-                if (expr.caller.property === "to_int") {
-                    if (expr.args.length !== 0) throw new Error("TypeError: to_int expects 0 arguments");
-                    return { kind: "Int" };
-                }
-                if (expr.caller.property === "to_float") {
-                    if (expr.args.length !== 0) throw new Error("TypeError: to_float expects 0 arguments");
-                    return { kind: "Float" };
-                }
-                throw new Error(`TypeError: Method '${expr.caller.property}' not found on type Float`);
+            if (expr.caller.property === "to_int") {
+              if (expr.args.length !== 0)
+                throw new FlexError("E2012", "to_int expects 0 arguments", expr.span);
+              return { kind: "Int" };
             }
-            if (callerType.kind === "Struct" && callerType.name === "Channel") {
-                if (expr.caller.property === "send") {
-                    if (expr.args.length !== 1) throw new Error("TypeError: Channel.send expects exactly 1 argument");
-                    const argExpr = expr.args[0];
-                    this.checkExpr(argExpr, env);
-                    
-                    if (argExpr.kind === "Identifier") {
-                        const vInfo = env.get(argExpr.symbol);
-                        if (vInfo && vInfo.isMut) {
-                            env.markMoved(argExpr.symbol);
-                        }
-                    }
-                    return { kind: "Void" };
-                } else if (expr.caller.property === "recv") {
-                    if (expr.args.length !== 0) throw new Error("TypeError: Channel.recv expects exactly 0 arguments");
-                    return callerType.genericArgs.length > 0 ? callerType.genericArgs[0] : { kind: "Any" };
-                }
+            throw new FlexError(
+              "E2024",
+              `Method '${expr.caller.property}' not found on type Int`,
+              expr.span,
+            );
+          }
+          if (callerType.kind === "Float") {
+            if (expr.caller.property === "to_int") {
+              if (expr.args.length !== 0)
+                throw new FlexError("E2012", "to_int expects 0 arguments", expr.span);
+              return { kind: "Int" };
             }
-            // Método de instância de um tipo nativo: `server.route(...)`
-            if (callerType.kind === "Struct") {
-                const methodSig = this.nativeTypes
-                    .get(callerType.name)
-                    ?.methods?.find((m) => m.name === expr.caller.property);
-                if (methodSig) {
-                    return this.checkNativeCall(`${callerType.name}.${methodSig.name}`, methodSig, expr.args, env);
-                }
+            if (expr.caller.property === "to_float") {
+              if (expr.args.length !== 0)
+                throw new FlexError("E2012", "to_float expects 0 arguments", expr.span);
+              return { kind: "Float" };
             }
+            throw new FlexError(
+              "E2024",
+              `Method '${expr.caller.property}' not found on type Float`,
+              expr.span,
+            );
+          }
+          if (callerType.kind === "Struct" && callerType.name === "Channel") {
+            if (expr.caller.property === "send") {
+              if (expr.args.length !== 1)
+                throw new FlexError(
+                  "E2025",
+                  "Channel.send expects exactly 1 argument",
+                  expr.span,
+                );
+              const argExpr = expr.args[0];
+              this.checkExpr(argExpr, env);
+
+              if (argExpr.kind === "Identifier") {
+                const vInfo = env.get(argExpr.symbol);
+                if (vInfo && vInfo.isMut) {
+                  env.markMoved(argExpr.symbol);
+                }
+              }
+              return { kind: "Void" };
+            } else if (expr.caller.property === "recv") {
+              if (expr.args.length !== 0)
+                throw new FlexError(
+                  "E2025",
+                  "Channel.recv expects exactly 0 arguments",
+                  expr.span,
+                );
+              return callerType.genericArgs.length > 0 ? callerType.genericArgs[0] : { kind: "Any" };
+            }
+          }
+          // Método de instância de um tipo nativo: `server.route(...)`
+          if (callerType.kind === "Struct") {
+            const methodSig = this.nativeTypes
+              .get(callerType.name)
+              ?.methods?.find((m) => m.name === expr.caller.property);
+            if (methodSig) {
+              return this.checkNativeCall(
+                `${callerType.name}.${methodSig.name}`,
+                methodSig,
+                expr.args,
+                env,
+                expr.span,
+              );
+            }
+          }
         }
 
         return { kind: "Any" };
+      }
 
-      case "AssignmentExpr":
+      case "AssignmentExpr": {
         const assignValueType = this.checkExpr(expr.value, env);
         let assigneeType: FlexType = { kind: "Any" };
-        
+
         if (expr.assignee.kind === "Identifier") {
-            const varData = env.get(expr.assignee.symbol);
-            if (varData && !varData.isMut) {
-                 throw new Error(`TypeError: Cannot assign twice to immutable variable '${expr.assignee.symbol}'`);
-            }
-            assigneeType = this.checkExpr(expr.assignee, env);
+          const varData = env.get(expr.assignee.symbol);
+          if (varData && !varData.isMut) {
+            throw new FlexError(
+              "E3001",
+              `Cannot assign twice to immutable variable '${expr.assignee.symbol}'`,
+              expr.span,
+            );
+          }
+          assigneeType = this.checkExpr(expr.assignee, env);
         } else if (expr.assignee.kind === "IndexExpr" || expr.assignee.kind === "MemberExpr") {
-            let root = expr.assignee;
-            while (root.kind === "MemberExpr" || root.kind === "IndexExpr") {
-                root = root.object as any;
+          let root = expr.assignee;
+          while (root.kind === "MemberExpr" || root.kind === "IndexExpr") {
+            root = root.object as any;
+          }
+          if (root.kind === "Identifier") {
+            const rootData = env.get(root.symbol);
+            if (rootData && !rootData.isMut) {
+              throw new FlexError(
+                "E3001",
+                `Cannot mutate property of immutable variable '${root.symbol}'`,
+                expr.span,
+              );
             }
-            if (root.kind === "Identifier") {
-                const rootData = env.get(root.symbol);
-                if (rootData && !rootData.isMut) {
-                    throw new Error(`TypeError: Cannot mutate property of immutable variable '${root.symbol}'`);
-                }
-            }
-            assigneeType = this.checkExpr(expr.assignee, env);
+          }
+          assigneeType = this.checkExpr(expr.assignee, env);
         }
 
         if (!this.isTypeAssignable(assigneeType, assignValueType)) {
-             throw new Error(`TypeError: Cannot assign ${this.typeToString(assignValueType)} to ${this.typeToString(assigneeType)}`);
+          throw new FlexError(
+            "E2001",
+            `Cannot assign ${this.typeToString(assignValueType)} to ${this.typeToString(assigneeType)}`,
+            expr.span,
+          );
         }
         return assignValueType;
-        
-      case "TryExpr":
+      }
+
+      case "TryExpr": {
         // `expected` repassado como está: para quem consome (`req.json()`), o
         // tipo esperado da expressão INTEIRA (o valor já desembrulhado pelo `?`)
         // é o mesmo tipo esperado da chamada por trás do `?`.
@@ -857,27 +1061,43 @@ export class TypeChecker {
         // Checagem estrutural: `?` é uma operação sobre os tipos embutidos, não
         // sobre "qualquer enum cuja primeira variante se chame Ok".
         if (tryType.kind !== "Enum" || !isBuiltinType(tryType.name)) {
-            throw new Error(`TypeError: ? operator can only be applied to Result or Option, got ${this.typeToString(tryType)}`);
+          throw new FlexError(
+            "E2005",
+            `? operator can only be applied to Result or Option, got ${this.typeToString(tryType)}`,
+            expr.span,
+          );
         }
 
         const currentReturn = env.get("__RETURN_TYPE__");
         if (currentReturn && currentReturn.type.kind !== "Any") {
-            if (currentReturn.type.kind !== "Enum") {
-                throw new Error(`TypeError: Cannot use ? operator in a function that returns ${this.typeToString(currentReturn.type)}`);
-            }
-            // O erro é propagado como está, então só cabe no retorno se for o mesmo tipo.
-            if (currentReturn.type.name !== tryType.name) {
-                throw new Error(`TypeError: Cannot use ? on ${tryType.name} in a function that returns ${this.typeToString(currentReturn.type)}`);
-            }
-            this.checkPropagatedPayload(tryType, currentReturn.type);
+          if (currentReturn.type.kind !== "Enum") {
+            throw new FlexError(
+              "E2007",
+              `Cannot use ? operator in a function that returns ${this.typeToString(currentReturn.type)}`,
+              expr.span,
+            );
+          }
+          // O erro é propagado como está, então só cabe no retorno se for o mesmo tipo.
+          if (currentReturn.type.name !== tryType.name) {
+            throw new FlexError(
+              "E2007",
+              `Cannot use ? on ${tryType.name} in a function that returns ${this.typeToString(currentReturn.type)}`,
+              expr.span,
+            );
+          }
+          this.checkPropagatedPayload(tryType, currentReturn.type, expr.span);
         }
 
         const tryDecl = this.enums.get(tryType.name)!;
         const okVariant = successVariant(tryDecl);
         if (okVariant && okVariant.payload && okVariant.payload.length > 0) {
-            return this.resolveTypeNode(okVariant.payload[0], this.genericSubst(tryDecl, tryType.genericArgs));
+          return this.resolveTypeNode(
+            okVariant.payload[0],
+            this.genericSubst(tryDecl, tryType.genericArgs),
+          );
         }
         return { kind: "Any" };
+      }
 
       case "LambdaExpr": {
         // Lambda: |param: Type, ...| { body }
@@ -941,12 +1161,16 @@ export class TypeChecker {
     signature: NativeSignature,
     args: Expr[],
     env: TypeEnvironment,
+    callSpan?: Span,
   ): FlexType {
     const min = signature.minArity ?? signature.arity ?? 0;
     const max = signature.maxArity ?? signature.arity ?? min;
     if (args.length < min || args.length > max) {
-      const expected = min === max ? `exactly ${min} argument${min === 1 ? "" : "s"}` : `between ${min} and ${max} arguments`;
-      throw new Error(`TypeError: ${label} expects ${expected}, got ${args.length}`);
+      const expected =
+        min === max
+          ? `exactly ${min} argument${min === 1 ? "" : "s"}`
+          : `between ${min} and ${max} arguments`;
+      throw new FlexError("E2008", `${label} expects ${expected}, got ${args.length}`, callSpan);
     }
     for (const arg of args) {
       this.checkExpr(arg, env);
@@ -960,7 +1184,7 @@ export class TypeChecker {
    * `Result<T, E>`) precisam caber no retorno da função. `Option.None` não carrega
    * nada, então propagar `Option<User>` de uma função `-> Option<String>` é seguro.
    */
-  private checkPropagatedPayload(tryType: FlexType, returnType: FlexType): void {
+  private checkPropagatedPayload(tryType: FlexType, returnType: FlexType, span?: Span): void {
     if (tryType.kind !== "Enum" || returnType.kind !== "Enum") return;
     const decl = this.enums.get(tryType.name);
     if (!decl) return;
@@ -979,8 +1203,10 @@ export class TypeChecker {
         const expected = returnType.genericArgs[position];
         if (!propagated || !expected) continue;
         if (!this.isTypeAssignable(expected, propagated)) {
-          throw new Error(
-            `TypeError: ? propagates ${this.typeToString(tryType)}, which does not fit the return type ${this.typeToString(returnType)}`,
+          throw new FlexError(
+            "E2007",
+            `? propagates ${this.typeToString(tryType)}, which does not fit the return type ${this.typeToString(returnType)}`,
+            span,
           );
         }
       }

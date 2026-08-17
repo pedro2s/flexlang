@@ -1,1 +1,6 @@
-TypeError: Server.new expects between 1 and 2 arguments, got 3
+error[E2008]: Server.new expects between 1 and 2 arguments, got 3
+ --> tests/24_http_arity.flex:6:14
+  |
+6 | let server = Server.new(":8080", ServerConfig { read_timeout: 1000, max_body_size: 1000 }, "demais");
+  |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |

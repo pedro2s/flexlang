@@ -64,6 +64,14 @@ export interface Token {
   column: number;
 }
 
+export interface Span {
+  file: string; // caminho absoluto — obrigatório em projeto multi-arquivo
+  line: number; // 1-based
+  column: number; // 1-based
+  endLine: number;
+  endColumn: number;
+}
+
 // --- Definição da AST (Discriminated Unions) ---
 
 export type Stmt =
@@ -107,11 +115,13 @@ export type Expr =
 export interface BooleanLiteral {
   kind: "BooleanLiteral";
   value: boolean;
+  span?: Span;
 }
 
 export interface ExpressionStatement {
   kind: "ExpressionStatement";
   expression: Expr;
+  span?: Span;
 }
 
 // --- Definição dos Nós de Tipagem ---
@@ -124,17 +134,20 @@ export type TypeNode =
 export interface NamedTypeNode {
   kind: "NamedTypeNode";
   name: string; // ex: "Int", "String"
+  span?: Span;
 }
 
 export interface GenericTypeNode {
   kind: "GenericTypeNode";
   name: string; // ex: "Result"
   typeArguments: TypeNode[]; // ex: [NamedTypeNode("Int")]
+  span?: Span;
 }
 
 export interface ArrayTypeNode {
   kind: "ArrayTypeNode";
   elementType: TypeNode; // ex: [Int] (Array de Int)
+  span?: Span;
 }
 
 // --- Fim Tipagem ---
@@ -143,11 +156,13 @@ export interface AssignmentExpr {
   kind: "AssignmentExpr";
   assignee: Identifier | MemberExpr | IndexExpr; // Target of the assignment (e.g., Identifier or MemberExpr)
   value: Expr;
+  span?: Span;
 }
 
 export interface StringInterpolationExpr {
   kind: "StringInterpolationExpr";
   parts: (string | Expr)[];
+  span?: Span;
 }
 
 export interface LogicalExpr {
@@ -155,29 +170,34 @@ export interface LogicalExpr {
   left: Expr;
   operator: string;
   right: Expr;
+  span?: Span;
 }
 
 export interface UnaryExpr {
   kind: "UnaryExpr";
   operator: string;
   argument: Expr;
+  span?: Span;
 }
 
 export interface WhileStmt {
   kind: "WhileStmt";
   condition: Expr;
   body: BlockStmt;
+  span?: Span;
 }
 
 export interface ArrayLiteral {
   kind: "ArrayLiteral";
   elements: Expr[];
+  span?: Span;
 }
 
 export interface IndexExpr {
   kind: "IndexExpr";
   object: Expr;
   index: Expr;
+  span?: Span;
 }
 
 export interface TraitDeclaration {
@@ -187,13 +207,16 @@ export interface TraitDeclaration {
     name: string;
     parameters: Parameter[];
     returnType?: TypeNode;
+    span?: Span;
   }[];
+  span?: Span;
 }
 
 export interface ImportDeclaration {
   kind: "ImportDeclaration";
   moduleName: string;
   imports: string[];
+  span?: Span;
 }
 
 export interface ImplDeclaration {
@@ -201,30 +224,35 @@ export interface ImplDeclaration {
   structName: string;
   traitName?: string; // Opcional: só preenchido se for `impl Trait for Struct`
   methods: FunctionDeclaration[];
+  span?: Span;
 }
 
 export interface StructDeclaration {
   kind: "StructDeclaration";
   name: string;
-  properties: { name: string; typeAnnotation: TypeNode }[];
+  properties: { name: string; typeAnnotation: TypeNode; span?: Span }[];
+  span?: Span;
 }
 
 export interface StructExpr {
   kind: "StructExpr";
   structName: string;
-  properties: { name: string; value: Expr }[];
+  properties: { name: string; value: Expr; span?: Span }[];
+  span?: Span;
 }
 
 export interface MemberExpr {
   kind: "MemberExpr";
   object: Expr; // A variável que guarda a struct (ex: p)
   property: string; // O nome da propriedade (ex: x)
+  span?: Span;
 }
 
 export interface Parameter {
   name: string;
   typeAnnotation: TypeNode;
   isMut?: boolean;
+  span?: Span;
 }
 
 export interface FunctionDeclaration {
@@ -233,22 +261,26 @@ export interface FunctionDeclaration {
   parameters: Parameter[];
   returnType?: TypeNode | undefined;
   body: BlockStmt;
+  span?: Span;
 }
 
 export interface ReturnStmt {
   kind: "ReturnStmt";
   value?: Expr | undefined;
+  span?: Span;
 }
 
 export interface CallExpr {
   kind: "CallExpr";
   caller: Expr; // Geralmente Identifier para funções
   args: Expr[];
+  span?: Span;
 }
 
 export interface BlockStmt {
   kind: "BlockStmt";
   body: Stmt[];
+  span?: Span;
 }
 
 export interface IfStmt {
@@ -256,6 +288,7 @@ export interface IfStmt {
   condition: Expr;
   consequent: BlockStmt;
   alternate?: BlockStmt | undefined; // Opcional, pois pode não ter 'else'
+  span?: Span;
 }
 
 export interface ForStmt {
@@ -264,6 +297,7 @@ export interface ForStmt {
   start: Expr;
   end: Expr;
   body: BlockStmt;
+  span?: Span;
 }
 
 export interface VarDeclaration {
@@ -272,11 +306,13 @@ export interface VarDeclaration {
   value: Expr;
   typeAnnotation?: TypeNode | undefined;
   isMut: boolean;
+  span?: Span;
 }
 
 export interface PrintStmt {
   kind: "PrintStmt";
   value: Expr;
+  span?: Span;
 }
 
 export interface BinaryExpr {
@@ -284,22 +320,26 @@ export interface BinaryExpr {
   left: Expr;
   operator: string;
   right: Expr;
+  span?: Span;
 }
 
 export interface NumericLiteral {
   kind: "NumericLiteral";
   value: number;
   isFloat?: boolean;
+  span?: Span;
 }
 
 export interface StringLiteral {
   kind: "StringLiteral";
   value: string;
+  span?: Span;
 }
 
 export interface Identifier {
   kind: "Identifier";
   symbol: string;
+  span?: Span;
 }
 
 // --- Enum e Pattern Matching ---
@@ -307,6 +347,7 @@ export interface Identifier {
 export interface EnumVariantDecl {
   name: string;
   payload?: TypeNode[];
+  span?: Span;
 }
 
 export interface EnumDeclaration {
@@ -318,6 +359,7 @@ export interface EnumDeclaration {
    * Só os enums embutidos têm — o parser não aceita generics de usuário.
    */
   typeParams?: string[];
+  span?: Span;
 }
 
 export interface MatchArm {
@@ -325,37 +367,44 @@ export interface MatchArm {
   variantName: string;
   binders: string[]; // Variáveis para mapear o payload (ex: v em Ok(v))
   body: BlockStmt;
+  span?: Span;
 }
 
 export interface MatchStmt {
   kind: "MatchStmt";
   value: Expr;
   arms: MatchArm[];
+  span?: Span;
 }
 
 export interface ScopeStmt {
   kind: "ScopeStmt";
   deadline?: Expr; // Opcional, para timeout
   body: BlockStmt;
+  span?: Span;
 }
 
 export interface SpawnStmt {
   kind: "SpawnStmt";
   body: BlockStmt;
+  span?: Span;
 }
 
 export interface TryExpr {
   kind: "TryExpr";
   expression: Expr;
+  span?: Span;
 }
 
 export interface LambdaExpr {
   kind: "LambdaExpr";
   parameters: Parameter[];
   body: BlockStmt;
+  span?: Span;
 }
 
 export interface MapLiteral {
   kind: "MapLiteral";
-  properties: { key: string; value: Expr }[];
+  properties: { key: string; value: Expr; span?: Span }[];
+  span?: Span;
 }

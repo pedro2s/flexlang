@@ -1,6 +1,6 @@
 # RFC-014: Diagnósticos do Compilador
 
-> **Status:** Draft · **Prioridade:** P0 — bloqueante · **Depende de:** nada (mas RFC-011/013 se beneficiam dela; ver PRD §3)
+> **Status:** Implementado · **Prioridade:** P0 — bloqueante · **Depende de:** nada (mas RFC-011/013 se beneficiam dela; ver PRD §3)
 > **Toca:** `src/ast.ts`, `src/parser.ts`, `src/checker.ts`, `src/loader.ts`, `src/cli.ts`, e um `src/diagnostics.ts` novo
 
 ## Resumo

@@ -1,1 +1,6 @@
-TypeError: Use-after-send of moved variable 'msg'
+error[E3002]: Use-after-send of moved variable 'msg'
+ --> tests/08_channels.flex:12:15
+   |
+12 |         print(msg);
+   |               ^^^
+   |

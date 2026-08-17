@@ -1,1 +1,7 @@
-TypeError: Operator % is not supported for Float. Use to_int()
+error[E2010]: Operator % is not supported for Float. Use to_int()
+ --> tests/35_modulo_float.flex:3:9
+  |
+3 | let y = x % 2;
+  |         ^^^^^
+  |
+help: converta para Int usando .to_int()
