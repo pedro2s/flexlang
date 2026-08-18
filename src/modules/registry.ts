@@ -3,6 +3,7 @@ import { httpModule } from "./http";
 import { postgresModule } from "./postgres";
 import { logModule } from "./log";
 import { decimalModule } from "./decimal";
+import { envModule } from "./env";
 
 export class ModuleRegistry {
   private modules = new Map<string, NativeModule>();
@@ -27,4 +28,5 @@ registry.register(httpModule);
 registry.register(postgresModule);
 registry.register(logModule);
 registry.register(decimalModule);
+registry.register(envModule);
 

@@ -456,4 +456,22 @@ const rfc025Ast = new Parser(rfc025Tokens, "rfc025.flex").parse();
 new TypeChecker().check(rfc025Ast, "rfc025.flex");
 assert(true, "RFC-025: módulo math/decimal com todas as operações e Result validado");
 
+// 13. Testes RFC-026 (Módulo os/env)
+console.log("\n--- 13. Testes RFC-026 (Módulo os/env) ---");
+const rfc026Code = `
+import { env } from "os/env";
+
+func test_env_suite() {
+    let port = env.get_or("PORT", "3000");
+    let missing = env.get("MISSING");
+    let req = env.require("PATH");
+    let has_p = env.has("PATH");
+}
+`;
+
+const rfc026Tokens = new Lexer(rfc026Code).tokenize();
+const rfc026Ast = new Parser(rfc026Tokens, "rfc026.flex").parse();
+new TypeChecker().check(rfc026Ast, "rfc026.flex");
+assert(true, "RFC-026: módulo os/env com get, get_or, require, has validado");
+
 console.log("\n✨ Todos os testes das Ferramentas VSCode passaram com 100% de sucesso!");

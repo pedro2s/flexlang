@@ -1,6 +1,6 @@
 # RFC-026 — Módulo `os/env` — Variáveis de Ambiente
 
-> **Status:** Proposto · **Prioridade:** P0 — bloqueante · **Depende de:** nada
+> **Status:** Implementado · **Prioridade:** P0 — bloqueante · **Depende de:** nada
 
 ## 1. Motivação
 

@@ -1,0 +1,7 @@
+--- Teste os/env ---
+Variavel ausente retornou None como esperado
+Porta configurada: 8080
+Tem fake var: false
+Tem PATH: true
+PATH customizado: true
+Require PATH ok: true
