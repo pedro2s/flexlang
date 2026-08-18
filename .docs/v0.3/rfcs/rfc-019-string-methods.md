@@ -1,6 +1,6 @@
 # RFC-019 — Métodos de String
 
-> **Status:** Proposto · **Prioridade:** P0 — bloqueante · **Depende de:** nada
+> **Status:** Implementado · **Prioridade:** P0 — bloqueante · **Depende de:** nada
 
 ## 1. Motivação
 

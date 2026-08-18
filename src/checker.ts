@@ -1020,6 +1020,70 @@ export class TypeChecker {
               expr.span,
             );
           }
+          if (callerType.kind === "String") {
+            const prop = expr.caller.property;
+            switch (prop) {
+              case "len":
+                if (expr.args.length !== 0)
+                  throw new FlexError("E2012", "len expects 0 arguments", expr.span);
+                return { kind: "Int" };
+              case "contains":
+                if (expr.args.length !== 1)
+                  throw new FlexError("E2012", "contains expects 1 argument", expr.span);
+                this.checkExpr(expr.args[0], env);
+                return { kind: "Bool" };
+              case "starts_with":
+                if (expr.args.length !== 1)
+                  throw new FlexError("E2012", "starts_with expects 1 argument", expr.span);
+                this.checkExpr(expr.args[0], env);
+                return { kind: "Bool" };
+              case "ends_with":
+                if (expr.args.length !== 1)
+                  throw new FlexError("E2012", "ends_with expects 1 argument", expr.span);
+                this.checkExpr(expr.args[0], env);
+                return { kind: "Bool" };
+              case "to_upper":
+                if (expr.args.length !== 0)
+                  throw new FlexError("E2012", "to_upper expects 0 arguments", expr.span);
+                return { kind: "String" };
+              case "to_lower":
+                if (expr.args.length !== 0)
+                  throw new FlexError("E2012", "to_lower expects 0 arguments", expr.span);
+                return { kind: "String" };
+              case "trim":
+                if (expr.args.length !== 0)
+                  throw new FlexError("E2012", "trim expects 0 arguments", expr.span);
+                return { kind: "String" };
+              case "split":
+                if (expr.args.length !== 1)
+                  throw new FlexError("E2012", "split expects 1 argument", expr.span);
+                this.checkExpr(expr.args[0], env);
+                return { kind: "Array", elementType: { kind: "String" } };
+              case "replace":
+                if (expr.args.length !== 2)
+                  throw new FlexError("E2012", "replace expects 2 arguments", expr.span);
+                this.checkExpr(expr.args[0], env);
+                this.checkExpr(expr.args[1], env);
+                return { kind: "String" };
+              case "substring":
+                if (expr.args.length !== 2)
+                  throw new FlexError("E2012", "substring expects 2 arguments", expr.span);
+                this.checkExpr(expr.args[0], env);
+                this.checkExpr(expr.args[1], env);
+                return { kind: "String" };
+              case "index_of":
+                if (expr.args.length !== 1)
+                  throw new FlexError("E2012", "index_of expects 1 argument", expr.span);
+                this.checkExpr(expr.args[0], env);
+                return { kind: "Enum", name: "Option", genericArgs: [{ kind: "Int" }] };
+              default:
+                throw new FlexError(
+                  "E2024",
+                  `Method '${prop}' not found on type String`,
+                  expr.span,
+                );
+            }
+          }
           if (callerType.kind === "Struct" && callerType.name === "Channel") {
             if (expr.caller.property === "send") {
               if (expr.args.length !== 1)

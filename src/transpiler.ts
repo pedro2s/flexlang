@@ -55,6 +55,7 @@ export class GoTranspiler {
 
   private tmpCount = 0;
   private funcDepth = 0;
+  private usedStringHelpers = false;
 
   constructor() {}
 
@@ -70,6 +71,7 @@ export class GoTranspiler {
     this.structDecls.clear();
     this.traitNames.clear();
     this.usedBuiltins.clear();
+    this.usedStringHelpers = false;
     this.nativeTypes.clear();
     this.types = types ?? new Map();
 
@@ -216,6 +218,20 @@ export class GoTranspiler {
         lines.push(this.capture(() => this.transpileEnum(builtin)).trimEnd());
       }
       lines.push("// ---------------------------------------", "");
+    }
+
+    if (this.usedStringHelpers) {
+      lines.push(
+        "func flex_string_index_of(s, sub string) Option {",
+        "\tidx := strings.Index(s, sub)",
+        "\tif idx == -1 {",
+        "\t\treturn Option_None",
+        "\t}",
+        "\tcharIdx := len([]rune(s[:idx]))",
+        "\treturn Option_Some_new(charIdx)",
+        "}",
+        ""
+      );
     }
 
     for (const boilerplate of boilerplates) {
@@ -769,6 +785,56 @@ export class GoTranspiler {
         return `int(${this.transpileExpr(member.object)})`;
       }
 
+      // Métodos de String (RFC-019)
+      const objType = this.types.get(member.object);
+      const isStringMethod =
+        objType?.kind === "String" ||
+        member.object.kind === "StringLiteral" ||
+        member.object.kind === "StringInterpolationExpr";
+
+      if (isStringMethod) {
+        const obj = this.transpileExpr(member.object);
+        switch (member.property) {
+          case "len":
+            return `len([]rune(${obj}))`;
+          case "contains":
+            this.goImports.add("strings");
+            return `strings.Contains(${obj}, ${this.transpileExpr(expr.args[0])})`;
+          case "starts_with":
+            this.goImports.add("strings");
+            return `strings.HasPrefix(${obj}, ${this.transpileExpr(expr.args[0])})`;
+          case "ends_with":
+            this.goImports.add("strings");
+            return `strings.HasSuffix(${obj}, ${this.transpileExpr(expr.args[0])})`;
+          case "to_upper":
+            this.goImports.add("strings");
+            return `strings.ToUpper(${obj})`;
+          case "to_lower":
+            this.goImports.add("strings");
+            return `strings.ToLower(${obj})`;
+          case "trim":
+            this.goImports.add("strings");
+            return `strings.TrimSpace(${obj})`;
+          case "split":
+            this.goImports.add("strings");
+            return `strings.Split(${obj}, ${this.transpileExpr(expr.args[0])})`;
+          case "replace":
+            this.goImports.add("strings");
+            return `strings.ReplaceAll(${obj}, ${this.transpileExpr(expr.args[0])}, ${this.transpileExpr(expr.args[1])})`;
+          case "substring": {
+            const start = this.transpileExpr(expr.args[0]);
+            const end = this.transpileExpr(expr.args[1]);
+            return `string([]rune(${obj})[${start}:${end}])`;
+          }
+          case "index_of": {
+            this.goImports.add("strings");
+            this.usedBuiltins.add("Option");
+            this.usedStringHelpers = true;
+            return `flex_string_index_of(${obj}, ${this.transpileExpr(expr.args[0])})`;
+          }
+        }
+      }
+
       // Construtor de variante de enum: Status.Sucesso("msg") -> Status_Sucesso_new("msg")
       if (member.object.kind === "Identifier" && this.enums.has(member.object.symbol)) {
         const args = expr.args.map((a) => this.transpileExpr(a)).join(", ");
@@ -821,7 +887,6 @@ export class GoTranspiler {
       }
 
       // Método de instância de módulo nativo: `pool.query(sql, params)`
-      const objType = this.types.get(member.object);
       if (objType && objType.kind === "Struct") {
         const nativeType = this.nativeTypes.get(objType.name);
         const methodSig = nativeType?.methods?.find((m) => m.name === member.property);

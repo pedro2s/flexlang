@@ -1,0 +1,24 @@
+--- Teste Transformacoes Basicas ---
+Original: '  FlexLang eh Incrivel!  '
+Len: 25
+Trim: 'FlexLang eh Incrivel!'
+Upper: 'FLEXLANG EH INCRIVEL!'
+Lower: 'flexlang eh incrivel!'
+UTF-8 Len: 4
+--- Teste Predicados ---
+Contains @: true
+Contains #: false
+Starts with admin: true
+Starts with user: false
+Ends with .dev: true
+Ends with .com: false
+--- Teste Split e Replace ---
+Fruta: apple
+Fruta: banana
+Fruta: orange
+CPF Limpo: 12345678900
+--- Teste Substring e IndexOf ---
+Sub 0..4: Flex
+Sub 4..8: Lang
+Arroba em: 7
+xyz nao encontrado

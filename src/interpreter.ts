@@ -1,5 +1,5 @@
 import type { Stmt, Expr, FunctionDeclaration } from "./ast";
-import { builtinEnums, isBuiltinType, isSuccessVariant } from "./stdlib";
+import { builtinEnums, isBuiltinType, isSuccessVariant, optionSome, optionNone } from "./stdlib";
 import { registry } from "./modules/registry";
 import { NATIVE_TAG, isNativeObject, modulePath, nativeMethod } from "./modules/types";
 import { type ModuleGraph, isLocalModule } from "./loader";
@@ -504,6 +504,51 @@ export class Interpreter {
                   return Math.trunc(objectInstanceCall);
               }
               throw new Error(`TypeError: Method '${expr.caller.property}' not found on number`);
+          }
+
+          // Suporte a métodos de String (RFC-019)
+          if (typeof objectInstanceCall === "string") {
+            const evaluatedArgs = [];
+            for (const arg of expr.args) {
+              evaluatedArgs.push(await this.evaluateExpr(arg, env));
+            }
+            switch (expr.caller.property) {
+              case "len":
+                return Array.from(objectInstanceCall).length;
+              case "contains":
+                return objectInstanceCall.includes(evaluatedArgs[0]);
+              case "starts_with":
+                return objectInstanceCall.startsWith(evaluatedArgs[0]);
+              case "ends_with":
+                return objectInstanceCall.endsWith(evaluatedArgs[0]);
+              case "to_upper":
+                return objectInstanceCall.toUpperCase();
+              case "to_lower":
+                return objectInstanceCall.toLowerCase();
+              case "trim":
+                return objectInstanceCall.trim();
+              case "split":
+                return objectInstanceCall.split(evaluatedArgs[0]);
+              case "replace":
+                return objectInstanceCall.replaceAll(evaluatedArgs[0], evaluatedArgs[1]);
+              case "substring": {
+                const chars = Array.from(objectInstanceCall);
+                const start = Math.max(0, Math.min(chars.length, evaluatedArgs[0]));
+                const end = Math.max(start, Math.min(chars.length, evaluatedArgs[1]));
+                return chars.slice(start, end).join("");
+              }
+              case "index_of": {
+                const sub = evaluatedArgs[0];
+                const rawIdx = objectInstanceCall.indexOf(sub);
+                if (rawIdx === -1) {
+                  return optionNone();
+                }
+                const charIdx = Array.from(objectInstanceCall.slice(0, rawIdx)).length;
+                return optionSome(charIdx);
+              }
+              default:
+                throw new Error(`TypeError: Method '${expr.caller.property}' not found on string`);
+            }
           }
 
           // Se for Enum, repassa para a lógica geral de Call abaixo que captura __isEnumConstructor

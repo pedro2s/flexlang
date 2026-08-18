@@ -187,4 +187,52 @@ try {
 }
 assert(caughtE2033, "RFC-018: iterar sobre tipo não-iterável emite erro estático E2033");
 
+// 6. Testes RFC-019 (Métodos de String e erros estáticos E2024 / E2012)
+console.log("\n--- 6. Testes RFC-019 (Métodos de String) ---");
+const rfc019Code = `
+func test_strings() {
+    let s = "  Ola Mundo  ";
+    let t = s.trim().to_upper();
+    let l = t.len();
+    let c = t.contains("OLA");
+    let parts = t.split(" ");
+    let r = t.replace("OLA", "HELLO");
+    let sub = t.substring(0, 3);
+    let opt = t.index_of("MUNDO");
+}
+`;
+
+const rfc019Tokens = new Lexer(rfc019Code).tokenize();
+const rfc019Ast = new Parser(rfc019Tokens, "rfc019.flex").parse();
+new TypeChecker().check(rfc019Ast, "rfc019.flex");
+assert(true, "RFC-019: métodos de String (len, trim, upper, contains, split, replace, substring, index_of) validados");
+
+// Validação estática: método inexistente em String deve emitir E2024
+let caughtE2024 = false;
+try {
+    const invalidMethodCode = `func main() { let s = "abc"; s.metodo_inexistente(); }`;
+    const invTokens = new Lexer(invalidMethodCode).tokenize();
+    const invAst = new Parser(invTokens, "invalid_str.flex").parse();
+    new TypeChecker().check(invAst, "invalid_str.flex");
+} catch (err: any) {
+    if (err.code === "E2024") {
+        caughtE2024 = true;
+    }
+}
+assert(caughtE2024, "RFC-019: método inexistente em String emite erro estático E2024");
+
+// Validação estática: aridade incorreta em método de String deve emitir E2012
+let caughtE2012 = false;
+try {
+    const invalidArityCode = `func main() { let s = "abc"; s.len(10); }`;
+    const invTokens = new Lexer(invalidArityCode).tokenize();
+    const invAst = new Parser(invTokens, "invalid_arity.flex").parse();
+    new TypeChecker().check(invAst, "invalid_arity.flex");
+} catch (err: any) {
+    if (err.code === "E2012") {
+        caughtE2012 = true;
+    }
+}
+assert(caughtE2012, "RFC-019: aridade incorreta em método de String emite erro estático E2012");
+
 console.log("\n✨ Todos os testes das Ferramentas VSCode passaram com 100% de sucesso!");
