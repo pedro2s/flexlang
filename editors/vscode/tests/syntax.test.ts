@@ -103,4 +103,46 @@ const checker = new TypeChecker();
 checker.check(ast, "test.flex");
 assert(true, "TypeChecker validou código sem erros");
 
+// 4. Testes RFC-017 (else if, break, continue e erro E2032)
+console.log("\n--- 4. Testes RFC-017 (else if, break, continue) ---");
+const rfc017Code = `
+func test_fluxo(x: Int) {
+    if x == 1 {
+        print("um");
+    } else if x == 2 {
+        print("dois");
+    } else {
+        print("outro");
+    }
+
+    for i in 0..10 {
+        if i == 5 {
+            break;
+        }
+        if i == 3 {
+            continue;
+        }
+    }
+}
+`;
+
+const rfcTokens = new Lexer(rfc017Code).tokenize();
+const rfcAst = new Parser(rfcTokens, "rfc017.flex").parse();
+new TypeChecker().check(rfcAst, "rfc017.flex");
+assert(true, "RFC-017: else if, break e continue aceitos dentro de laço");
+
+// Validação estática: break fora de laço deve lançar E2032
+let caughtE2032 = false;
+try {
+    const invalidBreakCode = `func main() { break; }`;
+    const invTokens = new Lexer(invalidBreakCode).tokenize();
+    const invAst = new Parser(invTokens, "invalid.flex").parse();
+    new TypeChecker().check(invAst, "invalid.flex");
+} catch (err: any) {
+    if (err.code === "E2032") {
+        caughtE2032 = true;
+    }
+}
+assert(caughtE2032, "RFC-017: 'break' fora de laço emite erro estático E2032");
+
 console.log("\n✨ Todos os testes das Ferramentas VSCode passaram com 100% de sucesso!");

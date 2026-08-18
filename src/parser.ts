@@ -136,6 +136,20 @@ export class Parser {
         return this.parseFunctionDeclaration();
       case TokenType.Return:
         return this.parseReturnStatement();
+      case TokenType.Break: {
+        const startToken = this.consume(TokenType.Break);
+        if (this.current().type === TokenType.Semi) {
+          this.consume(TokenType.Semi);
+        }
+        return { kind: "BreakStmt", span: this.spanFrom(startToken, this.previous()) };
+      }
+      case TokenType.Continue: {
+        const startToken = this.consume(TokenType.Continue);
+        if (this.current().type === TokenType.Semi) {
+          this.consume(TokenType.Semi);
+        }
+        return { kind: "ContinueStmt", span: this.spanFrom(startToken, this.previous()) };
+      }
       default: {
         const expression = this.parseExpression();
         const semiToken = this.consume(TokenType.Semi);
@@ -426,10 +440,14 @@ export class Parser {
     const condition = this.parseExpression();
     const consequent = this.parseBlock();
 
-    let alternate: BlockStmt | undefined = undefined;
+    let alternate: BlockStmt | IfStmt | undefined = undefined;
     if (this.current().type === TokenType.Else) {
       this.consume(TokenType.Else);
-      alternate = this.parseBlock();
+      if (this.current().type === TokenType.If) {
+        alternate = this.parseIfStatement() as IfStmt;
+      } else {
+        alternate = this.parseBlock();
+      }
     }
 
     return {

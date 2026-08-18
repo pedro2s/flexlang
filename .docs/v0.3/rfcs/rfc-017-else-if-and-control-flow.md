@@ -1,6 +1,6 @@
 # RFC-017 — `else if`, `break`, `continue` e Controle de Fluxo Maduro
 
-> **Status:** Proposto · **Prioridade:** P0 — bloqueante · **Depende de:** nada
+> **Status:** Implementado · **Prioridade:** P0 — bloqueante · **Depende de:** nada
 
 ## 1. Motivação
 

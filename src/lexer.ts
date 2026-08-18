@@ -17,6 +17,8 @@ export class Lexer {
     [TokenType.Else, /^else\b/],
     [TokenType.For, /^for\b/],
     [TokenType.While, /^while\b/],
+    [TokenType.Break, /^break\b/],
+    [TokenType.Continue, /^continue\b/],
     [TokenType.In, /^in\b/],
     [TokenType.Let, /^let\b/],
     [TokenType.Mut, /^mut\b/],

@@ -83,6 +83,7 @@ export class TypeChecker {
   /** Superfície dos módulos nativos importados (RFC-003), por nome de tipo. */
   private nativeTypes: Map<string, NativeType> = new Map();
   private inScopeContext: number = 0;
+  private loopDepth: number = 0;
   private typeMap: TypeMap = new Map();
 
   /**
@@ -387,7 +388,12 @@ export class TypeChecker {
             stmt.condition.span ?? stmt.span,
           );
         }
-        this.checkStmt(stmt.body, env);
+        this.loopDepth++;
+        try {
+          this.checkStmt(stmt.body, env);
+        } finally {
+          this.loopDepth--;
+        }
         break;
 
       case "ForStmt":
@@ -402,7 +408,25 @@ export class TypeChecker {
         }
         const forEnv = new TypeEnvironment(env);
         forEnv.define(stmt.iteratorName, { kind: "Int" }, false);
-        this.checkStmt(stmt.body, forEnv);
+        this.loopDepth++;
+        try {
+          this.checkStmt(stmt.body, forEnv);
+        } finally {
+          this.loopDepth--;
+        }
+        break;
+
+      case "BreakStmt":
+      case "ContinueStmt":
+        if (this.loopDepth === 0) {
+          const kw = stmt.kind === "BreakStmt" ? "break" : "continue";
+          throw new FlexError(
+            "E2032",
+            `'${kw}' só pode ser usado dentro de laços 'for' ou 'while'`,
+            stmt.span,
+            "Remova o comando ou envolva-o em um laço de repetição.",
+          );
+        }
         break;
 
       case "FunctionDeclaration":

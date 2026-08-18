@@ -1,0 +1,20 @@
+--- Teste Else If ---
+Nota A: Excelente
+Nota B: Bom
+Nota C: Regular
+Nota F: Reprovado
+--- Teste For Break ---
+For loop: 0
+For loop: 1
+For loop: 2
+For loop: 3
+--- Teste For Continue ---
+For continue: 0
+For continue: 1
+For continue: 3
+For continue: 4
+--- Teste While Break e Continue ---
+While val: 1
+While val: 3
+While val: 4
+While val: 5

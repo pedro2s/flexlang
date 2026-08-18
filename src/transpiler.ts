@@ -1,5 +1,6 @@
 import type {
   Stmt,
+  IfStmt,
   Expr,
   TypeNode,
   EnumDeclaration,
@@ -373,19 +374,16 @@ export class GoTranspiler {
         this.transpileStmts(stmt.body);
         break;
 
+      case "BreakStmt":
+        this.emitLine(`break`);
+        break;
+
+      case "ContinueStmt":
+        this.emitLine(`continue`);
+        break;
+
       case "IfStmt": {
-        const condition = this.transpileExpr(stmt.condition);
-        this.emitLine(`if ${condition} {`);
-        this.indent();
-        this.transpileStmts(stmt.consequent.body);
-        this.dedent();
-        if (stmt.alternate) {
-          this.emitLine(`} else {`);
-          this.indent();
-          this.transpileStmts(stmt.alternate.body);
-          this.dedent();
-        }
-        this.emitLine(`}`);
+        this.transpileIfStmt(stmt);
         break;
       }
 
@@ -492,6 +490,30 @@ export class GoTranspiler {
         // Tratado no cabeçalho, não emite nada aqui
         break;
     }
+  }
+
+  private transpileIfStmt(stmt: IfStmt, isElseIf = false): void {
+    const condition = this.transpileExpr(stmt.condition);
+    if (isElseIf) {
+      this.emitLine(`} else if ${condition} {`);
+    } else {
+      this.emitLine(`if ${condition} {`);
+    }
+    this.indent();
+    this.transpileStmts(stmt.consequent.body);
+    this.dedent();
+    if (stmt.alternate) {
+      if (stmt.alternate.kind === "IfStmt") {
+        this.transpileIfStmt(stmt.alternate, true);
+        return;
+      } else {
+        this.emitLine(`} else {`);
+        this.indent();
+        this.transpileStmts(stmt.alternate.body);
+        this.dedent();
+      }
+    }
+    this.emitLine(`}`);
   }
 
   private transpileNestedFunction(stmt: FunctionDeclaration, rest: Stmt[]): void {
@@ -1103,7 +1125,16 @@ export class GoTranspiler {
       case "IfStmt":
         this.walkExpr(stmt.condition, visit);
         walkAll(stmt.consequent.body);
-        if (stmt.alternate) walkAll(stmt.alternate.body);
+        if (stmt.alternate) {
+          if (stmt.alternate.kind === "IfStmt") {
+            this.walkStmt(stmt.alternate, visit);
+          } else {
+            walkAll(stmt.alternate.body);
+          }
+        }
+        break;
+      case "BreakStmt":
+      case "ContinueStmt":
         break;
       case "WhileStmt":
         this.walkExpr(stmt.condition, visit);

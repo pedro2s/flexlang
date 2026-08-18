@@ -55,6 +55,8 @@ export enum TokenType {
   True = "TRUE", // true
   False = "FALSE", // false
   Pipe = "PIPE", // | (delimitador de parâmetros de lambda)
+  Break = "BREAK", // break
+  Continue = "CONTINUE", // continue
 }
 
 export interface Token {
@@ -91,6 +93,8 @@ export type Stmt =
   | SpawnStmt
   | TraitDeclaration
   | ImportDeclaration
+  | BreakStmt
+  | ContinueStmt
   | ExpressionStatement;
 
 export type Expr =
@@ -287,7 +291,17 @@ export interface IfStmt {
   kind: "IfStmt";
   condition: Expr;
   consequent: BlockStmt;
-  alternate?: BlockStmt | undefined; // Opcional, pois pode não ter 'else'
+  alternate?: BlockStmt | IfStmt | undefined; // Suporta BlockStmt ou IfStmt recursivo para 'else if'
+  span?: Span;
+}
+
+export interface BreakStmt {
+  kind: "BreakStmt";
+  span?: Span;
+}
+
+export interface ContinueStmt {
+  kind: "ContinueStmt";
   span?: Span;
 }
 

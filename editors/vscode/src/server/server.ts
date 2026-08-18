@@ -284,6 +284,8 @@ connection.onHover((params): Hover | null => {
       "trait": "**`trait`**: Declaração de abstração de comportamento.",
       "struct": "**`struct`**: Declaração de modelo de dados.",
       "func": "**`func`**: Declaração de função.",
+      "break": "**`break`**: Interrompe imediatamente a execução do laço 'for' ou 'while' envolvente.",
+      "continue": "**`continue`**: Avança para a próxima iteração do laço 'for' ou 'while' envolvente.",
       "print": "**`print`**: Imprime valores na saída padrão do sistema.",
     };
 
@@ -324,6 +326,8 @@ connection.onCompletion((params): CompletionItem[] => {
       { label: "import", detail: "Importação de módulos", kind: CompletionItemKind.Keyword },
       { label: "from", detail: "Cláusula de importação", kind: CompletionItemKind.Keyword },
       { label: "return", detail: "Retorna valor da função", kind: CompletionItemKind.Keyword },
+      { label: "break", detail: "Interrompe execução do laço", kind: CompletionItemKind.Keyword },
+      { label: "continue", detail: "Avança para próxima iteração", kind: CompletionItemKind.Keyword },
       { label: "if", detail: "Condicional", kind: CompletionItemKind.Keyword },
       { label: "else", detail: "Condicional alternativa", kind: CompletionItemKind.Keyword },
       { label: "while", detail: "Laço de repetição", kind: CompletionItemKind.Keyword },

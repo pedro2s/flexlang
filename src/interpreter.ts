@@ -45,6 +45,10 @@ class ReturnException {
   constructor(public value: any) {}
 }
 
+class BreakException {}
+
+class ContinueException {}
+
 class FlexFunction {
   constructor(
     public declaration: FunctionDeclaration,
@@ -293,6 +297,10 @@ export class Interpreter {
           await this.evaluateStmt(blockStmt, blockEnv);
         }
         break;
+      case "BreakStmt":
+        throw new BreakException();
+      case "ContinueStmt":
+        throw new ContinueException();
       case "IfStmt":
         const conditionValue = await this.evaluateExpr(stmt.condition, env);
         if (conditionValue) {
@@ -308,13 +316,25 @@ export class Interpreter {
           // A cada iteração do loop, criamos um escopo limpo para não misturar os dados
           const loopEnv = new Environment(env);
           loopEnv.define(stmt.iteratorName, i);
-          await this.evaluateStmt(stmt.body, loopEnv);
+          try {
+            await this.evaluateStmt(stmt.body, loopEnv);
+          } catch (e) {
+            if (e instanceof BreakException) break;
+            if (e instanceof ContinueException) continue;
+            throw e;
+          }
         }
         break;
       case "WhileStmt":
         while (await this.evaluateExpr(stmt.condition, env)) {
           const loopEnv = new Environment(env);
-          await this.evaluateStmt(stmt.body, loopEnv);
+          try {
+            await this.evaluateStmt(stmt.body, loopEnv);
+          } catch (e) {
+            if (e instanceof BreakException) break;
+            if (e instanceof ContinueException) continue;
+            throw e;
+          }
         }
         break;
       default:
