@@ -235,4 +235,45 @@ try {
 }
 assert(caughtE2012, "RFC-019: aridade incorreta em método de String emite erro estático E2012");
 
+// 7. Testes RFC-020 (Métodos de Array, mutabilidade E3001 e métodos funcionais)
+console.log("\n--- 7. Testes RFC-020 (Métodos de Array) ---");
+const rfc020Code = `
+func test_arrays() {
+    let mut arr = [10, 20, 30];
+    let l = arr.len();
+    let empty = arr.is_empty();
+    let c = arr.contains(20);
+    let sub = arr.slice(0, 2);
+    let concat_arr = arr.concat([40, 50]);
+
+    arr.push(40);
+    arr.sort();
+    let popped = arr.pop();
+
+    let doubled = arr.map(|x| { return x * 2; });
+    let filtered = arr.filter(|x| { return x > 10; });
+    let found = arr.find(|x| { return x == 20; });
+    arr.for_each(|x| { print("\${x}"); });
+}
+`;
+
+const rfc020Tokens = new Lexer(rfc020Code).tokenize();
+const rfc020Ast = new Parser(rfc020Tokens, "rfc020.flex").parse();
+new TypeChecker().check(rfc020Ast, "rfc020.flex");
+assert(true, "RFC-020: métodos de Array (len, is_empty, contains, slice, concat, push, sort, pop, map, filter, find, for_each) validados");
+
+// Validação estática: mutação em array imutável deve emitir E3001
+let caughtE3001 = false;
+try {
+    const invalidMutCode = `func main() { let arr = [1, 2]; arr.push(3); }`;
+    const invTokens = new Lexer(invalidMutCode).tokenize();
+    const invAst = new Parser(invTokens, "invalid_mut.flex").parse();
+    new TypeChecker().check(invAst, "invalid_mut.flex");
+} catch (err: any) {
+    if (err.code === "E3001") {
+        caughtE3001 = true;
+    }
+}
+assert(caughtE3001, "RFC-020: push em array imutável emite erro estático E3001");
+
 console.log("\n✨ Todos os testes das Ferramentas VSCode passaram com 100% de sucesso!");

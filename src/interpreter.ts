@@ -551,6 +551,84 @@ export class Interpreter {
             }
           }
 
+          // Suporte a métodos de Array (RFC-020)
+          if (Array.isArray(objectInstanceCall)) {
+            const prop = expr.caller.property;
+            switch (prop) {
+              case "len":
+                return objectInstanceCall.length;
+              case "is_empty":
+                return objectInstanceCall.length === 0;
+              case "contains": {
+                const item = await this.evaluateExpr(expr.args[0], env);
+                return objectInstanceCall.includes(item);
+              }
+              case "slice": {
+                const start = await this.evaluateExpr(expr.args[0], env);
+                const end = await this.evaluateExpr(expr.args[1], env);
+                return objectInstanceCall.slice(start, end);
+              }
+              case "concat": {
+                const other = await this.evaluateExpr(expr.args[0], env);
+                return objectInstanceCall.concat(other);
+              }
+              case "push": {
+                const item = await this.evaluateExpr(expr.args[0], env);
+                objectInstanceCall.push(item);
+                return undefined;
+              }
+              case "pop": {
+                if (objectInstanceCall.length === 0) {
+                  return optionNone();
+                }
+                const popped = objectInstanceCall.pop();
+                return optionSome(popped);
+              }
+              case "sort": {
+                objectInstanceCall.sort((a, b) => {
+                  if (typeof a === "number" && typeof b === "number") return a - b;
+                  if (typeof a === "string" && typeof b === "string") return a.localeCompare(b);
+                  return 0;
+                });
+                return undefined;
+              }
+              case "map": {
+                const fn = await this.evaluateExpr(expr.args[0], env);
+                const result = [];
+                for (const item of objectInstanceCall) {
+                  result.push(await this.callFunction(fn, [item]));
+                }
+                return result;
+              }
+              case "filter": {
+                const fn = await this.evaluateExpr(expr.args[0], env);
+                const result = [];
+                for (const item of objectInstanceCall) {
+                  const keep = await this.callFunction(fn, [item]);
+                  if (keep) result.push(item);
+                }
+                return result;
+              }
+              case "find": {
+                const fn = await this.evaluateExpr(expr.args[0], env);
+                for (const item of objectInstanceCall) {
+                  const match = await this.callFunction(fn, [item]);
+                  if (match) return optionSome(item);
+                }
+                return optionNone();
+              }
+              case "for_each": {
+                const fn = await this.evaluateExpr(expr.args[0], env);
+                for (const item of objectInstanceCall) {
+                  await this.callFunction(fn, [item]);
+                }
+                return undefined;
+              }
+              default:
+                throw new Error(`TypeError: Method '${prop}' not found on Array`);
+            }
+          }
+
           // Se for Enum, repassa para a lógica geral de Call abaixo que captura __isEnumConstructor
           if (typeof objectInstanceCall === "object" && objectInstanceCall !== null && objectInstanceCall.kind === "EnumDeclaration") {
               // Pula o bloco if de método.

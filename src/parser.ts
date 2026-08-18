@@ -1144,8 +1144,12 @@ export class Parser {
           const isMut = this.match(TokenType.Mut);
           const pToken = this.consume(TokenType.Identifier);
           const paramName = pToken.value;
-          this.consume(TokenType.Colon);
-          const typeAnnotation = this.parseTypeAnnotation();
+          let typeAnnotation: TypeNode;
+          if (this.match(TokenType.Colon)) {
+            typeAnnotation = this.parseTypeAnnotation();
+          } else {
+            typeAnnotation = { kind: "NamedTypeNode", name: "Any", span: this.spanFrom(pToken, pToken) };
+          }
           parameters.push({
             name: paramName,
             typeAnnotation,

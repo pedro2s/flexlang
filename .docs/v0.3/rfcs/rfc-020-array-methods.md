@@ -1,6 +1,6 @@
 # RFC-020 — Métodos de Array
 
-> **Status:** Proposto · **Prioridade:** P0 — bloqueante · **Depende de:** RFC-021 (Closures, para `map`/`filter`/`find`)
+> **Status:** Implementado · **Prioridade:** P0 — bloqueante · **Depende de:** RFC-021 (Closures, para `map`/`filter`/`find`)
 
 ## 1. Motivação
 

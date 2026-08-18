@@ -1,0 +1,33 @@
+--- Teste Metodos Imutaveis ---
+Len: 3
+Is empty: false
+Contains 20: true
+Contains 99: false
+Slice: 20
+Slice: 30
+Concat: 10
+Concat: 20
+Concat: 30
+Concat: 40
+Concat: 50
+--- Teste Metodos Funcionais ---
+Doubled: 10
+Doubled: 24
+Doubled: 36
+Doubled: 50
+Filtered: 18
+Filtered: 25
+ForEach: 5
+ForEach: 12
+ForEach: 18
+ForEach: 25
+Found: 18
+Not found 999
+--- Teste Metodos Mutaveis ---
+Sorted: 5
+Sorted: 10
+Sorted: 20
+Sorted: 30
+Popped: 30
+Remaining len: 3
+Empty list popped None

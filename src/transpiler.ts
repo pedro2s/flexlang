@@ -758,9 +758,19 @@ export class GoTranspiler {
         return this.transpileTry(expr);
 
       case "LambdaExpr": {
-        // Lambda vira closure literal em Go: func(params) { body }
+        // Lambda vira closure literal em Go: func(params) ReturnType { body }
+        const retType = this.types.get(expr);
+        const retSuffix = retType && retType.kind !== "Void" && retType.kind !== "Any" ? ` ${this.goType(retType)}` : "";
         const params = expr.parameters
-          .map((p) => `${this.goIdent(p.name)} ${this.transpileType(p.typeAnnotation)}`)
+          .map((p) => {
+            const pTypeNode = p.typeAnnotation;
+            let typeStr = this.transpileType(pTypeNode);
+            if (typeStr === "any") {
+              const inferred = (p as any).__inferredType ? this.goType((p as any).__inferredType) : "any";
+              typeStr = inferred;
+            }
+            return `${this.goIdent(p.name)} ${typeStr}`;
+          })
           .join(", ");
         const bodyCode = this.capture(() => {
           this.funcDepth++;
@@ -768,7 +778,7 @@ export class GoTranspiler {
           this.funcDepth--;
         });
         // Emitido inline — quem consome (ex: transpileCall) envolve na chamada
-        return `func(${params}) {\n${bodyCode}${"  ".repeat(this.indentLevel)}}`;
+        return `func(${params})${retSuffix} {\n${bodyCode}${"  ".repeat(this.indentLevel)}}`;
       }
     }
   }
@@ -832,6 +842,46 @@ export class GoTranspiler {
             this.usedStringHelpers = true;
             return `flex_string_index_of(${obj}, ${this.transpileExpr(expr.args[0])})`;
           }
+        }
+      }
+
+      // Métodos de Array (RFC-020)
+      if (objType?.kind === "Array" || member.object.kind === "ArrayLiteral") {
+        const obj = this.transpileExpr(member.object);
+        const elemType = objType && objType.kind === "Array" ? objType.elementType : { kind: "Any" } as FlexType;
+        const elemGoType = this.goType(elemType);
+
+        switch (member.property) {
+          case "len":
+            return `len(${obj})`;
+          case "is_empty":
+            return `(len(${obj}) == 0)`;
+          case "contains":
+            return `func() bool { for _, __item := range ${obj} { if __item == ${this.transpileExpr(expr.args[0])} { return true } }; return false }()`;
+          case "slice":
+            return `${obj}[${this.transpileExpr(expr.args[0])}:${this.transpileExpr(expr.args[1])}]`;
+          case "concat":
+            return `append(append([]${elemGoType}{}, ${obj}...), ${this.transpileExpr(expr.args[0])}...)`;
+          case "push":
+            return `${obj} = append(${obj}, ${this.transpileExpr(expr.args[0])})`;
+          case "pop":
+            this.usedBuiltins.add("Option");
+            return `func() Option { if len(${obj}) == 0 { return Option_None }; __last := ${obj}[len(${obj})-1]; ${obj} = ${obj}[:len(${obj})-1]; return Option_Some_new(__last) }()`;
+          case "sort":
+            this.goImports.add("sort");
+            return `sort.Slice(${obj}, func(__i, __j int) bool { return ${obj}[__i] < ${obj}[__j] })`;
+          case "map": {
+            const resType = this.types.get(expr);
+            const resElemType = resType && resType.kind === "Array" ? this.goType(resType.elementType) : "any";
+            return `func() []${resElemType} { __res := []${resElemType}{}; for _, __item := range ${obj} { __res = append(__res, ${this.transpileExpr(expr.args[0])}(__item)) }; return __res }()`;
+          }
+          case "filter":
+            return `func() []${elemGoType} { __res := []${elemGoType}{}; for _, __item := range ${obj} { if ${this.transpileExpr(expr.args[0])}(__item) { __res = append(__res, __item) } }; return __res }()`;
+          case "find":
+            this.usedBuiltins.add("Option");
+            return `func() Option { for _, __item := range ${obj} { if ${this.transpileExpr(expr.args[0])}(__item) { return Option_Some_new(__item) } }; return Option_None }()`;
+          case "for_each":
+            return `func() { for _, __item := range ${obj} { ${this.transpileExpr(expr.args[0])}(__item) } }()`;
         }
       }
 

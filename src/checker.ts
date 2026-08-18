@@ -1084,6 +1084,130 @@ export class TypeChecker {
                 );
             }
           }
+          if (callerType.kind === "Array") {
+            const prop = expr.caller.property;
+            const elemType = callerType.elementType;
+
+            const checkMut = () => {
+              let root: Expr = expr.caller.object;
+              while (root.kind === "MemberExpr" || root.kind === "IndexExpr") {
+                root = (root as any).object;
+              }
+              if (root.kind === "Identifier") {
+                const rootData = env.get(root.symbol);
+                if (rootData && !rootData.isMut) {
+                  throw new FlexError(
+                    "E3001",
+                    `Cannot call mutating method '${prop}' on immutable variable '${root.symbol}'`,
+                    expr.span,
+                    "Declare a variável como mutável com 'let mut'."
+                  );
+                }
+              }
+            };
+
+            switch (prop) {
+              case "len":
+                if (expr.args.length !== 0)
+                  throw new FlexError("E2012", "len expects 0 arguments", expr.span);
+                return { kind: "Int" };
+              case "is_empty":
+                if (expr.args.length !== 0)
+                  throw new FlexError("E2012", "is_empty expects 0 arguments", expr.span);
+                return { kind: "Bool" };
+              case "contains": {
+                if (expr.args.length !== 1)
+                  throw new FlexError("E2012", "contains expects 1 argument", expr.span);
+                const argType = this.checkExpr(expr.args[0], env, elemType);
+                if (!this.isTypeAssignable(elemType, argType)) {
+                  throw new FlexError(
+                    "E2009",
+                    `Type mismatch: cannot check if Array<${this.typeToString(elemType)}> contains ${this.typeToString(argType)}`,
+                    expr.args[0].span ?? expr.span,
+                  );
+                }
+                return { kind: "Bool" };
+              }
+              case "slice": {
+                if (expr.args.length !== 2)
+                  throw new FlexError("E2012", "slice expects 2 arguments", expr.span);
+                const sType = this.checkExpr(expr.args[0], env);
+                const eType = this.checkExpr(expr.args[1], env);
+                if (sType.kind !== "Int" && sType.kind !== "Any") {
+                  throw new FlexError("E2009", `slice start bound must be Int, got ${this.typeToString(sType)}`, expr.args[0].span ?? expr.span);
+                }
+                if (eType.kind !== "Int" && eType.kind !== "Any") {
+                  throw new FlexError("E2009", `slice end bound must be Int, got ${this.typeToString(eType)}`, expr.args[1].span ?? expr.span);
+                }
+                return callerType;
+              }
+              case "concat": {
+                if (expr.args.length !== 1)
+                  throw new FlexError("E2012", "concat expects 1 argument", expr.span);
+                const otherType = this.checkExpr(expr.args[0], env);
+                if (otherType.kind !== "Array" && otherType.kind !== "Any") {
+                  throw new FlexError("E2009", `concat expects Array, got ${this.typeToString(otherType)}`, expr.args[0].span ?? expr.span);
+                }
+                return callerType;
+              }
+              case "push": {
+                checkMut();
+                if (expr.args.length !== 1)
+                  throw new FlexError("E2012", "push expects 1 argument", expr.span);
+                const itemType = this.checkExpr(expr.args[0], env, elemType);
+                if (!this.isTypeAssignable(elemType, itemType)) {
+                  throw new FlexError(
+                    "E2009",
+                    `Type mismatch: cannot push ${this.typeToString(itemType)} to Array<${this.typeToString(elemType)}>`,
+                    expr.args[0].span ?? expr.span,
+                  );
+                }
+                return { kind: "Void" };
+              }
+              case "pop": {
+                checkMut();
+                if (expr.args.length !== 0)
+                  throw new FlexError("E2012", "pop expects 0 arguments", expr.span);
+                return { kind: "Enum", name: "Option", genericArgs: [elemType] };
+              }
+              case "sort": {
+                checkMut();
+                if (expr.args.length !== 0)
+                  throw new FlexError("E2012", "sort expects 0 arguments", expr.span);
+                return { kind: "Void" };
+              }
+              case "find": {
+                if (expr.args.length !== 1)
+                  throw new FlexError("E2012", "find expects 1 argument", expr.span);
+                this.checkHigherOrderArg(expr.args[0], elemType, env);
+                return { kind: "Enum", name: "Option", genericArgs: [elemType] };
+              }
+              case "filter": {
+                if (expr.args.length !== 1)
+                  throw new FlexError("E2012", "filter expects 1 argument", expr.span);
+                this.checkHigherOrderArg(expr.args[0], elemType, env);
+                return callerType;
+              }
+              case "for_each": {
+                if (expr.args.length !== 1)
+                  throw new FlexError("E2012", "for_each expects 1 argument", expr.span);
+                this.checkHigherOrderArg(expr.args[0], elemType, env);
+                return { kind: "Void" };
+              }
+              case "map": {
+                if (expr.args.length !== 1)
+                  throw new FlexError("E2012", "map expects 1 argument", expr.span);
+                const returnType = this.checkHigherOrderArg(expr.args[0], elemType, env);
+                return { kind: "Array", elementType: returnType ?? { kind: "Any" } };
+              }
+              default:
+                throw new FlexError(
+                  "E2024",
+                  `Method '${prop}' not found on type Array`,
+                  expr.span,
+                );
+            }
+          }
           if (callerType.kind === "Struct" && callerType.name === "Channel") {
             if (expr.caller.property === "send") {
               if (expr.args.length !== 1)
@@ -1236,16 +1360,42 @@ export class TypeChecker {
       }
 
       case "LambdaExpr": {
-        // Lambda: |param: Type, ...| { body }
-        // Checa o corpo da lambda em um ambiente com os parâmetros definidos.
-        // O tipo da lambda em si é Any — limitação conhecida, igual a closures
-        // passadas como variável (o checker não modela tipos de função).
         const lambdaEnv = new TypeEnvironment(env);
         for (const param of expr.parameters) {
-          lambdaEnv.define(param.name, this.resolveTypeNode(param.typeAnnotation), !!param.isMut);
+          const pType =
+            param.typeAnnotation && (param.typeAnnotation as any).name !== "Any"
+              ? this.resolveTypeNode(param.typeAnnotation)
+              : (param as any).__inferredType ?? { kind: "Any" };
+          lambdaEnv.define(param.name, pType, !!param.isMut);
         }
+        let returnType: FlexType | undefined = undefined;
+        const scanReturns = (stmts: Stmt[]) => {
+          for (const s of stmts) {
+            if (s.kind === "ReturnStmt") {
+              if (s.value) {
+                returnType = this.checkExpr(s.value, lambdaEnv);
+              } else {
+                returnType = { kind: "Void" };
+              }
+            } else if (s.kind === "IfStmt") {
+              scanReturns(s.consequent.body);
+              if (s.alternate) {
+                if (s.alternate.kind === "IfStmt") {
+                  scanReturns([s.alternate]);
+                } else {
+                  scanReturns(s.alternate.body);
+                }
+              }
+            } else if (s.kind === "BlockStmt") {
+              scanReturns(s.body);
+            }
+          }
+        };
+        scanReturns(expr.body.body);
         this.checkStmt(expr.body, lambdaEnv);
-        return { kind: "Any" };
+        const resType = returnType ?? { kind: "Void" };
+        this.typeMap.set(expr, resType);
+        return resType;
       }
 
       case "RangeExpr": {
@@ -1336,6 +1486,51 @@ export class TypeChecker {
    * `Result<T, E>`) precisam caber no retorno da função. `Option.None` não carrega
    * nada, então propagar `Option<User>` de uma função `-> Option<String>` é seguro.
    */
+  private checkHigherOrderArg(arg: Expr, elemType: FlexType, env: TypeEnvironment): FlexType {
+    if (arg.kind === "LambdaExpr") {
+      const lambdaEnv = new TypeEnvironment(env);
+      if (arg.parameters.length > 0) {
+        const p = arg.parameters[0];
+        const pType =
+          p.typeAnnotation && (p.typeAnnotation as any).name !== "Any"
+            ? this.resolveTypeNode(p.typeAnnotation)
+            : elemType;
+        (p as any).__inferredType = pType;
+        lambdaEnv.define(p.name, pType, !!p.isMut);
+      }
+      let returnType: FlexType | undefined = undefined;
+      const scanReturns = (stmts: Stmt[]) => {
+        for (const s of stmts) {
+          if (s.kind === "ReturnStmt") {
+            if (s.value) {
+              returnType = this.checkExpr(s.value, lambdaEnv);
+            } else {
+              returnType = { kind: "Void" };
+            }
+          } else if (s.kind === "IfStmt") {
+            scanReturns(s.consequent.body);
+            if (s.alternate) {
+              if (s.alternate.kind === "IfStmt") {
+                scanReturns([s.alternate]);
+              } else {
+                scanReturns(s.alternate.body);
+              }
+            }
+          } else if (s.kind === "BlockStmt") {
+            scanReturns(s.body);
+          }
+        }
+      };
+      scanReturns(arg.body.body);
+      this.checkStmt(arg.body, lambdaEnv);
+      const resType = returnType ?? { kind: "Void" };
+      this.typeMap.set(arg, resType);
+      return resType;
+    } else {
+      return this.checkExpr(arg, env);
+    }
+  }
+
   private checkPropagatedPayload(tryType: FlexType, returnType: FlexType, span?: Span): void {
     if (tryType.kind !== "Enum" || returnType.kind !== "Enum") return;
     const decl = this.enums.get(tryType.name);
