@@ -1,6 +1,6 @@
 # RFC-023 — `HashMap<K, V>` Tipado
 
-> **Status:** Proposto · **Prioridade:** P1 · **Depende de:** RFC-018 (for-in), RFC-021 (Closures)
+> **Status:** Implementado · **Prioridade:** P1 · **Depende de:** RFC-018 (for-in), RFC-021 (Closures)
 
 ## 1. Motivação
 

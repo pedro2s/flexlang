@@ -341,4 +341,41 @@ try {
 }
 assert(caughtE2012Conv, "RFC-022: aridade incorreta em parse_int emite erro estático E2012");
 
+// 10. Testes RFC-023 (HashMap<K, V> Tipado)
+console.log("\n--- 10. Testes RFC-023 (HashMap Tipado) ---");
+const rfc023Code = `
+func test_hashmap() {
+    let mut mapa: HashMap<String, Int> = HashMap.new();
+    mapa.set("Alice", 100);
+    let val = mapa.get("Alice");
+    let rem = mapa.remove("Alice");
+    let has = mapa.contains_key("Alice");
+    let l = mapa.len();
+    let empty = mapa.is_empty();
+    let k = mapa.keys();
+    let v = mapa.values();
+
+    let config = HashMap.from({ "host": "localhost" });
+}
+`;
+
+const rfc023Tokens = new Lexer(rfc023Code).tokenize();
+const rfc023Ast = new Parser(rfc023Tokens, "rfc023.flex").parse();
+new TypeChecker().check(rfc023Ast, "rfc023.flex");
+assert(true, "RFC-023: HashMap (new, from, get, set, remove, contains_key, len, is_empty, keys, values) validado");
+
+// Validação estática: set em HashMap imutável deve emitir E3001
+let caughtE3001Map = false;
+try {
+    const invMapCode = `func main() { let m: HashMap<String, Int> = HashMap.new(); m.set("k", 1); }`;
+    const invMapTokens = new Lexer(invMapCode).tokenize();
+    const invMapAst = new Parser(invMapTokens, "invalid_map.flex").parse();
+    new TypeChecker().check(invMapAst, "invalid_map.flex");
+} catch (err: any) {
+    if (err.code === "E3001") {
+        caughtE3001Map = true;
+    }
+}
+assert(caughtE3001Map, "RFC-023: set em HashMap imutável emite erro estático E3001");
+
 console.log("\n✨ Todos os testes das Ferramentas VSCode passaram com 100% de sucesso!");

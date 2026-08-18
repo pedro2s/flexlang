@@ -477,7 +477,64 @@ export class Interpreter {
               return new FlexChannel();
           }
 
+          // Construtores estáticos de HashMap (RFC-023)
+          if (expr.caller.object.kind === "Identifier" && expr.caller.object.symbol === "HashMap") {
+            if (expr.caller.property === "new") {
+              return new Map();
+            }
+            if (expr.caller.property === "from") {
+              const arg = await this.evaluateExpr(expr.args[0], env);
+              if (arg instanceof Map) {
+                return new Map(arg);
+              }
+              if (arg && typeof arg === "object") {
+                return new Map(Object.entries(arg));
+              }
+              return new Map();
+            }
+          }
+
           const objectInstanceCall = await this.evaluateExpr(expr.caller.object, env);
+
+          // Suporte a métodos de HashMap (RFC-023)
+          if (objectInstanceCall instanceof Map) {
+            const evaluatedArgs = [];
+            for (const arg of expr.args) {
+              evaluatedArgs.push(await this.evaluateExpr(arg, env));
+            }
+            switch (expr.caller.property) {
+              case "len":
+                return objectInstanceCall.size;
+              case "is_empty":
+                return objectInstanceCall.size === 0;
+              case "get": {
+                const key = evaluatedArgs[0];
+                if (objectInstanceCall.has(key)) {
+                  return optionSome(objectInstanceCall.get(key));
+                }
+                return optionNone();
+              }
+              case "set": {
+                objectInstanceCall.set(evaluatedArgs[0], evaluatedArgs[1]);
+                return undefined;
+              }
+              case "remove": {
+                const key = evaluatedArgs[0];
+                if (objectInstanceCall.has(key)) {
+                  const val = objectInstanceCall.get(key);
+                  objectInstanceCall.delete(key);
+                  return optionSome(val);
+                }
+                return optionNone();
+              }
+              case "contains_key":
+                return objectInstanceCall.has(evaluatedArgs[0]);
+              case "keys":
+                return Array.from(objectInstanceCall.keys());
+              case "values":
+                return Array.from(objectInstanceCall.values());
+            }
+          }
 
           // Chamada nativa (construtor estático de módulo, método de canal, de
           // servidor...): todo objeto nativo expõe seus métodos como funções,

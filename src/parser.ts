@@ -833,12 +833,43 @@ export class Parser {
   }
 
   // ATENÇÂO: Acesso a propriedades (p.x) tem a precedência mais alta.
-  // Precisamos criar um novo nível na nossa avaliação de expressões.
+  private consumePropertyName(): Token {
+    const curr = this.current();
+    if (
+      curr.type === TokenType.Identifier ||
+      curr.type === TokenType.From ||
+      curr.type === TokenType.Match ||
+      curr.type === TokenType.For ||
+      curr.type === TokenType.In ||
+      curr.type === TokenType.Import ||
+      curr.type === TokenType.Let ||
+      curr.type === TokenType.Mut ||
+      curr.type === TokenType.Return ||
+      curr.type === TokenType.Struct ||
+      curr.type === TokenType.Enum ||
+      curr.type === TokenType.Trait ||
+      curr.type === TokenType.Impl ||
+      curr.type === TokenType.Self ||
+      curr.type === TokenType.Print ||
+      curr.type === TokenType.True ||
+      curr.type === TokenType.False ||
+      curr.type === TokenType.If ||
+      curr.type === TokenType.Else ||
+      curr.type === TokenType.While ||
+      curr.type === TokenType.Break ||
+      curr.type === TokenType.Continue ||
+      curr.type === TokenType.Spawn ||
+      curr.type === TokenType.Scope
+    ) {
+      this.pos++;
+      return curr;
+    }
+    return this.consume(TokenType.Identifier);
+  }
+
   private parseMemberExpr(): Expr {
-    // Começa com o lado esquerdo (o objeto/variável)
     let object = this.parseCallMemberExpr();
 
-    // Enquanto tiver ponto, colchetes ou interrogação, continua expandindo a expressão
     while (
       this.current().type === TokenType.Dot ||
       this.current().type === TokenType.LBracket ||
@@ -854,7 +885,7 @@ export class Parser {
         };
       } else if (this.current().type === TokenType.Dot) {
         this.consume(TokenType.Dot);
-        const propToken = this.consume(TokenType.Identifier);
+        const propToken = this.consumePropertyName();
         const propSpan = this.spanFrom(propToken, propToken);
         object = {
           kind: "MemberExpr",
@@ -885,7 +916,7 @@ export class Parser {
     while (true) {
       if (this.current().type === TokenType.Dot) {
         this.consume(TokenType.Dot);
-        const propToken = this.consume(TokenType.Identifier);
+        const propToken = this.consumePropertyName();
         const propSpan = this.spanFrom(propToken, propToken);
         expr = {
           kind: "MemberExpr",

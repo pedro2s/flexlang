@@ -1,0 +1,21 @@
+--- Teste HashMap Basico ---
+Vazio: true
+Len inicial: 0
+Len apos sets: 2
+Vazio apos sets: false
+Contains Alice: true
+Contains Charlie: false
+Get Alice: 100
+Get Charlie: nao encontrado com sucesso
+Remove Alice: 100
+Len apos remove: 1
+Contains Alice apos remove: false
+Remove Alice repetido devolveu None com sucesso
+--- Teste HashMap.from ---
+Config len: 2
+Host: localhost
+--- Teste Keys e Values ---
+Keys len: 1
+Values len: 1
+Chave 0: k1
+Valor 0: 1

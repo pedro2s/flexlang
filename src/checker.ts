@@ -32,6 +32,7 @@ export type FlexType =
   | { kind: "String" }
   | { kind: "Bool" }
   | { kind: "Array"; elementType: FlexType }
+  | { kind: "HashMap"; keyType: FlexType; valueType: FlexType }
   | { kind: "Struct"; name: string; genericArgs: FlexType[] }
   | { kind: "Enum"; name: string; genericArgs: FlexType[] }
   | { kind: "Map" }
@@ -421,9 +422,9 @@ export class TypeChecker {
           if (iterableType.kind === "Array") {
             iteratorType = iterableType.elementType;
             indexType = { kind: "Int" };
-          } else if (iterableType.kind === "Map") {
-            iteratorType = { kind: "String" };
-            indexType = { kind: "Any" };
+          } else if (iterableType.kind === "Map" || iterableType.kind === "HashMap") {
+            iteratorType = iterableType.kind === "HashMap" ? iterableType.keyType : { kind: "String" };
+            indexType = iterableType.kind === "HashMap" ? iterableType.valueType : { kind: "Any" };
           } else if (iterableType.kind === "Any") {
             iteratorType = { kind: "Any" };
             indexType = { kind: "Any" };
@@ -996,6 +997,32 @@ export class TypeChecker {
             }
           }
 
+          // Construtor estático de HashMap (RFC-023)
+          if (expr.caller.object.kind === "Identifier" && expr.caller.object.symbol === "HashMap") {
+            if (expr.caller.property === "new") {
+              if (expr.args.length !== 0)
+                throw new FlexError("E2012", "HashMap.new expects 0 arguments", expr.span);
+              if (expected && expected.kind === "HashMap") {
+                return expected;
+              }
+              return { kind: "HashMap", keyType: { kind: "Any" }, valueType: { kind: "Any" } };
+            }
+            if (expr.caller.property === "from") {
+              if (expr.args.length !== 1)
+                throw new FlexError("E2012", "HashMap.from expects 1 argument", expr.span);
+              this.checkExpr(expr.args[0], env);
+              if (expected && expected.kind === "HashMap") {
+                return expected;
+              }
+              return { kind: "HashMap", keyType: { kind: "String" }, valueType: { kind: "Any" } };
+            }
+            throw new FlexError(
+              "E2024",
+              `Static method '${expr.caller.property}' not found on HashMap`,
+              expr.span,
+            );
+          }
+
           // Construtor estático de módulo nativo: `Server.new(...)`
           if (expr.caller.object.kind === "Identifier") {
             const staticSig = this.nativeTypes
@@ -1257,6 +1284,83 @@ export class TypeChecker {
                 );
             }
           }
+          if (callerType.kind === "HashMap" || callerType.kind === "Map") {
+            const keyType = callerType.kind === "HashMap" ? callerType.keyType : { kind: "String" } as FlexType;
+            const valueType = callerType.kind === "HashMap" ? callerType.valueType : { kind: "Any" } as FlexType;
+            const prop = expr.caller.property;
+
+            const checkMut = () => {
+              let root: Expr = expr.caller.object;
+              while (root.kind === "MemberExpr" || root.kind === "IndexExpr") {
+                root = (root as any).object;
+              }
+              if (root.kind === "Identifier") {
+                const rootData = env.get(root.symbol);
+                if (rootData && !rootData.isMut) {
+                  throw new FlexError(
+                    "E3001",
+                    `Cannot call mutating method '${prop}' on immutable variable '${root.symbol}'`,
+                    expr.span,
+                    "Declare a variável como mutável com 'let mut'."
+                  );
+                }
+              }
+            };
+
+            switch (prop) {
+              case "len":
+                if (expr.args.length !== 0)
+                  throw new FlexError("E2012", "len expects 0 arguments", expr.span);
+                return { kind: "Int" };
+              case "is_empty":
+                if (expr.args.length !== 0)
+                  throw new FlexError("E2012", "is_empty expects 0 arguments", expr.span);
+                return { kind: "Bool" };
+              case "get": {
+                if (expr.args.length !== 1)
+                  throw new FlexError("E2012", "get expects 1 argument", expr.span);
+                this.checkExpr(expr.args[0], env, keyType);
+                return { kind: "Enum", name: "Option", genericArgs: [valueType] };
+              }
+              case "set": {
+                checkMut();
+                if (expr.args.length !== 2)
+                  throw new FlexError("E2012", "set expects 2 arguments", expr.span);
+                this.checkExpr(expr.args[0], env, keyType);
+                this.checkExpr(expr.args[1], env, valueType);
+                return { kind: "Void" };
+              }
+              case "remove": {
+                checkMut();
+                if (expr.args.length !== 1)
+                  throw new FlexError("E2012", "remove expects 1 argument", expr.span);
+                this.checkExpr(expr.args[0], env, keyType);
+                return { kind: "Enum", name: "Option", genericArgs: [valueType] };
+              }
+              case "contains_key": {
+                if (expr.args.length !== 1)
+                  throw new FlexError("E2012", "contains_key expects 1 argument", expr.span);
+                this.checkExpr(expr.args[0], env, keyType);
+                return { kind: "Bool" };
+              }
+              case "keys": {
+                if (expr.args.length !== 0)
+                  throw new FlexError("E2012", "keys expects 0 arguments", expr.span);
+                return { kind: "Array", elementType: keyType };
+              }
+              case "values": {
+                if (expr.args.length !== 0)
+                  throw new FlexError("E2012", "values expects 0 arguments", expr.span);
+                return { kind: "Array", elementType: valueType };
+              }
+              default:
+                throw new FlexError(
+                  "E2024",
+                  `Method '${prop}' not found on type HashMap`,
+                  expr.span,
+                );
+            }
+          }
           if (callerType.kind === "Struct" && callerType.name === "Channel") {
             if (expr.caller.property === "send") {
               if (expr.args.length !== 1)
@@ -1461,6 +1565,9 @@ export class TypeChecker {
         if (node.name === "Float") return { kind: "Float" };
         if (node.name === "String") return { kind: "String" };
         if (node.name === "Bool") return { kind: "Bool" };
+        if (node.name === "HashMap" || node.name === "Map") {
+          return { kind: "HashMap", keyType: { kind: "Any" }, valueType: { kind: "Any" } };
+        }
         if (this.enums.has(node.name)) return { kind: "Enum", name: node.name, genericArgs: [] };
         return { kind: "Struct", name: node.name, genericArgs: [] };
 
@@ -1469,6 +1576,13 @@ export class TypeChecker {
 
       case "GenericTypeNode":
         const genericArgs = node.typeArguments.map((t) => this.resolveTypeNode(t, subst));
+        if (node.name === "HashMap" || node.name === "Map") {
+          return {
+            kind: "HashMap",
+            keyType: genericArgs[0] ?? { kind: "Any" },
+            valueType: genericArgs[1] ?? { kind: "Any" },
+          };
+        }
         if (this.enums.has(node.name)) {
           return { kind: "Enum", name: node.name, genericArgs };
         }
@@ -1577,6 +1691,17 @@ export class TypeChecker {
 
   private isTypeAssignable(target: FlexType, source: FlexType): boolean {
     if (target.kind === "Any" || source.kind === "Any") return true;
+    if (target.kind === "HashMap" || source.kind === "HashMap") {
+      if (target.kind === "HashMap" && source.kind === "HashMap") {
+        return (
+          this.isTypeAssignable(target.keyType, source.keyType) &&
+          this.isTypeAssignable(target.valueType, source.valueType)
+        );
+      }
+      if (target.kind === "HashMap" && source.kind === "Map") return true;
+      if (target.kind === "Map" && source.kind === "HashMap") return true;
+      return false;
+    }
     if (target.kind !== source.kind) return false;
 
     if (target.kind === "Array" && source.kind === "Array") {
@@ -1610,6 +1735,8 @@ export class TypeChecker {
       case "Any": return "Any";
       case "Void": return "Void";
       case "Map": return "Map";
+      case "HashMap":
+        return `HashMap<${this.typeToString(type.keyType)}, ${this.typeToString(type.valueType)}>`;
       case "Array": return `[${this.typeToString(type.elementType)}]`;
       case "Struct":
         if (type.genericArgs.length > 0) {

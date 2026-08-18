@@ -459,7 +459,10 @@ export class GoTranspiler {
           const target = this.transpileExpr(stmt.iterable);
           const iterator = this.goIdent(stmt.iteratorName);
           const iterableType = this.types.get(stmt.iterable);
-          const isMap = iterableType?.kind === "Map" || stmt.iterable.kind === "MapLiteral";
+          const isMap =
+            iterableType?.kind === "Map" ||
+            iterableType?.kind === "HashMap" ||
+            stmt.iterable.kind === "MapLiteral";
 
           if (isMap) {
             if (stmt.indexName) {
@@ -931,6 +934,54 @@ export class GoTranspiler {
         }
       }
 
+      // Métodos de HashMap (RFC-023)
+      const isMapMethod =
+        objType?.kind === "HashMap" ||
+        objType?.kind === "Map" ||
+        member.object.kind === "MapLiteral";
+
+      if (isMapMethod) {
+        const obj = this.transpileExpr(member.object);
+        const keyGoType =
+          objType && objType.kind === "HashMap" ? this.goType(objType.keyType) : "string";
+        const valGoType =
+          objType && objType.kind === "HashMap" ? this.goType(objType.valueType) : "any";
+
+        switch (member.property) {
+          case "len":
+            return `len(${obj})`;
+          case "is_empty":
+            return `(len(${obj}) == 0)`;
+          case "get":
+            this.usedBuiltins.add("Option");
+            return `func() Option {\n  __v, __ok := ${obj}[${this.transpileExpr(expr.args[0])}]\n  if !__ok {\n    return Option_None\n  }\n  return Option_Some_new(__v)\n}()`;
+          case "set":
+            return `${obj}[${this.transpileExpr(expr.args[0])}] = ${this.transpileExpr(expr.args[1])}`;
+          case "remove":
+            this.usedBuiltins.add("Option");
+            return `func() Option {\n  __v, __ok := ${obj}[${this.transpileExpr(expr.args[0])}]\n  if !__ok {\n    return Option_None\n  }\n  delete(${obj}, ${this.transpileExpr(expr.args[0])})\n  return Option_Some_new(__v)\n}()`;
+          case "contains_key":
+            return `func() bool {\n  _, __ok := ${obj}[${this.transpileExpr(expr.args[0])}]\n  return __ok\n}()`;
+          case "keys":
+            return `func() []${keyGoType} {\n  __keys := []${keyGoType}{}\n  for __k := range ${obj} {\n    __keys = append(__keys, __k)\n  }\n  return __keys\n}()`;
+          case "values":
+            return `func() []${valGoType} {\n  __vals := []${valGoType}{}\n  for _, __v := range ${obj} {\n    __vals = append(__vals, __v)\n  }\n  return __vals\n}()`;
+        }
+      }
+
+      // Construtores estáticos de HashMap (RFC-023)
+      if (member.object.kind === "Identifier" && member.object.symbol === "HashMap") {
+        if (member.property === "new") {
+          const mapType = this.types.get(expr);
+          const goMapType =
+            mapType && mapType.kind === "HashMap" ? this.goType(mapType) : "map[string]any";
+          return `make(${goMapType})`;
+        }
+        if (member.property === "from") {
+          return `${this.transpileExpr(expr.args[0])}`;
+        }
+      }
+
       // Construtor de variante de enum: Status.Sucesso("msg") -> Status_Sucesso_new("msg")
       if (member.object.kind === "Identifier" && this.enums.has(member.object.symbol)) {
         const args = expr.args.map((a) => this.transpileExpr(a)).join(", ");
@@ -1099,6 +1150,9 @@ export class GoTranspiler {
           return "string";
         case "Bool":
           return "bool";
+        case "HashMap":
+        case "Map":
+          return "map[string]any";
         case "Any":
           return "any";
         case "Void":
@@ -1121,6 +1175,15 @@ export class GoTranspiler {
       return `[]${this.transpileType(typeNode.elementType, typeParams)}`;
     }
     if (typeNode.kind === "GenericTypeNode") {
+      if (typeNode.name === "HashMap" || typeNode.name === "Map") {
+        const k = typeNode.typeArguments[0]
+          ? this.transpileType(typeNode.typeArguments[0], typeParams)
+          : "string";
+        const v = typeNode.typeArguments[1]
+          ? this.transpileType(typeNode.typeArguments[1], typeParams)
+          : "any";
+        return `map[${k}]${v}`;
+      }
       if (typeNode.name === "Channel") {
         return `chan ${typeNode.typeArguments[0] ? this.transpileType(typeNode.typeArguments[0], typeParams) : "any"}`;
       }
@@ -1152,6 +1215,10 @@ export class GoTranspiler {
         return "any";
       case "Array":
         return `[]${this.goType(type.elementType)}`;
+      case "HashMap":
+        return `map[${this.goType(type.keyType)}]${this.goType(type.valueType)}`;
+      case "Map":
+        return "map[string]any";
       case "Enum":
         this.markBuiltinUse(type.name);
         return this.goIdent(type.name);
