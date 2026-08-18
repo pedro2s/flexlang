@@ -6,6 +6,26 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e o
 
 ## [Não lançado]
 
+## [0.3.0] - 2026-08-18
+
+Terceira release pública da FlexLang. Focada em backend enterprise, precisão financeira, observabilidade e ergonomia de código moderno. Implementa integralmente as RFCs 017 a 030 (ver [`.docs/v0.3/rfcs/`](.docs/v0.3/rfcs/)).
+
+### Adicionado
+- **Controle de Fluxo Estendido (RFC-017)**: Adicionadas cláusulas `else if` sem aninhamento excessivo e instruções `break` e `continue` com validação estática de escopo dentro de laços (`while` e `for`).
+- **Laços `for..in` sobre Coleções (RFC-018)**: Iteração idiomática `for item in collection` sobre arrays (`[T]`), mapas (`HashMap`/`Map`), strings (`String`) e ranges numéricos (`a..b`).
+- **Métodos Nativos de `String` (RFC-019)**: Métodos nativos `.len()`, `.trim()`, `.upper()`, `.lower()`, `.contains()`, `.split()`, `.replace()`, `.substring()` e `.index_of()` com retorno em `Option<Int>`.
+- **Métodos Nativos de `Array` e Programação Funcional (RFC-020)**: Métodos `.len()`, `.is_empty()`, `.contains()`, `.slice()`, `.concat()`, `.push()`, `.pop()`, `.sort()`, `.map()`, `.filter()`, `.find()` e `.for_each()` operando com closures.
+- **Closures com Captura de Escopo Lexical (RFC-021)**: Lambdas e closures com sintaxe `|param: Type| { ... }`, captura de variáveis externas por referência e suporte a funções de alta ordem aninhadas.
+- **Conversões de Tipo Explícitas e Parsing (RFC-022)**: Métodos `.to_string()` para primitivos (`Int`, `Float`, `Bool`) e funções livres `parse_int(s)` e `parse_float(s)` com retornos `Result<Int, String>` e `Result<Float, String>`.
+- **Coleção `HashMap<K, V>` Tipada (RFC-023)**: Tipo de dicionário em memória com métodos `new()`, `from()`, `.get(key) -> Option<V>`, `.set(key, val)`, `.remove(key) -> Option<V>`, `.contains_key(key) -> Bool`, `.keys()`, `.values()`, `.len()` e `.is_empty()`.
+- **Declarações `const` de Nível de Módulo (RFC-024)**: Palavra-chave `const` para imutabilidade estrita em tempo de compilação, validação contra reatribuição e proibição de chamadas com efeitos colaterais na inicialização.
+- **Módulo `math/decimal` para Precisão Financeira (RFC-025)**: Tipo `Decimal` de ponto fixo/arbitrário para operações monetárias exatas, com `.add()`, `.sub()`, `.mul()`, `.div()`, `.pow()`, `.round()`, comparações (`eq`, `lt`, `gt`) e conversão para string.
+- **Módulo `os/env` para Variáveis de Ambiente (RFC-026)**: Acesso seguro ao ambiente com `env.get(key) -> Option<String>`, `env.get_or(key, default) -> String`, `env.require(key) -> String` e `env.has(key) -> Bool`.
+- **Módulo `core/time` para Datas e Durações (RFC-027)**: Tipos `Time` (epoch unix, layouts customizados e ISO 8601) e `Duration` (construtores `seconds`, `millis`, `minutes`, `hours` e métodos de conversão).
+- **Módulo `crypto` para Criptografia e Segurança (RFC-028)**: Hashing seguro de senhas com `hash.bcrypt` e `hash.bcrypt_verify`, geração de identificadores `uuid.v4`, proteção contra timing attacks com `hmac.sha256`/`hmac.verify` e função livre `sha256(data)`.
+- **Expressões `catch` para Tratamento de Erros Inline (RFC-029)**: Sintaxe `<expr> catch err { <bloco> }` para interceptar variantes `Result.Err`, vincular erros em variáveis e fornecer valores de fallback, retries ou re-propagação ergonômica.
+- **Projeto de Referência FlexBank API e Homologação (RFC-030)**: Projeto completo `examples/09_flexbank_api` e suíte de integração ponta a ponta `tests/flexbank_integration.ts` com 66 cenários HTTP executados e aprovados nos modos interpretado e compilado Go.
+
 ## [0.2.0] - 2026-08-17
 
 Segunda release pública da FlexLang. Torna a linguagem capaz de expressar APIs REST completas e elimina divergências aritméticas e de roteamento entre o interpretador e a compilação Go. Implementa as RFCs 011 a 016 (ver [`.docs/v0.2/rfcs/`](.docs/v0.2/rfcs/)).
@@ -37,7 +57,8 @@ Apenas documentação — sem mudança de comportamento. O `README.md` publicado
 
 Primeira versão pública do FlexLang. Implementa as RFCs 001–009 (ver [`.docs/v1/rfcs/`](.docs/v1/rfcs/)): paridade completa entre o modo interpretado e o transpiler Go, `Result`/`Option` nativos, módulos nativos (`net/http`, `db/postgres`), sistema de módulos locais, CLI (`flex init`/`run`/`build`/`test`), e a baseline de observabilidade e segurança para produção.
 
-[Não lançado]: https://github.com/pedro2s/flexlang/compare/v0.2.0...HEAD
+[Não lançado]: https://github.com/pedro2s/flexlang/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/pedro2s/flexlang/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/pedro2s/flexlang/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/pedro2s/flexlang/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/pedro2s/flexlang/releases/tag/v0.1.0
