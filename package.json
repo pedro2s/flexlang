@@ -39,6 +39,7 @@
   "license": "ISC",
   "type": "module",
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^26.2.0",
     "@types/pg": "^8.21.0",
     "ts-node": "^10.9.2",
@@ -47,6 +48,7 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "pg": "^8.23.0"
   }
 }

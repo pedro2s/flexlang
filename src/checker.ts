@@ -83,6 +83,8 @@ export class TypeChecker {
   private traits: Map<string, TraitDeclaration> = new Map();
   /** Superfície dos módulos nativos importados (RFC-003), por nome de tipo. */
   private nativeTypes: Map<string, NativeType> = new Map();
+  /** Funções livres de módulos nativos importados (RFC-028), por nome. */
+  private nativeFunctions: Map<string, NativeSignature> = new Map();
   private inScopeContext: number = 0;
   private loopDepth: number = 0;
   private typeMap: TypeMap = new Map();
@@ -134,6 +136,7 @@ export class TypeChecker {
         enums: Map<string, EnumDeclaration>;
         traits: Map<string, TraitDeclaration>;
         nativeTypes: Map<string, NativeType>;
+        nativeFunctions: Map<string, NativeSignature>;
       }
     >();
 
@@ -144,6 +147,7 @@ export class TypeChecker {
       const fileEnums = new Map<string, EnumDeclaration>();
       const fileTraits = new Map<string, TraitDeclaration>();
       const fileNativeTypes = new Map<string, NativeType>();
+      const fileNativeFunctions = new Map<string, NativeSignature>();
 
       for (const stmt of sourceFile.ast) {
         if (
@@ -182,6 +186,9 @@ export class TypeChecker {
               fileStructs.set(nativeType.name, nativeStructDeclaration(nativeType));
               fileNativeTypes.set(nativeType.name, nativeType);
             }
+            for (const nativeFunc of mod.functions ?? []) {
+              fileNativeFunctions.set(nativeFunc.name, nativeFunc);
+            }
           }
         }
       }
@@ -192,6 +199,7 @@ export class TypeChecker {
         enums: fileEnums,
         traits: fileTraits,
         nativeTypes: fileNativeTypes,
+        nativeFunctions: fileNativeFunctions,
       });
     }
 
@@ -204,6 +212,7 @@ export class TypeChecker {
         enums: Map<string, EnumDeclaration>;
         traits: Map<string, TraitDeclaration>;
         nativeTypes: Map<string, NativeType>;
+        nativeFunctions: Map<string, NativeSignature>;
       }
     >();
 
@@ -215,6 +224,7 @@ export class TypeChecker {
       for (const [k, v] of own.enums) visibleEnums.set(k, v);
       const visibleTraits = new Map<string, TraitDeclaration>(own.traits);
       const visibleNativeTypes = new Map<string, NativeType>(own.nativeTypes);
+      const visibleNativeFunctions = new Map<string, NativeSignature>(own.nativeFunctions);
 
       for (const stmt of sourceFile.ast) {
         if (stmt.kind === "ImportDeclaration" && isLocalModule(stmt.moduleName)) {
@@ -267,6 +277,7 @@ export class TypeChecker {
         enums: visibleEnums,
         traits: visibleTraits,
         nativeTypes: visibleNativeTypes,
+        nativeFunctions: visibleNativeFunctions,
       });
     }
 
@@ -280,6 +291,7 @@ export class TypeChecker {
       this.enums = scope.enums;
       this.traits = scope.traits;
       this.nativeTypes = scope.nativeTypes;
+      this.nativeFunctions = scope.nativeFunctions;
 
       const fileEnv = new TypeEnvironment(this.env);
       for (const stmt of sourceFile.ast) {
@@ -940,6 +952,22 @@ export class TypeChecker {
               name: "Result",
               genericArgs: [{ kind: "Float" }, { kind: "String" }],
             };
+          }
+
+          const nativeFn = this.nativeFunctions.get(expr.caller.symbol);
+          if (nativeFn) {
+            const expectedArity = nativeFn.arity ?? 0;
+            if (expr.args.length !== expectedArity) {
+              throw new FlexError(
+                "E2012",
+                `Function '${nativeFn.name}' expects ${expectedArity} arguments, got ${expr.args.length}`,
+                expr.span,
+              );
+            }
+            for (let i = 0; i < expr.args.length; i++) {
+              this.checkExpr(expr.args[i], env);
+            }
+            return nativeFn.returns;
           }
 
           const func = this.functions.get(expr.caller.symbol);

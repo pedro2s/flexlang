@@ -1,0 +1,9 @@
+--- 1. Bcrypt ---
+Senha correta valida: true
+Senha incorreta valida: false
+--- 2. UUID ---
+UUID tamanho: 36
+--- 3. HMAC e SHA256 ---
+HMAC valido: true
+HMAC invalido: false
+SHA256 hello: 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824

@@ -803,6 +803,14 @@ export class Interpreter {
             }
             return await this.callFunction(func, args);
         }
+
+        if (typeof func === "function") {
+            const args = [];
+            for (const arg of expr.args) {
+                 args.push(await this.evaluateExpr(arg, env));
+            }
+            return await func(...args);
+        }
         throw new Error(`TypeError: Not a function`);
 
       case "NumericLiteral":

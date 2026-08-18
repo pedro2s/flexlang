@@ -507,4 +507,25 @@ const rfc027Ast = new Parser(rfc027Tokens, "rfc027.flex").parse();
 new TypeChecker().check(rfc027Ast, "rfc027.flex");
 assert(true, "RFC-027: módulo core/time com Time e Duration validado");
 
+// 15. Testes RFC-028 (Módulo crypto)
+console.log("\n--- 15. Testes RFC-028 (Módulo crypto) ---");
+const rfc028Code = `
+import { hash, uuid, hmac, sha256 } from "crypto";
+
+func test_crypto_suite() -> Result<String, String> {
+    let pass_hash = hash.bcrypt("segredo123")?;
+    let is_v = hash.bcrypt_verify("segredo123", pass_hash);
+    let u = uuid.v4();
+    let mac = hmac.sha256("msg", "key");
+    let mac_v = hmac.verify("msg", "key", mac);
+    let s = sha256("data");
+    return Result.Ok(pass_hash);
+}
+`;
+
+const rfc028Tokens = new Lexer(rfc028Code).tokenize();
+const rfc028Ast = new Parser(rfc028Tokens, "rfc028.flex").parse();
+new TypeChecker().check(rfc028Ast, "rfc028.flex");
+assert(true, "RFC-028: módulo crypto com hash, uuid, hmac e sha256 validado");
+
 console.log("\n✨ Todos os testes das Ferramentas VSCode passaram com 100% de sucesso!");

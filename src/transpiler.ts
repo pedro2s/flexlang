@@ -212,11 +212,22 @@ export class GoTranspiler {
 
     const imports = [...this.goImports].sort();
     if (imports.length === 1) {
-      lines.push(`import "${imports[0]}"`);
+      const imp = imports[0];
+      if (imp.includes(" ") || imp.startsWith("\"")) {
+        lines.push(`import ${imp}`);
+      } else {
+        lines.push(`import "${imp}"`);
+      }
       lines.push("");
     } else if (imports.length > 1) {
       lines.push("import (");
-      for (const imp of imports) lines.push(`  "${imp}"`);
+      for (const imp of imports) {
+        if (imp.includes(" ") || imp.startsWith("\"")) {
+          lines.push(`  ${imp}`);
+        } else {
+          lines.push(`  "${imp}"`);
+        }
+      }
       lines.push(")");
       lines.push("");
     }

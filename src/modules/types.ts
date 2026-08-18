@@ -52,6 +52,9 @@ export interface NativeModule {
   /** O que o TypeChecker pré-registra ao ver o import. */
   types: NativeType[];
 
+  /** Funções livres exportadas diretamente pelo módulo nativo. */
+  functions?: NativeSignature[];
+
   /**
    * Embutidos (`Result`/`Option`) que o boilerplate Go deste módulo referencia
    * diretamente (ex: `req.param_int` devolve `Result`). O transpiler não sabe o
