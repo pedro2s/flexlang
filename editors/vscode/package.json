@@ -1,0 +1,202 @@
+{
+  "name": "vscode-flexlang",
+  "displayName": "FlexLang",
+  "description": "Suporte oficial de alta performance e inteligência para a linguagem FlexLang no VSCode: Syntax Highlighting, LSP, IntelliSense, Auto-Format, Snippets, CodeLens e Comandos Interativos.",
+  "version": "0.1.0",
+  "publisher": "flexlang",
+  "icon": "assets/flexlang-icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets",
+    "Linters",
+    "Formatters"
+  ],
+  "keywords": [
+    "flexlang",
+    "flex",
+    "concurrency",
+    "golang",
+    "backend",
+    "lsp",
+    "language-server"
+  ],
+  "author": {
+    "name": "Pedro Santana",
+    "email": "pedromanu27@gmail.com"
+  },
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pedro2s/flexlang.git"
+  },
+  "bugs": {
+    "url": "https://github.com/pedro2s/flexlang/issues"
+  },
+  "main": "./dist/client/extension.js",
+  "activationEvents": [
+    "onLanguage:flexlang"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "flexlang",
+        "aliases": [
+          "FlexLang",
+          "flex",
+          "flexlang"
+        ],
+        "extensions": [
+          ".flex"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./assets/file-icon.png",
+          "dark": "./assets/file-icon.png"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "flexlang",
+        "scopeName": "source.flex",
+        "path": "./syntaxes/flexlang.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "flexlang",
+        "path": "./snippets/flexlang.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "flexlang.runFile",
+        "title": "FlexLang: Executar Arquivo Atual (Interpreted)",
+        "category": "FlexLang",
+        "icon": "$(play)"
+      },
+      {
+        "command": "flexlang.runWatch",
+        "title": "FlexLang: Executar em Modo Watch (--watch)",
+        "category": "FlexLang",
+        "icon": "$(zap)"
+      },
+      {
+        "command": "flexlang.buildFile",
+        "title": "FlexLang: Compilar para Binário Nativo (Go)",
+        "category": "FlexLang",
+        "icon": "$(package)"
+      },
+      {
+        "command": "flexlang.runTests",
+        "title": "FlexLang: Executar Testes do Projeto (flex test)",
+        "category": "FlexLang",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "flexlang.formatDocument",
+        "title": "FlexLang: Formatar Documento",
+        "category": "FlexLang"
+      },
+      {
+        "command": "flexlang.restartServer",
+        "title": "FlexLang: Reiniciar Servidor de Linguagem (LSP)",
+        "category": "FlexLang",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "flexlang.runFile",
+          "when": "resourceExtname == .flex",
+          "group": "navigation@1"
+        },
+        {
+          "command": "flexlang.runWatch",
+          "when": "resourceExtname == .flex",
+          "group": "navigation@2"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "flexlang.runFile",
+          "when": "resourceExtname == .flex",
+          "group": "1_flexlang@1"
+        },
+        {
+          "command": "flexlang.runWatch",
+          "when": "resourceExtname == .flex",
+          "group": "1_flexlang@2"
+        },
+        {
+          "command": "flexlang.buildFile",
+          "when": "resourceExtname == .flex",
+          "group": "1_flexlang@3"
+        }
+      ]
+    },
+    "configuration": {
+      "type": "object",
+      "title": "FlexLang",
+      "properties": {
+        "flexlang.cliPath": {
+          "type": "string",
+          "default": "flex",
+          "description": "Caminho ou comando executável da CLI FlexLang (ex: 'flex' ou '/usr/local/bin/flex')."
+        },
+        "flexlang.server.trace": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Nível de rastreamento de comunicação JSON-RPC do Language Server."
+        },
+        "flexlang.format.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Habilita a formatação automática de código FlexLang integrada."
+        },
+        "flexlang.format.indentSize": {
+          "type": "number",
+          "default": 4,
+          "description": "Número de espaços utilizados para indentação."
+        },
+        "flexlang.diagnostics.onType": {
+          "type": "boolean",
+          "default": true,
+          "description": "Executa verificação léxica, sintática e semântica de tipos em tempo real durante a digitação."
+        },
+        "flexlang.codeLens.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Exibe ações interativas de CodeLens (▶ Run, ⚡ Watch) sobre funções principais e testes."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "tsup src/client/extension.ts src/server/server.ts --format cjs --target node18 --out-dir dist",
+    "watch": "tsup src/client/extension.ts src/server/server.ts --format cjs --target node18 --out-dir dist --watch",
+    "test": "npx tsx tests/syntax.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "@types/vscode": "^1.85.0",
+    "tsup": "^8.5.1",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1",
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-textdocument": "^1.0.12"
+  }
+}
