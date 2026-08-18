@@ -1,6 +1,6 @@
 # RFC-022 — Conversões de Tipo
 
-> **Status:** Proposto · **Prioridade:** P0 — bloqueante · **Depende de:** RFC-025 (Decimal)
+> **Status:** Implementado · **Prioridade:** P0 — bloqueante · **Depende de:** RFC-025 (Decimal)
 
 ## 1. Motivação
 

@@ -306,4 +306,39 @@ const rfc021Ast = new Parser(rfc021Tokens, "rfc021.flex").parse();
 new TypeChecker().check(rfc021Ast, "rfc021.flex");
 assert(true, "RFC-021: closures com captura de escopo e closures aninhadas validadas");
 
+// 9. Testes RFC-022 (Conversões de Tipo Explícitas)
+console.log("\n--- 9. Testes RFC-022 (Conversões de Tipo) ---");
+const rfc022Code = `
+func test_conversions() {
+    let n = 42;
+    let sn = n.to_string();
+    let f = 3.14;
+    let sf = f.to_string();
+    let b = true;
+    let sb = b.to_string();
+
+    let pi_res = parse_int("123");
+    let pf_res = parse_float("3.14");
+}
+`;
+
+const rfc022Tokens = new Lexer(rfc022Code).tokenize();
+const rfc022Ast = new Parser(rfc022Tokens, "rfc022.flex").parse();
+new TypeChecker().check(rfc022Ast, "rfc022.flex");
+assert(true, "RFC-022: to_string() para Int, Float, Bool e parse_int/parse_float validados");
+
+// Validação estática: aridade incorreta em parse_int deve emitir E2012
+let caughtE2012Conv = false;
+try {
+    const invCode = `func main() { parse_int("10", "20"); }`;
+    const invTokens = new Lexer(invCode).tokenize();
+    const invAst = new Parser(invTokens, "invalid_conv.flex").parse();
+    new TypeChecker().check(invAst, "invalid_conv.flex");
+} catch (err: any) {
+    if (err.code === "E2012") {
+        caughtE2012Conv = true;
+    }
+}
+assert(caughtE2012Conv, "RFC-022: aridade incorreta em parse_int emite erro estático E2012");
+
 console.log("\n✨ Todos os testes das Ferramentas VSCode passaram com 100% de sucesso!");

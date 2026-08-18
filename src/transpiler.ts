@@ -56,6 +56,8 @@ export class GoTranspiler {
   private tmpCount = 0;
   private funcDepth = 0;
   private usedStringHelpers = false;
+  private usedParseIntHelper = false;
+  private usedParseFloatHelper = false;
 
   constructor() {}
 
@@ -72,6 +74,8 @@ export class GoTranspiler {
     this.traitNames.clear();
     this.usedBuiltins.clear();
     this.usedStringHelpers = false;
+    this.usedParseIntHelper = false;
+    this.usedParseFloatHelper = false;
     this.nativeTypes.clear();
     this.types = types ?? new Map();
 
@@ -229,6 +233,32 @@ export class GoTranspiler {
         "\t}",
         "\tcharIdx := len([]rune(s[:idx]))",
         "\treturn Option_Some_new(charIdx)",
+        "}",
+        ""
+      );
+    }
+
+    if (this.usedParseIntHelper) {
+      lines.push(
+        "func flex_parse_int(s string) Result {",
+        "\tv, err := strconv.Atoi(s)",
+        "\tif err != nil {",
+        "\t\treturn Result_Err_new(err.Error())",
+        "\t}",
+        "\treturn Result_Ok_new(v)",
+        "}",
+        ""
+      );
+    }
+
+    if (this.usedParseFloatHelper) {
+      lines.push(
+        "func flex_parse_float(s string) Result {",
+        "\tv, err := strconv.ParseFloat(s, 64)",
+        "\tif err != nil {",
+        "\t\treturn Result_Err_new(err.Error())",
+        "\t}",
+        "\treturn Result_Ok_new(v)",
         "}",
         ""
       );
@@ -787,7 +817,23 @@ export class GoTranspiler {
     if (expr.caller.kind === "MemberExpr") {
       const member = expr.caller;
 
-      // Conversões numéricas explícitas: to_float() -> float64(...) e to_int() -> int(...)
+      // Conversões numéricas e de tipo explícitas (RFC-013, RFC-022)
+      if (member.property === "to_string") {
+        this.goImports.add("strconv");
+        const obj = this.transpileExpr(member.object);
+        const objType = this.types.get(member.object);
+        if (objType?.kind === "Int" || member.object.kind === "NumericLiteral") {
+          return `strconv.Itoa(${obj})`;
+        }
+        if (objType?.kind === "Float") {
+          return `strconv.FormatFloat(${obj}, 'f', -1, 64)`;
+        }
+        if (objType?.kind === "Bool" || member.object.kind === "BooleanLiteral") {
+          return `strconv.FormatBool(${obj})`;
+        }
+        this.goImports.add("fmt");
+        return `fmt.Sprint(${obj})`;
+      }
       if (member.property === "to_float") {
         return `float64(${this.transpileExpr(member.object)})`;
       }
@@ -954,8 +1000,23 @@ export class GoTranspiler {
       }
     }
 
-    const args = expr.args.map((a) => this.transpileExpr(a)).join(", ");
-    return `${this.transpileExpr(expr.caller)}(${args})`;
+      if (expr.caller.kind === "Identifier") {
+        if (expr.caller.symbol === "parse_int") {
+          this.goImports.add("strconv");
+          this.usedBuiltins.add("Result");
+          this.usedParseIntHelper = true;
+          return `flex_parse_int(${this.transpileExpr(expr.args[0])})`;
+        }
+        if (expr.caller.symbol === "parse_float") {
+          this.goImports.add("strconv");
+          this.usedBuiltins.add("Result");
+          this.usedParseFloatHelper = true;
+          return `flex_parse_float(${this.transpileExpr(expr.args[0])})`;
+        }
+      }
+
+      const args = expr.args.map((a) => this.transpileExpr(a)).join(", ");
+      return `${this.transpileExpr(expr.caller)}(${args})`;
   }
 
   /**

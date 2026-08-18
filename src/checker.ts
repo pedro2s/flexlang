@@ -885,6 +885,29 @@ export class TypeChecker {
         }
 
         if (expr.caller.kind === "Identifier") {
+          if (expr.caller.symbol === "parse_int") {
+            if (expr.args.length !== 1) {
+              throw new FlexError("E2012", "parse_int expects 1 argument", expr.span);
+            }
+            this.checkExpr(expr.args[0], env);
+            return {
+              kind: "Enum",
+              name: "Result",
+              genericArgs: [{ kind: "Int" }, { kind: "String" }],
+            };
+          }
+          if (expr.caller.symbol === "parse_float") {
+            if (expr.args.length !== 1) {
+              throw new FlexError("E2012", "parse_float expects 1 argument", expr.span);
+            }
+            this.checkExpr(expr.args[0], env);
+            return {
+              kind: "Enum",
+              name: "Result",
+              genericArgs: [{ kind: "Float" }, { kind: "String" }],
+            };
+          }
+
           const func = this.functions.get(expr.caller.symbol);
           if (!func) {
             const struct = this.structs.get(expr.caller.symbol);
@@ -991,6 +1014,11 @@ export class TypeChecker {
 
           const callerType = this.checkExpr(expr.caller.object, env);
           if (callerType.kind === "Int") {
+            if (expr.caller.property === "to_string") {
+              if (expr.args.length !== 0)
+                throw new FlexError("E2012", "to_string expects 0 arguments", expr.span);
+              return { kind: "String" };
+            }
             if (expr.caller.property === "to_float") {
               if (expr.args.length !== 0)
                 throw new FlexError("E2012", "to_float expects 0 arguments", expr.span);
@@ -1008,6 +1036,11 @@ export class TypeChecker {
             );
           }
           if (callerType.kind === "Float") {
+            if (expr.caller.property === "to_string") {
+              if (expr.args.length !== 0)
+                throw new FlexError("E2012", "to_string expects 0 arguments", expr.span);
+              return { kind: "String" };
+            }
             if (expr.caller.property === "to_int") {
               if (expr.args.length !== 0)
                 throw new FlexError("E2012", "to_int expects 0 arguments", expr.span);
@@ -1021,6 +1054,18 @@ export class TypeChecker {
             throw new FlexError(
               "E2024",
               `Method '${expr.caller.property}' not found on type Float`,
+              expr.span,
+            );
+          }
+          if (callerType.kind === "Bool") {
+            if (expr.caller.property === "to_string") {
+              if (expr.args.length !== 0)
+                throw new FlexError("E2012", "to_string expects 0 arguments", expr.span);
+              return { kind: "String" };
+            }
+            throw new FlexError(
+              "E2024",
+              `Method '${expr.caller.property}' not found on type Bool`,
               expr.span,
             );
           }

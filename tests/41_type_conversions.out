@@ -1,0 +1,14 @@
+--- Teste to_string ---
+Int: 42
+Neg: -100
+Float: 3.14
+Bool true: true
+Bool false: false
+--- Teste Parsing ---
+Int parse Ok: 12345
+Int parse detectou erro com sucesso
+Float parse Ok: 99.95
+Float parse detectou erro com sucesso
+--- Teste Propagacao com Try ---
+Soma Ok: 30
+Soma falhou corretamente com Try

@@ -1,5 +1,13 @@
 import type { Stmt, Expr, FunctionDeclaration } from "./ast";
-import { builtinEnums, isBuiltinType, isSuccessVariant, optionSome, optionNone } from "./stdlib";
+import {
+  builtinEnums,
+  isBuiltinType,
+  isSuccessVariant,
+  optionSome,
+  optionNone,
+  resultOk,
+  resultErr,
+} from "./stdlib";
 import { registry } from "./modules/registry";
 import { NATIVE_TAG, isNativeObject, modulePath, nativeMethod } from "./modules/types";
 import { type ModuleGraph, isLocalModule } from "./loader";
@@ -497,6 +505,9 @@ export class Interpreter {
           
           // Suporte a métodos de conversão em números primitivos (Float/Int)
           if (typeof objectInstanceCall === "number") {
+              if (expr.caller.property === "to_string") {
+                  return String(objectInstanceCall);
+              }
               if (expr.caller.property === "to_float") {
                   return objectInstanceCall;
               }
@@ -504,6 +515,14 @@ export class Interpreter {
                   return Math.trunc(objectInstanceCall);
               }
               throw new Error(`TypeError: Method '${expr.caller.property}' not found on number`);
+          }
+
+          // Suporte a métodos em boolean primitivo (Bool)
+          if (typeof objectInstanceCall === "boolean") {
+              if (expr.caller.property === "to_string") {
+                  return String(objectInstanceCall);
+              }
+              throw new Error(`TypeError: Method '${expr.caller.property}' not found on boolean`);
           }
 
           // Suporte a métodos de String (RFC-019)
@@ -678,6 +697,33 @@ export class Interpreter {
                 throw e;
               }
               return null;
+          }
+        }
+
+        if (expr.caller.kind === "Identifier") {
+          if (expr.caller.symbol === "parse_int") {
+            const raw = await this.evaluateExpr(expr.args[0], env);
+            const str = String(raw).trim();
+            if (!/^-?\d+$/.test(str)) {
+              return resultErr(`invalid integer: ${str}`);
+            }
+            const num = parseInt(str, 10);
+            if (isNaN(num)) {
+              return resultErr(`invalid integer: ${str}`);
+            }
+            return resultOk(num);
+          }
+          if (expr.caller.symbol === "parse_float") {
+            const raw = await this.evaluateExpr(expr.args[0], env);
+            const str = String(raw).trim();
+            if (!/^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(str)) {
+              return resultErr(`invalid float: ${str}`);
+            }
+            const num = parseFloat(str);
+            if (isNaN(num)) {
+              return resultErr(`invalid float: ${str}`);
+            }
+            return resultOk(num);
           }
         }
 
