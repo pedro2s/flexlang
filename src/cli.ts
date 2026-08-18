@@ -11,7 +11,7 @@ import { FlexError, formatDiagnostic } from "./diagnostics";
 import { FileWatcher } from "./watcher";
 
 // Versão atual do compilador FlexLang
-const FLEX_VERSION = "0.2.0";
+const FLEX_VERSION = "0.3.0";
 
 function printUsage() {
     console.log(`🚀 FlexLang CLI

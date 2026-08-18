@@ -818,8 +818,17 @@ export class TypeChecker {
       }
 
       case "ArrayLiteral": {
-        if (expr.elements.length === 0) return { kind: "Array", elementType: { kind: "Any" } };
-        const firstType = this.checkExpr(expr.elements[0], env);
+        if (expr.elements.length === 0) {
+          return {
+            kind: "Array",
+            elementType: expected?.kind === "Array" ? expected.elementType : { kind: "Any" },
+          };
+        }
+        const firstType = this.checkExpr(
+          expr.elements[0],
+          env,
+          expected?.kind === "Array" ? expected.elementType : undefined,
+        );
         // Valida que todos os outros são do mesmo tipo
         for (let i = 1; i < expr.elements.length; i++) {
           const nextType = this.checkExpr(expr.elements[i], env);
@@ -1679,6 +1688,9 @@ export class TypeChecker {
         if (node.name === "HashMap" || node.name === "Map") {
           return { kind: "HashMap", keyType: { kind: "Any" }, valueType: { kind: "Any" } };
         }
+        if (node.name === "Array") {
+          return { kind: "Array", elementType: { kind: "Any" } };
+        }
         if (this.enums.has(node.name)) return { kind: "Enum", name: node.name, genericArgs: [] };
         return { kind: "Struct", name: node.name, genericArgs: [] };
 
@@ -1693,6 +1705,9 @@ export class TypeChecker {
             keyType: genericArgs[0] ?? { kind: "Any" },
             valueType: genericArgs[1] ?? { kind: "Any" },
           };
+        }
+        if (node.name === "Array") {
+          return { kind: "Array", elementType: genericArgs[0] ?? { kind: "Any" } };
         }
         if (this.enums.has(node.name)) {
           return { kind: "Enum", name: node.name, genericArgs };

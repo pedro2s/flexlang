@@ -1,6 +1,6 @@
 # RFC-030 — Projeto de Referência FlexBank API e Validação End-to-End
 
-> **Status:** Proposto · **Prioridade:** P1 · **Depende de:** Todas as RFCs 017-029
+> **Status:** Implementado · **Prioridade:** P1 · **Depende de:** Todas as RFCs 017-029
 
 ## 1. Motivação
 
@@ -103,13 +103,13 @@ Criar `tests/flexbank_integration.ts` que:
 
 ### 3.2 Checklist de Aceitação
 
-- [ ] Projeto compila com `flex build` sem erros
-- [ ] Projeto roda com `flex run` e `flex run --watch`
-- [ ] Todos os endpoints respondem corretamente
-- [ ] Operações com Decimal produzem resultados precisos
-- [ ] Senhas são hasheadas com bcrypt
-- [ ] Tokens têm UUID e expiração
-- [ ] Logs contêm correlation ID e timestamps
-- [ ] Dados sensíveis são mascarados nos logs
-- [ ] Health check `/healthz` responde 200
-- [ ] CORS configurado para frontend
+- [x] Projeto compila com `flex build` sem erros
+- [x] Projeto roda com `flex run` e `flex run --watch`
+- [x] Todos os endpoints respondem corretamente
+- [x] Operações com Decimal produzem resultados precisos
+- [x] Senhas são hasheadas com bcrypt
+- [x] Tokens têm UUID e expiração
+- [x] Logs contêm correlation ID e timestamps
+- [x] Dados sensíveis são mascarados nos logs
+- [x] Health check `/healthz` responde 200
+- [x] CORS configurado para frontend

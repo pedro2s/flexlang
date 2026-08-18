@@ -168,6 +168,14 @@ export class GoTranspiler {
             checkDuplicateSymbol(stmt.name, filePath);
             declarations.push(stmt);
             break;
+          case "VarDeclaration":
+            if (filePath !== graph.entryPath) {
+              checkDuplicateSymbol(stmt.name, filePath);
+              declarations.push(stmt);
+            } else {
+              mainStatements.push(stmt);
+            }
+            break;
           case "ImplDeclaration":
             declarations.push(stmt);
             break;
@@ -358,6 +366,18 @@ export class GoTranspiler {
         const declaredType = stmt.typeAnnotation ? this.transpileType(stmt.typeAnnotation) : undefined;
         const resolvedType = this.types.get(stmt.value);
         const isFloatContext = declaredType === "float64" || resolvedType?.kind === "Float";
+
+        if (this.funcDepth === 0) {
+          const value = this.transpileExpr(stmt.value);
+          if (declaredType) {
+            this.emitLine(`var ${this.goIdent(stmt.name)} ${declaredType} = ${value}`);
+          } else if (isFloatContext && stmt.value.kind === "NumericLiteral" && !stmt.value.isFloat) {
+            this.emitLine(`var ${this.goIdent(stmt.name)} float64 = ${value}`);
+          } else {
+            this.emitLine(`var ${this.goIdent(stmt.name)} = ${value}`);
+          }
+          break;
+        }
 
         if (isFloatContext && stmt.value.kind === "NumericLiteral" && !stmt.value.isFloat) {
           const value = this.transpileExpr(stmt.value);
@@ -1282,6 +1302,9 @@ export class GoTranspiler {
           ? this.transpileType(typeNode.typeArguments[1], typeParams)
           : "any";
         return `map[${k}]${v}`;
+      }
+      if (typeNode.name === "Array") {
+        return `[]${typeNode.typeArguments[0] ? this.transpileType(typeNode.typeArguments[0], typeParams) : "any"}`;
       }
       if (typeNode.name === "Channel") {
         return `chan ${typeNode.typeArguments[0] ? this.transpileType(typeNode.typeArguments[0], typeParams) : "any"}`;
