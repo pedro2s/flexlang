@@ -474,4 +474,37 @@ const rfc026Ast = new Parser(rfc026Tokens, "rfc026.flex").parse();
 new TypeChecker().check(rfc026Ast, "rfc026.flex");
 assert(true, "RFC-026: módulo os/env com get, get_or, require, has validado");
 
+// 14. Testes RFC-027 (Módulo core/time)
+console.log("\n--- 14. Testes RFC-027 (Módulo core/time) ---");
+const rfc027Code = `
+import { Time, Duration } from "core/time";
+
+func test_time_suite() {
+    let now = Time.now();
+    let epoch = Time.from_unix(0);
+    let u = now.unix();
+    let um = now.unix_millis();
+    let iso = now.iso8601();
+    let fmt = now.format("YYYY-MM-DD");
+
+    let d_sec = Duration.seconds(10);
+    let d_ms = Duration.millis(500);
+    let d_min = Duration.minutes(2);
+    let d_h = Duration.hours(1);
+
+    let sec_val = d_sec.as_seconds();
+    let ms_val = d_sec.as_millis();
+
+    let future = epoch.add_duration(d_h);
+    let diff = future.sub(epoch);
+    let is_b = epoch.before(future);
+    let is_a = future.after(epoch);
+}
+`;
+
+const rfc027Tokens = new Lexer(rfc027Code).tokenize();
+const rfc027Ast = new Parser(rfc027Tokens, "rfc027.flex").parse();
+new TypeChecker().check(rfc027Ast, "rfc027.flex");
+assert(true, "RFC-027: módulo core/time com Time e Duration validado");
+
 console.log("\n✨ Todos os testes das Ferramentas VSCode passaram com 100% de sucesso!");

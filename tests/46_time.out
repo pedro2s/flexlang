@@ -1,0 +1,17 @@
+--- 1. Durations ---
+10s em segundos: 10
+10s em millis: 10000
+5min em segundos: 300
+2h em segundos: 7200
+2500ms em segundos: 2
+2500ms em millis: 2500
+--- 2. Timestamps ---
+Epoch unix: 0
+Epoch iso8601: 1970-01-01T00:00:00Z
+t100 unix: 100
+t100 unix_millis: 100000
+Epoch + 1h iso8601: 1970-01-01T01:00:00Z
+Diff em segundos: 3600
+Epoch before Epoch+1h: true
+Epoch+1h after Epoch: true
+Formatado: 1970-01-01 01:00:00

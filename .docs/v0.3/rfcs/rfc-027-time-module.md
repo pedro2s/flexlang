@@ -1,6 +1,6 @@
 # RFC-027 — Módulo `core/time` — Timestamps, Duração e Formatação
 
-> **Status:** Proposto · **Prioridade:** P0 — bloqueante · **Depende de:** nada
+> **Status:** Implementado · **Prioridade:** P0 — bloqueante · **Depende de:** nada
 
 ## 1. Motivação
 
