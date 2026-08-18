@@ -183,8 +183,8 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run build",
-    "build": "tsup src/client/extension.ts src/server/server.ts --format cjs --target node18 --out-dir dist",
-    "watch": "tsup src/client/extension.ts src/server/server.ts --format cjs --target node18 --out-dir dist --watch",
+    "build": "tsup src/client/extension.ts src/server/server.ts --format cjs --target node18 --out-dir dist --external vscode",
+    "watch": "tsup src/client/extension.ts src/server/server.ts --format cjs --target node18 --out-dir dist --external vscode --watch",
     "test": "npx tsx tests/syntax.test.ts"
   },
   "devDependencies": {

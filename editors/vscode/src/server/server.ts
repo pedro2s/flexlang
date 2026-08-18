@@ -28,11 +28,11 @@ import { TextDocument } from "vscode-languageserver-textdocument";
 import * as path from "path";
 import * as fs from "fs";
 
-import { Lexer } from "../../../src/lexer";
-import { Parser } from "../../../src/parser";
-import { TypeChecker } from "../../../src/checker";
-import { FlexError } from "../../../src/diagnostics";
-import { resolveModuleFilePath, isLocalModule } from "../../../src/loader";
+import { Lexer } from "../../../../src/lexer";
+import { Parser } from "../../../../src/parser";
+import { TypeChecker } from "../../../../src/checker";
+import { FlexError } from "../../../../src/diagnostics";
+import { resolveModuleFilePath, isLocalModule } from "../../../../src/loader";
 import { FlexFormatter } from "../formatter/formatter";
 import type {
   Stmt,
@@ -43,7 +43,8 @@ import type {
   ImplDeclaration,
   VarDeclaration,
   ImportDeclaration,
-} from "../../../src/ast";
+  TypeNode,
+} from "../../../../src/ast";
 
 // Criação da conexão LSP padrão sobre IPC/pipes
 const connection = createConnection(ProposedFeatures.all);
@@ -199,390 +200,429 @@ function validateTextDocument(textDocument: TextDocument): void {
 // --- Provedor de Hover (Documentação Interativa) ---
 
 connection.onHover((params): Hover | null => {
-  const document = documents.get(params.textDocument.uri);
-  if (!document) return null;
+  try {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) return null;
 
-  const position = params.position;
-  const word = getWordAtPosition(document, position);
-  if (!word) return null;
+    const position = params.position;
+    const word = getWordAtPosition(document, position);
+    if (!word) return null;
 
-  // 1. Verifica se é símbolo da Stdlib documentado
-  if (STDLIB_DOCS[word]) {
-    return {
-      contents: {
-        kind: MarkupKind.Markdown,
-        value: STDLIB_DOCS[word],
-      },
-    };
-  }
+    // 1. Verifica se é símbolo da Stdlib documentado
+    if (STDLIB_DOCS[word]) {
+      return {
+        contents: {
+          kind: MarkupKind.Markdown,
+          value: STDLIB_DOCS[word],
+        },
+      };
+    }
 
-  // 2. Busca definições na AST atual
-  const analysis = documentCache.get(params.textDocument.uri);
-  if (analysis && analysis.ast) {
-    for (const stmt of analysis.ast) {
-      if (stmt.kind === "FunctionDeclaration" && stmt.name === word) {
-        const paramsStr = stmt.params.map((p) => `${p.isMut ? "mut " : ""}${p.name}: ${formatTypeNode(p.type)}`).join(", ");
-        const returnStr = stmt.returnType ? formatTypeNode(stmt.returnType) : "Void";
-        return {
-          contents: {
-            kind: MarkupKind.Markdown,
-            value: `\`\`\`flexlang\nfunc ${stmt.name}(${paramsStr}) -> ${returnStr}\n\`\`\`\n\nFunção declarada no escopo local.`,
-          },
-        };
-      }
+    // 2. Busca definições na AST atual
+    const analysis = documentCache.get(params.textDocument.uri);
+    if (analysis && analysis.ast) {
+      for (const stmt of analysis.ast) {
+        if (stmt.kind === "FunctionDeclaration" && stmt.name === word) {
+          const params = stmt.parameters || [];
+          const paramsStr = params
+            .map((p) => `${p.isMut ? "mut " : ""}${p.name}: ${formatTypeNode(p.typeAnnotation)}`)
+            .join(", ");
+          const returnStr = stmt.returnType ? formatTypeNode(stmt.returnType) : "Void";
+          return {
+            contents: {
+              kind: MarkupKind.Markdown,
+              value: `\`\`\`flexlang\nfunc ${stmt.name}(${paramsStr}) -> ${returnStr}\n\`\`\`\n\nFunção declarada no escopo local.`,
+            },
+          };
+        }
 
-      if (stmt.kind === "StructDeclaration" && stmt.name === word) {
-        const fieldsStr = stmt.fields.map((f) => `  ${f.name}: ${formatTypeNode(f.type)}`).join(",\n");
-        return {
-          contents: {
-            kind: MarkupKind.Markdown,
-            value: `\`\`\`flexlang\nstruct ${stmt.name} {\n${fieldsStr}\n}\n\`\`\`\n\nEstrutura de dados imutável por padrão.`,
-          },
-        };
-      }
+        if (stmt.kind === "StructDeclaration" && stmt.name === word) {
+          const props = stmt.properties || [];
+          const fieldsStr = props
+            .map((f) => `  ${f.name}: ${formatTypeNode(f.typeAnnotation)}`)
+            .join(",\n");
+          return {
+            contents: {
+              kind: MarkupKind.Markdown,
+              value: `\`\`\`flexlang\nstruct ${stmt.name} {\n${fieldsStr}\n}\n\`\`\`\n\nEstrutura de dados imutável por padrão.`,
+            },
+          };
+        }
 
-      if (stmt.kind === "EnumDeclaration" && stmt.name === word) {
-        const variantsStr = stmt.variants.map((v) => `  ${v.name}${v.payload ? `(...)` : ""}`).join(",\n");
-        return {
-          contents: {
-            kind: MarkupKind.Markdown,
-            value: `\`\`\`flexlang\nenum ${stmt.name} {\n${variantsStr}\n}\n\`\`\`\n\nEnum com suporte a Pattern Matching exhaustivo.`,
-          },
-        };
-      }
+        if (stmt.kind === "EnumDeclaration" && stmt.name === word) {
+          const variants = stmt.variants || [];
+          const variantsStr = variants
+            .map((v) => `  ${v.name}${v.payload && v.payload.length > 0 ? `(...)` : ""}`)
+            .join(",\n");
+          return {
+            contents: {
+              kind: MarkupKind.Markdown,
+              value: `\`\`\`flexlang\nenum ${stmt.name} {\n${variantsStr}\n}\n\`\`\`\n\nEnum com suporte a Pattern Matching exhaustivo.`,
+            },
+          };
+        }
 
-      if (stmt.kind === "TraitDeclaration" && stmt.name === word) {
-        return {
-          contents: {
-            kind: MarkupKind.Markdown,
-            value: `\`\`\`flexlang\ntrait ${stmt.name}\n\`\`\`\n\nDefinição de interface/contrato de comportamento.`,
-          },
-        };
+        if (stmt.kind === "TraitDeclaration" && stmt.name === word) {
+          return {
+            contents: {
+              kind: MarkupKind.Markdown,
+              value: `\`\`\`flexlang\ntrait ${stmt.name}\n\`\`\`\n\nDefinição de interface/contrato de comportamento.`,
+            },
+          };
+        }
       }
     }
-  }
 
-  // 3. Palavras-chave da linguagem
-  const KEYWORD_HOVERS: Record<string, string> = {
-    "let": "**`let`**: Declara uma nova variável imutável por padrão.",
-    "mut": "**`mut`**: Especifica mutabilidade explícita para variáveis ou parâmetros.",
-    "scope": "**`scope`**: Bloco de concorrência estruturada. Aguarda o término de todas as tarefas filhas `spawn`.",
-    "spawn": "**`spawn`**: Inicia uma green thread leve concorrente dentro de um `scope`.",
-    "match": "**`match`**: Desestruturação e verificação exaustiva de padrões em variantes de enums.",
-    "impl": "**`impl`**: Bloco de implementação de métodos ou conformance de Traits.",
-    "trait": "**`trait`**: Declaração de abstração de comportamento.",
-    "struct": "**`struct`**: Declaração de modelo de dados.",
-    "func": "**`func`**: Declaração de função.",
-    "print": "**`print`**: Imprime valores na saída padrão do sistema.",
-  };
-
-  if (KEYWORD_HOVERS[word]) {
-    return {
-      contents: {
-        kind: MarkupKind.Markdown,
-        value: KEYWORD_HOVERS[word],
-      },
+    // 3. Palavras-chave da linguagem
+    const KEYWORD_HOVERS: Record<string, string> = {
+      "let": "**`let`**: Declara uma nova variável imutável por padrão.",
+      "mut": "**`mut`**: Especifica mutabilidade explícita para variáveis ou parâmetros.",
+      "scope": "**`scope`**: Bloco de concorrência estruturada. Aguarda o término de todas as tarefas filhas `spawn`.",
+      "spawn": "**`spawn`**: Inicia uma green thread leve concorrente dentro de um `scope`.",
+      "match": "**`match`**: Desestruturação e verificação exaustiva de padrões em variantes de enums.",
+      "impl": "**`impl`**: Bloco de implementação de métodos ou conformance de Traits.",
+      "trait": "**`trait`**: Declaração de abstração de comportamento.",
+      "struct": "**`struct`**: Declaração de modelo de dados.",
+      "func": "**`func`**: Declaração de função.",
+      "print": "**`print`**: Imprime valores na saída padrão do sistema.",
     };
-  }
 
-  return null;
+    if (KEYWORD_HOVERS[word]) {
+      return {
+        contents: {
+          kind: MarkupKind.Markdown,
+          value: KEYWORD_HOVERS[word],
+        },
+      };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
 });
 
 // --- Provedor de Auto-complete (IntelliSense) ---
 
 connection.onCompletion((params): CompletionItem[] => {
-  const items: CompletionItem[] = [];
+  try {
+    const items: CompletionItem[] = [];
 
-  // 1. Palavras-chave essenciais
-  const keywords = [
-    { label: "func", detail: "Declaração de função", kind: CompletionItemKind.Keyword },
-    { label: "let", detail: "Declaração de variável imutável", kind: CompletionItemKind.Keyword },
-    { label: "mut", detail: "Modificador de mutabilidade", kind: CompletionItemKind.Keyword },
-    { label: "const", detail: "Declaração de constante", kind: CompletionItemKind.Keyword },
-    { label: "struct", detail: "Declaração de estrutura", kind: CompletionItemKind.Keyword },
-    { label: "impl", detail: "Bloco de implementação", kind: CompletionItemKind.Keyword },
-    { label: "trait", detail: "Declaração de interface de trait", kind: CompletionItemKind.Keyword },
-    { label: "enum", detail: "Declaração de enum com variantes", kind: CompletionItemKind.Keyword },
-    { label: "match", detail: "Desestruturação exaustiva de padrão", kind: CompletionItemKind.Keyword },
-    { label: "scope", detail: "Escopo de concorrência estruturada", kind: CompletionItemKind.Keyword },
-    { label: "spawn", detail: "Gera tarefa concorrente em escopo", kind: CompletionItemKind.Keyword },
-    { label: "import", detail: "Importação de módulos", kind: CompletionItemKind.Keyword },
-    { label: "from", detail: "Cláusula de importação", kind: CompletionItemKind.Keyword },
-    { label: "return", detail: "Retorna valor da função", kind: CompletionItemKind.Keyword },
-    { label: "if", detail: "Condicional", kind: CompletionItemKind.Keyword },
-    { label: "else", detail: "Condicional alternativa", kind: CompletionItemKind.Keyword },
-    { label: "while", detail: "Laço de repetição", kind: CompletionItemKind.Keyword },
-    { label: "for", detail: "Laço de iteração", kind: CompletionItemKind.Keyword },
-    { label: "in", detail: "Cláusula de iteração for", kind: CompletionItemKind.Keyword },
-    { label: "print", detail: "Imprime na saída padrão", kind: CompletionItemKind.Function },
-  ];
+    // 1. Palavras-chave essenciais
+    const keywords = [
+      { label: "func", detail: "Declaração de função", kind: CompletionItemKind.Keyword },
+      { label: "let", detail: "Declaração de variável imutável", kind: CompletionItemKind.Keyword },
+      { label: "mut", detail: "Modificador de mutabilidade", kind: CompletionItemKind.Keyword },
+      { label: "const", detail: "Declaração de constante", kind: CompletionItemKind.Keyword },
+      { label: "struct", detail: "Declaração de estrutura", kind: CompletionItemKind.Keyword },
+      { label: "impl", detail: "Bloco de implementação", kind: CompletionItemKind.Keyword },
+      { label: "trait", detail: "Declaração de interface de trait", kind: CompletionItemKind.Keyword },
+      { label: "enum", detail: "Declaração de enum com variantes", kind: CompletionItemKind.Keyword },
+      { label: "match", detail: "Desestruturação exaustiva de padrão", kind: CompletionItemKind.Keyword },
+      { label: "scope", detail: "Escopo de concorrência estruturada", kind: CompletionItemKind.Keyword },
+      { label: "spawn", detail: "Gera tarefa concorrente em escopo", kind: CompletionItemKind.Keyword },
+      { label: "import", detail: "Importação de módulos", kind: CompletionItemKind.Keyword },
+      { label: "from", detail: "Cláusula de importação", kind: CompletionItemKind.Keyword },
+      { label: "return", detail: "Retorna valor da função", kind: CompletionItemKind.Keyword },
+      { label: "if", detail: "Condicional", kind: CompletionItemKind.Keyword },
+      { label: "else", detail: "Condicional alternativa", kind: CompletionItemKind.Keyword },
+      { label: "while", detail: "Laço de repetição", kind: CompletionItemKind.Keyword },
+      { label: "for", detail: "Laço de iteração", kind: CompletionItemKind.Keyword },
+      { label: "in", detail: "Cláusula de iteração for", kind: CompletionItemKind.Keyword },
+      { label: "print", detail: "Imprime na saída padrão", kind: CompletionItemKind.Function },
+    ];
 
-  for (const kw of keywords) {
-    items.push(kw);
-  }
+    for (const kw of keywords) {
+      items.push(kw);
+    }
 
-  // 2. Tipos primitivos e embutidos
-  const types = ["Int", "Float", "String", "Bool", "Void", "Result", "Option", "Channel", "Map"];
-  for (const t of types) {
-    items.push({
-      label: t,
-      kind: CompletionItemKind.Class,
-      detail: `Tipo ${t} da FlexLang`,
-    });
-  }
+    // 2. Tipos primitivos e embutidos
+    const types = ["Int", "Float", "String", "Bool", "Void", "Result", "Option", "Channel", "Map"];
+    for (const t of types) {
+      items.push({
+        label: t,
+        kind: CompletionItemKind.Class,
+        detail: `Tipo ${t} da FlexLang`,
+      });
+    }
 
-  // 3. Módulos da biblioteca padrão
-  const stdModules = [
-    { label: "net/http", detail: "Módulo nativo de servidor e cliente HTTP" },
-    { label: "db/postgres", detail: "Módulo nativo de conexão com banco de dados PostgreSQL" },
-    { label: "core/log", detail: "Módulo nativo de logging estruturado JSON" },
-  ];
-  for (const mod of stdModules) {
-    items.push({
-      label: `"${mod.label}"`,
-      kind: CompletionItemKind.Module,
-      detail: mod.detail,
-    });
-  }
+    // 3. Módulos da biblioteca padrão
+    const stdModules = [
+      { label: "net/http", detail: "Módulo nativo de servidor e cliente HTTP" },
+      { label: "db/postgres", detail: "Módulo nativo de conexão com banco de dados PostgreSQL" },
+      { label: "core/log", detail: "Módulo nativo de logging estruturado JSON" },
+    ];
+    for (const mod of stdModules) {
+      items.push({
+        label: `"${mod.label}"`,
+        kind: CompletionItemKind.Module,
+        detail: mod.detail,
+      });
+    }
 
-  // 4. Símbolos declarados na AST do documento
-  const analysis = documentCache.get(params.textDocument.uri);
-  if (analysis && analysis.ast) {
-    for (const stmt of analysis.ast) {
-      if (stmt.kind === "FunctionDeclaration") {
-        items.push({
-          label: stmt.name,
-          kind: CompletionItemKind.Function,
-          detail: `func ${stmt.name}(...)`,
-        });
-      } else if (stmt.kind === "StructDeclaration") {
-        items.push({
-          label: stmt.name,
-          kind: CompletionItemKind.Struct,
-          detail: `struct ${stmt.name}`,
-        });
-      } else if (stmt.kind === "EnumDeclaration") {
-        items.push({
-          label: stmt.name,
-          kind: CompletionItemKind.Enum,
-          detail: `enum ${stmt.name}`,
-        });
-        for (const v of stmt.variants) {
+    // 4. Símbolos declarados na AST do documento
+    const analysis = documentCache.get(params.textDocument.uri);
+    if (analysis && analysis.ast) {
+      for (const stmt of analysis.ast) {
+        if (stmt.kind === "FunctionDeclaration") {
           items.push({
-            label: `${stmt.name}.${v.name}`,
-            kind: CompletionItemKind.EnumMember,
-            detail: `Variante de ${stmt.name}`,
+            label: stmt.name,
+            kind: CompletionItemKind.Function,
+            detail: `func ${stmt.name}(...)`,
+          });
+        } else if (stmt.kind === "StructDeclaration") {
+          items.push({
+            label: stmt.name,
+            kind: CompletionItemKind.Struct,
+            detail: `struct ${stmt.name}`,
+          });
+        } else if (stmt.kind === "EnumDeclaration") {
+          items.push({
+            label: stmt.name,
+            kind: CompletionItemKind.Enum,
+            detail: `enum ${stmt.name}`,
+          });
+          const variants = stmt.variants || [];
+          for (const v of variants) {
+            items.push({
+              label: `${stmt.name}.${v.name}`,
+              kind: CompletionItemKind.EnumMember,
+              detail: `Variante de ${stmt.name}`,
+            });
+          }
+        } else if (stmt.kind === "TraitDeclaration") {
+          items.push({
+            label: stmt.name,
+            kind: CompletionItemKind.Interface,
+            detail: `trait ${stmt.name}`,
           });
         }
-      } else if (stmt.kind === "TraitDeclaration") {
-        items.push({
-          label: stmt.name,
-          kind: CompletionItemKind.Interface,
-          detail: `trait ${stmt.name}`,
-        });
       }
     }
-  }
 
-  return items;
+    return items;
+  } catch {
+    return [];
+  }
 });
 
 // --- Provedor de Formatação de Documento ---
 
 connection.onDocumentFormatting((params): TextEdit[] => {
-  const document = documents.get(params.textDocument.uri);
-  if (!document) return [];
+  try {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) return [];
 
-  const text = document.getText();
-  const indentSize = params.options.tabSize ?? 4;
-  const useTabs = !params.options.insertSpaces;
+    const text = document.getText();
+    const indentSize = params.options.tabSize ?? 4;
+    const useTabs = !params.options.insertSpaces;
 
-  const docFormatter = new FlexFormatter({ indentSize, useTabs });
-  const formatted = docFormatter.format(text);
+    const docFormatter = new FlexFormatter({ indentSize, useTabs });
+    const formatted = docFormatter.format(text);
 
-  // Substituição completa do conteúdo do documento
-  const fullRange: Range = {
-    start: { line: 0, character: 0 },
-    end: { line: document.lineCount, character: 0 },
-  };
+    // Substituição completa do conteúdo do documento
+    const fullRange: Range = {
+      start: { line: 0, character: 0 },
+      end: { line: document.lineCount, character: 0 },
+    };
 
-  return [TextEdit.replace(fullRange, formatted)];
+    return [TextEdit.replace(fullRange, formatted)];
+  } catch {
+    return [];
+  }
 });
 
 // --- Provedor de Símbolos do Documento (Outline / Breadcrumbs) ---
 
 connection.onDocumentSymbol((params): DocumentSymbol[] => {
-  const document = documents.get(params.textDocument.uri);
-  if (!document) return [];
+  try {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) return [];
 
-  const analysis = documentCache.get(params.textDocument.uri);
-  if (!analysis || !analysis.ast) return [];
+    const analysis = documentCache.get(params.textDocument.uri);
+    if (!analysis || !analysis.ast) return [];
 
-  const symbols: DocumentSymbol[] = [];
+    const symbols: DocumentSymbol[] = [];
 
-  for (const stmt of analysis.ast) {
-    if (stmt.kind === "FunctionDeclaration") {
-      const line = stmt.span ? Math.max(0, stmt.span.line - 1) : 0;
-      const endLine = stmt.span ? Math.max(0, stmt.span.endLine - 1) : line;
-      symbols.push({
-        name: stmt.name,
-        kind: SymbolKind.Function,
-        range: Range.create(line, 0, endLine, 0),
-        selectionRange: Range.create(line, 0, line, stmt.name.length),
-        detail: `func ${stmt.name}()`,
-      });
-    } else if (stmt.kind === "StructDeclaration") {
-      const line = stmt.span ? Math.max(0, stmt.span.line - 1) : 0;
-      const endLine = stmt.span ? Math.max(0, stmt.span.endLine - 1) : line;
-      symbols.push({
-        name: stmt.name,
-        kind: SymbolKind.Struct,
-        range: Range.create(line, 0, endLine, 0),
-        selectionRange: Range.create(line, 0, line, stmt.name.length),
-        detail: `struct ${stmt.name}`,
-      });
-    } else if (stmt.kind === "EnumDeclaration") {
-      const line = stmt.span ? Math.max(0, stmt.span.line - 1) : 0;
-      const endLine = stmt.span ? Math.max(0, stmt.span.endLine - 1) : line;
-      symbols.push({
-        name: stmt.name,
-        kind: SymbolKind.Enum,
-        range: Range.create(line, 0, endLine, 0),
-        selectionRange: Range.create(line, 0, line, stmt.name.length),
-        detail: `enum ${stmt.name}`,
-      });
-    } else if (stmt.kind === "TraitDeclaration") {
-      const line = stmt.span ? Math.max(0, stmt.span.line - 1) : 0;
-      const endLine = stmt.span ? Math.max(0, stmt.span.endLine - 1) : line;
-      symbols.push({
-        name: stmt.name,
-        kind: SymbolKind.Interface,
-        range: Range.create(line, 0, endLine, 0),
-        selectionRange: Range.create(line, 0, line, stmt.name.length),
-        detail: `trait ${stmt.name}`,
-      });
-    } else if (stmt.kind === "ImplDeclaration") {
-      const line = stmt.span ? Math.max(0, stmt.span.line - 1) : 0;
-      const endLine = stmt.span ? Math.max(0, stmt.span.endLine - 1) : line;
-      const name = stmt.traitName ? `impl ${stmt.traitName} for ${stmt.structName}` : `impl ${stmt.structName}`;
-      symbols.push({
-        name,
-        kind: SymbolKind.Class,
-        range: Range.create(line, 0, endLine, 0),
-        selectionRange: Range.create(line, 0, line, name.length),
-        detail: name,
-      });
+    for (const stmt of analysis.ast) {
+      if (stmt.kind === "FunctionDeclaration") {
+        const line = stmt.span ? Math.max(0, stmt.span.line - 1) : 0;
+        const endLine = stmt.span ? Math.max(0, stmt.span.endLine - 1) : line;
+        symbols.push({
+          name: stmt.name,
+          kind: SymbolKind.Function,
+          range: Range.create(line, 0, endLine, 0),
+          selectionRange: Range.create(line, 0, line, stmt.name.length),
+          detail: `func ${stmt.name}()`,
+        });
+      } else if (stmt.kind === "StructDeclaration") {
+        const line = stmt.span ? Math.max(0, stmt.span.line - 1) : 0;
+        const endLine = stmt.span ? Math.max(0, stmt.span.endLine - 1) : line;
+        symbols.push({
+          name: stmt.name,
+          kind: SymbolKind.Struct,
+          range: Range.create(line, 0, endLine, 0),
+          selectionRange: Range.create(line, 0, line, stmt.name.length),
+          detail: `struct ${stmt.name}`,
+        });
+      } else if (stmt.kind === "EnumDeclaration") {
+        const line = stmt.span ? Math.max(0, stmt.span.line - 1) : 0;
+        const endLine = stmt.span ? Math.max(0, stmt.span.endLine - 1) : line;
+        symbols.push({
+          name: stmt.name,
+          kind: SymbolKind.Enum,
+          range: Range.create(line, 0, endLine, 0),
+          selectionRange: Range.create(line, 0, line, stmt.name.length),
+          detail: `enum ${stmt.name}`,
+        });
+      } else if (stmt.kind === "TraitDeclaration") {
+        const line = stmt.span ? Math.max(0, stmt.span.line - 1) : 0;
+        const endLine = stmt.span ? Math.max(0, stmt.span.endLine - 1) : line;
+        symbols.push({
+          name: stmt.name,
+          kind: SymbolKind.Interface,
+          range: Range.create(line, 0, endLine, 0),
+          selectionRange: Range.create(line, 0, line, stmt.name.length),
+          detail: `trait ${stmt.name}`,
+        });
+      } else if (stmt.kind === "ImplDeclaration") {
+        const line = stmt.span ? Math.max(0, stmt.span.line - 1) : 0;
+        const endLine = stmt.span ? Math.max(0, stmt.span.endLine - 1) : line;
+        const name = stmt.traitName ? `impl ${stmt.traitName} for ${stmt.structName}` : `impl ${stmt.structName}`;
+        symbols.push({
+          name,
+          kind: SymbolKind.Class,
+          range: Range.create(line, 0, endLine, 0),
+          selectionRange: Range.create(line, 0, line, name.length),
+          detail: name,
+        });
+      }
     }
-  }
 
-  return symbols;
+    return symbols;
+  } catch {
+    return [];
+  }
 });
 
 // --- Provedor de Definição (Go to Definition) ---
 
 connection.onDefinition((params): Definition | null => {
-  const document = documents.get(params.textDocument.uri);
-  if (!document) return null;
+  try {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) return null;
 
-  const word = getWordAtPosition(document, params.position);
-  if (!word) return null;
+    const word = getWordAtPosition(document, params.position);
+    if (!word) return null;
 
-  const currentFilePath = document.uri.startsWith("file://")
-    ? decodeURIComponent(document.uri.replace("file://", ""))
-    : document.uri;
+    const currentFilePath = document.uri.startsWith("file://")
+      ? decodeURIComponent(document.uri.replace("file://", ""))
+      : document.uri;
 
-  const analysis = documentCache.get(params.textDocument.uri);
-  if (!analysis || !analysis.ast) return null;
+    const analysis = documentCache.get(params.textDocument.uri);
+    if (!analysis || !analysis.ast) return null;
 
-  // 1. Busca no próprio arquivo atual
-  for (const stmt of analysis.ast) {
-    if (
-      (stmt.kind === "FunctionDeclaration" && stmt.name === word) ||
-      (stmt.kind === "StructDeclaration" && stmt.name === word) ||
-      (stmt.kind === "EnumDeclaration" && stmt.name === word) ||
-      (stmt.kind === "TraitDeclaration" && stmt.name === word)
-    ) {
-      const line = stmt.span ? Math.max(0, stmt.span.line - 1) : 0;
-      const col = stmt.span ? Math.max(0, stmt.span.column - 1) : 0;
-      return Location.create(params.textDocument.uri, Range.create(line, col, line, col + word.length));
-    }
+    // 1. Busca no próprio arquivo atual
+    for (const stmt of analysis.ast) {
+      if (
+        (stmt.kind === "FunctionDeclaration" && stmt.name === word) ||
+        (stmt.kind === "StructDeclaration" && stmt.name === word) ||
+        (stmt.kind === "EnumDeclaration" && stmt.name === word) ||
+        (stmt.kind === "TraitDeclaration" && stmt.name === word)
+      ) {
+        const line = stmt.span ? Math.max(0, stmt.span.line - 1) : 0;
+        const col = stmt.span ? Math.max(0, stmt.span.column - 1) : 0;
+        return Location.create(params.textDocument.uri, Range.create(line, col, line, col + word.length));
+      }
 
-    // 2. Se for um símbolo importado de módulo local, resolve o arquivo de destino
-    if (stmt.kind === "ImportDeclaration") {
-      const isImported = stmt.symbols.some((s) => s.name === word);
-      if (isImported && isLocalModule(stmt.moduleName)) {
-        try {
-          const resolvedPath = resolveModuleFilePath(currentFilePath, stmt.moduleName);
-          const targetUri = "file://" + resolvedPath;
-          return Location.create(targetUri, Range.create(0, 0, 0, 0));
-        } catch {
-          // Ignora caso módulo não seja encontrado
+      // 2. Se for um símbolo importado de módulo local, resolve o arquivo de destino
+      if (stmt.kind === "ImportDeclaration") {
+        const imports = stmt.imports || [];
+        if (imports.includes(word) && isLocalModule(stmt.moduleName)) {
+          try {
+            const resolvedPath = resolveModuleFilePath(currentFilePath, stmt.moduleName);
+            const targetUri = "file://" + resolvedPath;
+            return Location.create(targetUri, Range.create(0, 0, 0, 0));
+          } catch {
+            // Ignora caso módulo não seja encontrado
+          }
         }
       }
     }
-  }
 
-  return null;
+    return null;
+  } catch {
+    return null;
+  }
 });
 
 // --- Provedor de Signature Help ---
 
 connection.onSignatureHelp((params): SignatureHelp | null => {
-  const document = documents.get(params.textDocument.uri);
-  if (!document) return null;
+  try {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) return null;
 
-  const text = document.getText();
-  const offset = document.offsetAt(params.position);
-  const beforeText = text.slice(0, offset);
+    const text = document.getText();
+    const offset = document.offsetAt(params.position);
+    const beforeText = text.slice(0, offset);
 
-  const callMatch = beforeText.match(/([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^()]*)$/);
-  if (!callMatch) return null;
+    const callMatch = beforeText.match(/([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^()]*)$/);
+    if (!callMatch) return null;
 
-  const funcName = callMatch[1];
-  const argsText = callMatch[2] || "";
-  const activeParameter = (argsText.match(/,/g) || []).length;
+    const funcName = callMatch[1];
+    const argsText = callMatch[2] || "";
+    const activeParameter = (argsText.match(/,/g) || []).length;
 
-  const analysis = documentCache.get(params.textDocument.uri);
-  if (analysis && analysis.ast) {
-    for (const stmt of analysis.ast) {
-      if (stmt.kind === "FunctionDeclaration" && stmt.name === funcName) {
-        const paramsInfo: ParameterInformation[] = stmt.params.map((p) => ({
-          label: `${p.isMut ? "mut " : ""}${p.name}: ${formatTypeNode(p.type)}`,
-        }));
-        const sig: SignatureInformation = {
-          label: `func ${stmt.name}(${paramsInfo.map((p) => p.label).join(", ")}) -> ${stmt.returnType ? formatTypeNode(stmt.returnType) : "Void"}`,
-          parameters: paramsInfo,
-          documentation: "Declaração de função FlexLang.",
-        };
-        return {
-          signatures: [sig],
-          activeSignature: 0,
-          activeParameter,
-        };
+    const analysis = documentCache.get(params.textDocument.uri);
+    if (analysis && analysis.ast) {
+      for (const stmt of analysis.ast) {
+        if (stmt.kind === "FunctionDeclaration" && stmt.name === funcName) {
+          const params = stmt.parameters || [];
+          const paramsInfo: ParameterInformation[] = params.map((p) => ({
+            label: `${p.isMut ? "mut " : ""}${p.name}: ${formatTypeNode(p.typeAnnotation)}`,
+          }));
+          const sig: SignatureInformation = {
+            label: `func ${stmt.name}(${paramsInfo.map((p) => p.label).join(", ")}) -> ${stmt.returnType ? formatTypeNode(stmt.returnType) : "Void"}`,
+            parameters: paramsInfo,
+            documentation: "Declaração de função FlexLang.",
+          };
+          return {
+            signatures: [sig],
+            activeSignature: 0,
+            activeParameter,
+          };
+        }
       }
     }
-  }
 
-  return null;
+    return null;
+  } catch {
+    return null;
+  }
 });
 
 // --- Provedor de Code Actions (Quick Fixes) ---
 
 connection.onCodeAction((params): CodeAction[] => {
-  const actions: CodeAction[] = [];
-  const document = documents.get(params.textDocument.uri);
-  if (!document) return actions;
+  try {
+    const actions: CodeAction[] = [];
+    const document = documents.get(params.textDocument.uri);
+    if (!document) return actions;
 
-  for (const diagnostic of params.context.diagnostics) {
-    // Sugestão de tornar mutável caso erro de reatribuição imutável
-    if (diagnostic.code === "E2001" || diagnostic.message.includes("is not mutable")) {
-      const fix = CodeAction.create("Adicionar modificador 'mut'", CodeActionKind.QuickFix);
-      fix.diagnostics = [diagnostic];
-      actions.push(fix);
+    for (const diagnostic of params.context.diagnostics) {
+      // Sugestão de tornar mutável caso erro de reatribuição imutável
+      if (diagnostic.code === "E2001" || diagnostic.message.includes("is not mutable")) {
+        const fix = CodeAction.create("Adicionar modificador 'mut'", CodeActionKind.QuickFix);
+        fix.diagnostics = [diagnostic];
+        actions.push(fix);
+      }
     }
-  }
 
-  return actions;
+    return actions;
+  } catch {
+    return [];
+  }
 });
 
 // --- Funções Auxiliares ---
@@ -606,14 +646,14 @@ function getWordAtPosition(document: TextDocument, position: Position): string |
   return line.slice(start, end);
 }
 
-function formatTypeNode(typeNode: any): string {
+function formatTypeNode(typeNode?: TypeNode): string {
   if (!typeNode) return "Void";
   if (typeNode.kind === "NamedTypeNode") {
-    let res = typeNode.name;
-    if (typeNode.genericArgs && typeNode.genericArgs.length > 0) {
-      res += `<${typeNode.genericArgs.map(formatTypeNode).join(", ")}>`;
-    }
-    return res;
+    return typeNode.name;
+  }
+  if (typeNode.kind === "GenericTypeNode") {
+    const args = (typeNode.typeArguments || []).map(formatTypeNode).join(", ");
+    return `${typeNode.name}<${args}>`;
   }
   if (typeNode.kind === "ArrayTypeNode") {
     return `[${formatTypeNode(typeNode.elementType)}]`;

@@ -1,0 +1,28 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "⚡ Executar Extensão FlexLang (Extension Host)",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/editors/vscode",
+        "${workspaceFolder}/examples/08_le_salvi_api"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/editors/vscode/dist/**/*.js"
+      ],
+      "preLaunchTask": "npm: build (editors/vscode)"
+    },
+    {
+      "name": "🐛 Conectar ao Servidor LSP (Attach Debugger)",
+      "type": "node",
+      "request": "attach",
+      "port": 6009,
+      "restart": true,
+      "outFiles": [
+        "${workspaceFolder}/editors/vscode/dist/**/*.js"
+      ]
+    }
+  ]
+}

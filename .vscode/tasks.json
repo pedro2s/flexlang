@@ -1,0 +1,26 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "npm",
+      "script": "build",
+      "path": "editors/vscode",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": "$tsc",
+      "label": "npm: build (editors/vscode)",
+      "detail": "Compila a extensão e o servidor LSP da FlexLang"
+    },
+    {
+      "type": "npm",
+      "script": "watch",
+      "path": "editors/vscode",
+      "isBackground": true,
+      "problemMatcher": "$tsc-watch",
+      "label": "npm: watch (editors/vscode)",
+      "detail": "Monitora alterações na extensão e no servidor LSP"
+    }
+  ]
+}

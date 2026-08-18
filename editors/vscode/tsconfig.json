@@ -7,7 +7,6 @@
       "ES2022"
     ],
     "sourceMap": true,
-    "rootDir": "src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -15,7 +14,8 @@
     "moduleResolution": "node"
   },
   "include": [
-    "src"
+    "src",
+    "../../src"
   ],
   "exclude": [
     "node_modules",
