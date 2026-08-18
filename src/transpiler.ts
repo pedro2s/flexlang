@@ -372,7 +372,7 @@ export class GoTranspiler {
 
       case "ExpressionStatement": {
         const code = this.transpileExpr(stmt.expression);
-        if (code.trim() !== "" && stmt.expression.kind !== "TryExpr") {
+        if (code.trim() !== "" && stmt.expression.kind !== "TryExpr" && stmt.expression.kind !== "CatchExpr") {
           this.emitLine(code);
         }
         break;
@@ -819,6 +819,9 @@ export class GoTranspiler {
       case "TryExpr":
         return this.transpileTry(expr);
 
+      case "CatchExpr":
+        return this.transpileCatch(expr);
+
       case "LambdaExpr": {
         // Lambda vira closure literal em Go: func(params) ReturnType { body }
         const retType = this.types.get(expr);
@@ -1164,6 +1167,68 @@ export class GoTranspiler {
       // também aborta nesse caso (ReturnException sem função envolvente).
       this.emitLine(`panic("RuntimeError: '?' propagated outside of a function")`);
     }
+  }
+
+  private transpileCatch(expr: Extract<Expr, { kind: "CatchExpr" }>): string {
+    this.usedBuiltins.add("Result");
+    const inner = this.transpileExpr(expr.expression);
+    const enumDecl = this.enumOf(expr.expression) ?? this.resolveEnum("Result");
+
+    if (!enumDecl) {
+      throw new Error(
+        "TranspileError: cannot resolve the Result behind the 'catch' operator (missing type information)",
+      );
+    }
+
+    const okVariant = successVariant(enumDecl)!;
+    const errVariant = enumDecl.variants.find((v) => v.name === "Err") ?? enumDecl.variants[1];
+    const tmp = this.nextTmp("catch");
+    const bound = this.nextTmp("cv");
+    const caseOk = this.variantTypeName(enumDecl.name, okVariant.name);
+    const caseErr = this.variantTypeName(enumDecl.name, errVariant.name);
+
+    const okAccess = this.payloadAccess(
+      enumDecl,
+      okVariant.payload![0],
+      this.genericArgsOf(expr.expression),
+    );
+    const errAccess = this.payloadAccess(
+      enumDecl,
+      errVariant.payload![0],
+      this.genericArgsOf(expr.expression),
+    );
+
+    const value = `${tmp}_v`;
+    this.emitLine(`var ${value} ${okAccess.goType}`);
+    this.emitLine(`${tmp} := ${inner}`);
+    this.emitLine(`switch ${bound} := ${tmp}.(type) {`);
+    this.emitLine(`case ${caseOk}:`);
+    this.indent();
+    this.emitLine(`${value} = ${bound}.Field0${okAccess.cast}`);
+    this.dedent();
+    this.emitLine(`case ${caseErr}:`);
+    this.indent();
+    if (expr.errorBinder) {
+      this.emitLine(`${this.goIdent(expr.errorBinder)} := ${bound}.Field0${errAccess.cast}`);
+      this.emitLine(`_ = ${this.goIdent(expr.errorBinder)}`);
+    }
+
+    for (let i = 0; i < expr.body.body.length; i++) {
+      const stmt = expr.body.body[i];
+      if (i === expr.body.body.length - 1 && stmt.kind === "ExpressionStatement") {
+        const fallback = this.transpileExpr(stmt.expression);
+        if (fallback.trim() !== "") {
+          this.emitLine(`${value} = ${fallback}`);
+        }
+      } else {
+        this.transpileStmt(stmt);
+      }
+    }
+
+    this.dedent();
+    this.emitLine(`}`);
+    this.emitLine(`_ = ${value}`);
+    return value;
   }
 
   // =========== TIPOS ===========
@@ -1533,6 +1598,10 @@ export class GoTranspiler {
         break;
       case "TryExpr":
         this.walkExpr(expr.expression, visit);
+        break;
+      case "CatchExpr":
+        this.walkExpr(expr.expression, visit);
+        for (const s of expr.body.body) this.walkStmt(s, visit);
         break;
       case "LambdaExpr":
         for (const s of expr.body.body) this.walkStmt(s, visit);

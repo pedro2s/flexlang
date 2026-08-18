@@ -1,0 +1,15 @@
+--- 1. Catch Basico ---
+Parse valido: 42
+Falha no parse capturada: true
+Parse invalido com fallback: 100
+Sucesso: dados_sucesso
+Erro capturado: timeout_servico
+Resultado apos catch: fallback_usado
+--- 2. Catch com Propagacao ---
+Sucesso try_helper: dados_sucesso
+Log intermediario: erro_propagado
+Erro try_helper: erro_reempacotado
+--- 3. Padrao Retry ---
+Tentativa 1 falhou com: erro_temporario
+Tentativa 2 falhou com: erro_temporario
+Resultado final retry: dados_sucesso

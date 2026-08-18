@@ -58,6 +58,7 @@ export enum TokenType {
   Pipe = "PIPE", // | (delimitador de parâmetros de lambda)
   Break = "BREAK", // break
   Continue = "CONTINUE", // continue
+  Catch = "CATCH", // catch (RFC-029)
 }
 
 export interface Token {
@@ -117,7 +118,8 @@ export type Expr =
   | AssignmentExpr
   | LambdaExpr
   | MapLiteral
-  | RangeExpr;
+  | RangeExpr
+  | CatchExpr;
 
 export interface RangeExpr {
   kind: "RangeExpr";
@@ -438,5 +440,13 @@ export interface LambdaExpr {
 export interface MapLiteral {
   kind: "MapLiteral";
   properties: { key: string; value: Expr; span?: Span }[];
+  span?: Span;
+}
+
+export interface CatchExpr {
+  kind: "CatchExpr";
+  expression: Expr;
+  errorBinder: string;
+  body: BlockStmt;
   span?: Span;
 }

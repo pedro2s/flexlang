@@ -154,11 +154,18 @@ export class Parser {
       }
       default: {
         const expression = this.parseExpression();
-        const semiToken = this.consume(TokenType.Semi);
+        let semiToken: Token | undefined = undefined;
+        if (this.current().type === TokenType.Semi) {
+          semiToken = this.consume(TokenType.Semi);
+        } else if (this.current().type === TokenType.RBrace) {
+          // Permite que a última expressão de um bloco omita o ponto-e-vírgula
+        } else {
+          semiToken = this.consume(TokenType.Semi);
+        }
         return {
           kind: "ExpressionStatement",
           expression,
-          span: this.combineSpans(expression.span, this.spanFrom(semiToken, semiToken)),
+          span: semiToken ? this.combineSpans(expression.span, this.spanFrom(semiToken, semiToken)) : expression.span,
         };
       }
     }
@@ -711,7 +718,7 @@ export class Parser {
   }
 
   private parseAssignmentExpr(): Expr {
-    const left = this.parseBinaryExpr();
+    const left = this.parseCatchExpr();
 
     if (this.current().type === TokenType.Assign) {
       this.consume(TokenType.Assign);
@@ -725,6 +732,28 @@ export class Parser {
     }
 
     return left;
+  }
+
+  private parseCatchExpr(): Expr {
+    let expr = this.parseBinaryExpr();
+
+    while (this.current().type === TokenType.Catch) {
+      this.consume(TokenType.Catch);
+      let errorBinder = "err";
+      if (this.current().type === TokenType.Identifier) {
+        errorBinder = this.consume(TokenType.Identifier).value;
+      }
+      const body = this.parseBlock();
+      expr = {
+        kind: "CatchExpr",
+        expression: expr,
+        errorBinder,
+        body,
+        span: this.combineSpans(expr.span, body.span),
+      };
+    }
+
+    return expr;
   }
 
   private parseBinaryExpr(): Expr {

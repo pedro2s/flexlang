@@ -528,4 +528,56 @@ const rfc028Ast = new Parser(rfc028Tokens, "rfc028.flex").parse();
 new TypeChecker().check(rfc028Ast, "rfc028.flex");
 assert(true, "RFC-028: módulo crypto com hash, uuid, hmac e sha256 validado");
 
+// 16. Testes RFC-029 (catch Blocks)
+console.log("\n--- 16. Testes RFC-029 (catch Blocks) ---");
+const rfc029Code = `
+func test_catch_suite() {
+    let num = parse_int("123") catch err {
+        0
+    };
+    let num2 = parse_int("abc") catch {
+        100
+    };
+}
+`;
+
+const rfc029Tokens = new Lexer(rfc029Code).tokenize();
+const rfc029Ast = new Parser(rfc029Tokens, "rfc029.flex").parse();
+new TypeChecker().check(rfc029Ast, "rfc029.flex");
+assert(true, "RFC-029: expressões catch com fallback estático validadas");
+
+// Validação de erro E2035 (catch fora de Result)
+let caughtE2035 = false;
+try {
+    const invalidCatchCode = `
+    func invalid_catch() {
+        let x = 42 catch err { 0 };
+    }
+    `;
+    const tokens = new Lexer(invalidCatchCode).tokenize();
+    const ast = new Parser(tokens, "err.flex").parse();
+    new TypeChecker().check(ast, "err.flex");
+} catch (e: any) {
+    if (e.code === "E2035") caughtE2035 = true;
+}
+assert(caughtE2035, "RFC-029: 'catch' em tipo não-Result emite erro estático E2035");
+
+// Validação de erro E2036 (tipo de retorno do catch incompatível)
+let caughtE2036 = false;
+try {
+    const invalidCatchReturn = `
+    func invalid_catch_return() {
+        let x = parse_int("123") catch err {
+            "incompativel"
+        };
+    }
+    `;
+    const tokens = new Lexer(invalidCatchReturn).tokenize();
+    const ast = new Parser(tokens, "err.flex").parse();
+    new TypeChecker().check(ast, "err.flex");
+} catch (e: any) {
+    if (e.code === "E2036") caughtE2036 = true;
+}
+assert(caughtE2036, "RFC-029: retorno incompatível no bloco catch emite erro estático E2036");
+
 console.log("\n✨ Todos os testes das Ferramentas VSCode passaram com 100% de sucesso!");

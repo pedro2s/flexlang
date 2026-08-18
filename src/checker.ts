@@ -1581,6 +1581,48 @@ export class TypeChecker {
         return { kind: "Any" };
       }
 
+      case "CatchExpr": {
+        const tryType = this.checkExpr(expr.expression, env);
+        if (tryType.kind === "Any") return { kind: "Any" };
+
+        if (
+          tryType.kind !== "Enum" ||
+          tryType.name !== "Result" ||
+          !tryType.genericArgs ||
+          tryType.genericArgs.length < 2
+        ) {
+          throw new FlexError(
+            "E2035",
+            `'catch' operator can only be applied to 'Result<T, E>', got ${this.typeToString(tryType)}`,
+            expr.expression.span ?? expr.span,
+          );
+        }
+
+        const okType = tryType.genericArgs[0];
+        const errType = tryType.genericArgs[1];
+
+        const catchEnv = new TypeEnvironment(env);
+        catchEnv.define(expr.errorBinder, errType, false);
+
+        for (let i = 0; i < expr.body.body.length; i++) {
+          const stmt = expr.body.body[i];
+          if (i === expr.body.body.length - 1 && stmt.kind === "ExpressionStatement") {
+            const bodyType = this.checkExpr(stmt.expression, catchEnv);
+            if (!this.isTypeAssignable(okType, bodyType)) {
+              throw new FlexError(
+                "E2036",
+                `'catch' block must return a value of type '${this.typeToString(okType)}', got '${this.typeToString(bodyType)}'`,
+                stmt.expression.span ?? expr.span,
+              );
+            }
+          } else {
+            this.checkStmt(stmt, catchEnv);
+          }
+        }
+
+        return okType;
+      }
+
       case "LambdaExpr": {
         this.lambdaReturnStack.push(undefined);
         const lambdaEnv = new TypeEnvironment(env);

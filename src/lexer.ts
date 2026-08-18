@@ -33,6 +33,7 @@ export class Lexer {
     [TokenType.Print, /^print\b/],
     [TokenType.True, /^true\b/],
     [TokenType.False, /^false\b/],
+    [TokenType.Catch, /^catch\b/],
     [TokenType.Identifier, /^[a-zA-Z_]\w*/],
     [TokenType.Number, /^\d+(\.\d+)?/],
     // A captura de string pura por regex foi removida. Faremos o parsing manual no laço!

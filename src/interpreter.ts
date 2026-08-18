@@ -846,6 +846,32 @@ export class Interpreter {
         }
         throw new Error("RuntimeError: ? operator can only be applied to Result or Option");
 
+      case "CatchExpr": {
+        const tryValue = await this.evaluateExpr(expr.expression, env);
+        if (
+          typeof tryValue === "object" &&
+          tryValue !== null &&
+          tryValue.kind === "EnumVariant" &&
+          tryValue.enumName === "Result"
+        ) {
+          if (tryValue.variantName === "Ok") {
+            return tryValue.payload.length > 0 ? tryValue.payload[0] : null;
+          }
+          const catchEnv = new Environment(env);
+          catchEnv.define(expr.errorBinder, tryValue.payload.length > 0 ? tryValue.payload[0] : null);
+          let lastResult: unknown = undefined;
+          for (const s of expr.body.body) {
+            if (s.kind === "ExpressionStatement") {
+              lastResult = await this.evaluateExpr(s.expression, catchEnv);
+            } else {
+              await this.evaluateStmt(s, catchEnv);
+            }
+          }
+          return lastResult;
+        }
+        throw new Error("RuntimeError: catch operator can only be applied to Result");
+      }
+
       case "Identifier":
         const value = env.get(expr.symbol);
         if (value === undefined) {

@@ -1,6 +1,6 @@
 # RFC-029 — `catch` Blocks e Padrões Avançados de Tratamento de Erros
 
-> **Status:** Proposto · **Prioridade:** P1 · **Depende de:** nada
+> **Status:** Implementado · **Prioridade:** P1 · **Depende de:** nada
 
 ## 1. Motivação
 
