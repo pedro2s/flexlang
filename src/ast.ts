@@ -114,7 +114,15 @@ export type Expr =
   | TryExpr
   | AssignmentExpr
   | LambdaExpr
-  | MapLiteral;
+  | MapLiteral
+  | RangeExpr;
+
+export interface RangeExpr {
+  kind: "RangeExpr";
+  start: Expr;
+  end: Expr;
+  span?: Span;
+}
 
 export interface BooleanLiteral {
   kind: "BooleanLiteral";
@@ -308,8 +316,8 @@ export interface ContinueStmt {
 export interface ForStmt {
   kind: "ForStmt";
   iteratorName: string;
-  start: Expr;
-  end: Expr;
+  indexName?: string | undefined;
+  iterable: Expr;
   body: BlockStmt;
   span?: Span;
 }

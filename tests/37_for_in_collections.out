@@ -1,0 +1,18 @@
+--- Teste Array For In ---
+Num: 10
+Num: 20
+Num: 30
+--- Teste Array com Indice ---
+0: Alice
+1: Bob
+2: Charlie
+--- Teste Range Regression ---
+Range: 1
+Range: 2
+Range: 3
+--- Teste Map For In ---
+Config ambiente: producao
+--- Teste For In com Break e Continue ---
+Item 0: C
+Item 2: Go
+Item 3: FlexLang

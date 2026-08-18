@@ -310,18 +310,59 @@ export class Interpreter {
         }
         break;
       case "ForStmt":
-        const startValue = await this.evaluateExpr(stmt.start, env);
-        const endValue = await this.evaluateExpr(stmt.end, env);
-        for (let i = startValue; i < endValue; i++) {
-          // A cada iteração do loop, criamos um escopo limpo para não misturar os dados
-          const loopEnv = new Environment(env);
-          loopEnv.define(stmt.iteratorName, i);
-          try {
-            await this.evaluateStmt(stmt.body, loopEnv);
-          } catch (e) {
-            if (e instanceof BreakException) break;
-            if (e instanceof ContinueException) continue;
-            throw e;
+        if (stmt.iterable.kind === "RangeExpr") {
+          const startValue = await this.evaluateExpr(stmt.iterable.start, env);
+          const endValue = await this.evaluateExpr(stmt.iterable.end, env);
+          let idx = 0;
+          for (let i = startValue; i < endValue; i++, idx++) {
+            // A cada iteração do loop, criamos um escopo limpo para não misturar os dados
+            const loopEnv = new Environment(env);
+            loopEnv.define(stmt.iteratorName, i);
+            if (stmt.indexName) {
+              loopEnv.define(stmt.indexName, idx);
+            }
+            try {
+              await this.evaluateStmt(stmt.body, loopEnv);
+            } catch (e) {
+              if (e instanceof BreakException) break;
+              if (e instanceof ContinueException) continue;
+              throw e;
+            }
+          }
+        } else {
+          const collection = await this.evaluateExpr(stmt.iterable, env);
+          if (Array.isArray(collection) || typeof collection === "string") {
+            for (let i = 0; i < collection.length; i++) {
+              const loopEnv = new Environment(env);
+              loopEnv.define(stmt.iteratorName, collection[i]);
+              if (stmt.indexName) {
+                loopEnv.define(stmt.indexName, i);
+              }
+              try {
+                await this.evaluateStmt(stmt.body, loopEnv);
+              } catch (e) {
+                if (e instanceof BreakException) break;
+                if (e instanceof ContinueException) continue;
+                throw e;
+              }
+            }
+          } else if (collection instanceof Map) {
+            for (const [key, value] of collection.entries()) {
+              const loopEnv = new Environment(env);
+              loopEnv.define(stmt.iteratorName, key);
+              if (stmt.indexName) {
+                loopEnv.define(stmt.indexName, value);
+              }
+              try {
+                await this.evaluateStmt(stmt.body, loopEnv);
+              } catch (e) {
+                if (e instanceof BreakException) break;
+                if (e instanceof ContinueException) continue;
+                throw e;
+              }
+            }
+          } else {
+            throw new Error(`TypeError: Value of type '${typeof collection}' is not iterable`);
           }
         }
         break;
@@ -662,6 +703,13 @@ export class Interpreter {
           body: expr.body,
         };
         return new FlexFunction(syntheticDecl, env);
+      }
+      case "RangeExpr": {
+        const rStart = await this.evaluateExpr(expr.start, env);
+        const rEnd = await this.evaluateExpr(expr.end, env);
+        const arr: number[] = [];
+        for (let i = rStart; i < rEnd; i++) arr.push(i);
+        return arr;
       }
       default:
         throw new Error(`Expression not implemented in the interpreter`);

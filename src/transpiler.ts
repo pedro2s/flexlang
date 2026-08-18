@@ -388,17 +388,53 @@ export class GoTranspiler {
       }
 
       case "ForStmt": {
-        const start = this.transpileExpr(stmt.start);
-        // O interpretador avalia o limite uma única vez, antes do laço; o `for`
-        // do Go reavaliaria a cada iteração. Fixamos em um temporário p/ manter paridade.
-        const end = this.nextTmp("end");
-        const iterator = this.goIdent(stmt.iteratorName);
-        this.emitLine(`${end} := ${this.transpileExpr(stmt.end)}`);
-        this.emitLine(`for ${iterator} := ${start}; ${iterator} < ${end}; ${iterator}++ {`);
-        this.indent();
-        this.transpileStmts(stmt.body.body);
-        this.dedent();
-        this.emitLine(`}`);
+        if (stmt.iterable.kind === "RangeExpr") {
+          const start = this.transpileExpr(stmt.iterable.start);
+          const end = this.nextTmp("end");
+          const iterator = this.goIdent(stmt.iteratorName);
+          this.emitLine(`${end} := ${this.transpileExpr(stmt.iterable.end)}`);
+          if (stmt.indexName) {
+            const idx = this.goIdent(stmt.indexName);
+            this.emitLine(`${idx} := 0`);
+            this.emitLine(`for ${iterator} := ${start}; ${iterator} < ${end}; ${iterator}++ {`);
+            this.indent();
+            this.transpileStmts(stmt.body.body);
+            this.emitLine(`${idx}++`);
+            this.dedent();
+            this.emitLine(`}`);
+          } else {
+            this.emitLine(`for ${iterator} := ${start}; ${iterator} < ${end}; ${iterator}++ {`);
+            this.indent();
+            this.transpileStmts(stmt.body.body);
+            this.dedent();
+            this.emitLine(`}`);
+          }
+        } else {
+          const target = this.transpileExpr(stmt.iterable);
+          const iterator = this.goIdent(stmt.iteratorName);
+          const iterableType = this.types.get(stmt.iterable);
+          const isMap = iterableType?.kind === "Map" || stmt.iterable.kind === "MapLiteral";
+
+          if (isMap) {
+            if (stmt.indexName) {
+              const val = this.goIdent(stmt.indexName);
+              this.emitLine(`for ${iterator}, ${val} := range ${target} {`);
+            } else {
+              this.emitLine(`for ${iterator} := range ${target} {`);
+            }
+          } else {
+            if (stmt.indexName) {
+              const idx = this.goIdent(stmt.indexName);
+              this.emitLine(`for ${idx}, ${iterator} := range ${target} {`);
+            } else {
+              this.emitLine(`for _, ${iterator} := range ${target} {`);
+            }
+          }
+          this.indent();
+          this.transpileStmts(stmt.body.body);
+          this.dedent();
+          this.emitLine(`}`);
+        }
         break;
       }
 
@@ -676,10 +712,14 @@ export class GoTranspiler {
         return this.transpileCall(expr);
 
       case "MapLiteral": {
-        const props = expr.properties
-          .map((p) => `"${p.key}": ${this.transpileExpr(p.value)}`)
-          .join(", ");
-        return `map[string]any{${props}}`;
+        const props = expr.properties.map((p) => `${this.goString(p.key)}: ${this.transpileExpr(p.value)}`);
+        return `map[string]any{${props.join(", ")}}`;
+      }
+
+      case "RangeExpr": {
+        const start = this.transpileExpr(expr.start);
+        const end = this.transpileExpr(expr.end);
+        return `func() []int { r := []int{}; for i := ${start}; i < ${end}; i++ { r = append(r, i) }; return r }()`;
       }
 
       case "StructExpr": {
@@ -1141,8 +1181,7 @@ export class GoTranspiler {
         walkAll(stmt.body.body);
         break;
       case "ForStmt":
-        this.walkExpr(stmt.start, visit);
-        this.walkExpr(stmt.end, visit);
+        this.walkExpr(stmt.iterable, visit);
         walkAll(stmt.body.body);
         break;
       case "BlockStmt":
@@ -1204,6 +1243,10 @@ export class GoTranspiler {
         break;
       case "MapLiteral":
         expr.properties.forEach((p) => this.walkExpr(p.value, visit));
+        break;
+      case "RangeExpr":
+        this.walkExpr(expr.start, visit);
+        this.walkExpr(expr.end, visit);
         break;
       case "StringInterpolationExpr":
         expr.parts.forEach((p) => {

@@ -396,18 +396,52 @@ export class TypeChecker {
         }
         break;
 
-      case "ForStmt":
-        const startType = this.checkExpr(stmt.start, env);
-        const endType = this.checkExpr(stmt.end, env);
-        if (startType.kind !== "Int" || endType.kind !== "Int") {
-          throw new FlexError(
-            "E2018",
-            "For loop bounds must be Int",
-            stmt.span,
-          );
+      case "ForStmt": {
+        let iteratorType: FlexType;
+        let indexType: FlexType = { kind: "Int" };
+
+        if (stmt.iterable.kind === "RangeExpr") {
+          const startType = this.checkExpr(stmt.iterable.start, env);
+          const endType = this.checkExpr(stmt.iterable.end, env);
+          if (
+            (startType.kind !== "Int" && startType.kind !== "Any") ||
+            (endType.kind !== "Int" && endType.kind !== "Any")
+          ) {
+            throw new FlexError(
+              "E2018",
+              "For loop bounds must be Int",
+              stmt.iterable.span ?? stmt.span,
+            );
+          }
+          iteratorType = { kind: "Int" };
+          indexType = { kind: "Int" };
+        } else {
+          const iterableType = this.checkExpr(stmt.iterable, env);
+          if (iterableType.kind === "Array") {
+            iteratorType = iterableType.elementType;
+            indexType = { kind: "Int" };
+          } else if (iterableType.kind === "Map") {
+            iteratorType = { kind: "String" };
+            indexType = { kind: "Any" };
+          } else if (iterableType.kind === "Any") {
+            iteratorType = { kind: "Any" };
+            indexType = { kind: "Any" };
+          } else {
+            throw new FlexError(
+              "E2033",
+              `Type '${this.typeToString(iterableType)}' is not iterable`,
+              stmt.iterable.span ?? stmt.span,
+              "Use um Array, Map ou Range (ex: 0..10) para iterar com 'for...in'.",
+            );
+          }
         }
+
         const forEnv = new TypeEnvironment(env);
-        forEnv.define(stmt.iteratorName, { kind: "Int" }, false);
+        forEnv.define(stmt.iteratorName, iteratorType, false);
+        if (stmt.indexName) {
+          forEnv.define(stmt.indexName, indexType, false);
+        }
+
         this.loopDepth++;
         try {
           this.checkStmt(stmt.body, forEnv);
@@ -415,6 +449,7 @@ export class TypeChecker {
           this.loopDepth--;
         }
         break;
+      }
 
       case "BreakStmt":
       case "ContinueStmt":
@@ -1147,6 +1182,22 @@ export class TypeChecker {
         }
         this.checkStmt(expr.body, lambdaEnv);
         return { kind: "Any" };
+      }
+
+      case "RangeExpr": {
+        const startType = this.checkExpr(expr.start, env);
+        const endType = this.checkExpr(expr.end, env);
+        if (
+          (startType.kind !== "Int" && startType.kind !== "Any") ||
+          (endType.kind !== "Int" && endType.kind !== "Any")
+        ) {
+          throw new FlexError(
+            "E2018",
+            "For loop bounds must be Int",
+            expr.span,
+          );
+        }
+        return { kind: "Array", elementType: { kind: "Int" } };
       }
 
       default:

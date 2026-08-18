@@ -1,6 +1,6 @@
 # RFC-018 — `for item in collection` (Iteração sobre Arrays, Maps e Ranges)
 
-> **Status:** Proposto · **Prioridade:** P0 — bloqueante · **Depende de:** RFC-017 (break/continue)
+> **Status:** Implementado · **Prioridade:** P0 — bloqueante · **Depende de:** RFC-017 (break/continue)
 
 ## 1. Motivação
 

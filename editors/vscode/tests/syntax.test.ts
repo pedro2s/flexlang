@@ -145,4 +145,46 @@ try {
 }
 assert(caughtE2032, "RFC-017: 'break' fora de laço emite erro estático E2032");
 
+// 5. Testes RFC-018 (for..in sobre coleções e erro E2033)
+console.log("\n--- 5. Testes RFC-018 (for..in sobre coleções) ---");
+const rfc018Code = `
+func test_for_in() {
+    let arr = [10, 20];
+    for item, idx in arr {
+        print("\${idx}: \${item}");
+    }
+
+    let config = { "debug": true };
+    for k, v in config {
+        print("\${k}: \${v}");
+    }
+}
+`;
+
+const rfc018Tokens = new Lexer(rfc018Code).tokenize();
+const rfc018Ast = new Parser(rfc018Tokens, "rfc018.flex").parse();
+new TypeChecker().check(rfc018Ast, "rfc018.flex");
+assert(true, "RFC-018: for-in com array, map e índices aceitos pelo TypeChecker");
+
+// Validação estática: iterar sobre Int ou Bool deve emitir E2033
+let caughtE2033 = false;
+try {
+    const invalidIterCode = `
+    func main() {
+        let x = 42;
+        for i in x {
+            print(i);
+        }
+    }
+    `;
+    const invTokens = new Lexer(invalidIterCode).tokenize();
+    const invAst = new Parser(invTokens, "invalid_iter.flex").parse();
+    new TypeChecker().check(invAst, "invalid_iter.flex");
+} catch (err: any) {
+    if (err.code === "E2033") {
+        caughtE2033 = true;
+    }
+}
+assert(caughtE2033, "RFC-018: iterar sobre tipo não-iterável emite erro estático E2033");
+
 console.log("\n✨ Todos os testes das Ferramentas VSCode passaram com 100% de sucesso!");

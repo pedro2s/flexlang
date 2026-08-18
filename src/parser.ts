@@ -462,19 +462,37 @@ export class Parser {
   private parseForStatement(): Stmt {
     const startToken = this.consume(TokenType.For);
     const iteratorName = this.consume(TokenType.Identifier).value;
+    let indexName: string | undefined = undefined;
+
+    if (this.match(TokenType.Comma)) {
+      indexName = this.consume(TokenType.Identifier).value;
+    }
+
     this.consume(TokenType.In);
 
-    const start = this.parseExpression();
-    this.consume(TokenType.DotDot);
-    const end = this.parseExpression();
+    const firstExpr = this.parseExpression();
+    let iterable: Expr;
+
+    if (this.current().type === TokenType.DotDot) {
+      this.consume(TokenType.DotDot);
+      const endExpr = this.parseExpression();
+      iterable = {
+        kind: "RangeExpr",
+        start: firstExpr,
+        end: endExpr,
+        span: this.combineSpans(firstExpr.span, endExpr.span),
+      };
+    } else {
+      iterable = firstExpr;
+    }
 
     const body = this.parseBlock();
 
     return {
       kind: "ForStmt",
       iteratorName,
-      start,
-      end,
+      indexName,
+      iterable,
       body,
       span: this.spanFrom(startToken, this.previous()),
     };

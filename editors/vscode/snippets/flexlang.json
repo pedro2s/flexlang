@@ -216,5 +216,23 @@
       "test_${1:feature}();"
     ],
     "description": "Template de função de teste unitário"
+  },
+  "For In Collection": {
+    "prefix": "for-in",
+    "body": [
+      "for ${1:item} in ${2:collection} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Itera sobre uma coleção (Array, Map ou Range)"
+  },
+  "For In Collection with Index": {
+    "prefix": "for-index",
+    "body": [
+      "for ${1:item}, ${2:index} in ${3:collection} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Itera sobre uma coleção com acesso ao índice/chave"
   }
 }
