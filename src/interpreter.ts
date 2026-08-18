@@ -290,6 +290,7 @@ export class Interpreter {
           ? await this.evaluateExpr(stmt.value, env)
           : null;
         throw new ReturnException(returnValue);
+      case "ConstDeclaration":
       case "VarDeclaration":
         const value = await this.evaluateExpr(stmt.value, env);
         env.define(stmt.name, value);

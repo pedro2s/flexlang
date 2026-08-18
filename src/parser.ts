@@ -124,6 +124,8 @@ export class Parser {
         return this.parseStructDeclaration();
       case TokenType.Let:
         return this.parseVarDeclaration();
+      case TokenType.Const:
+        return this.parseConstDeclaration();
       case TokenType.Print:
         return this.parsePrintStatement();
       case TokenType.If:
@@ -627,6 +629,29 @@ export class Parser {
     };
   }
 
+  private parseConstDeclaration(): ConstDeclaration {
+    const startToken = this.consume(TokenType.Const);
+    const name = this.consume(TokenType.Identifier).value;
+
+    let typeAnnotation: TypeNode | undefined = undefined;
+    if (this.current().type === TokenType.Colon) {
+      this.consume(TokenType.Colon);
+      typeAnnotation = this.parseTypeAnnotation();
+    }
+
+    this.consume(TokenType.Assign);
+    const value = this.parseExpression();
+    const semiToken = this.consume(TokenType.Semi);
+
+    return {
+      kind: "ConstDeclaration",
+      name,
+      typeAnnotation,
+      value,
+      span: this.spanFrom(startToken, semiToken),
+    };
+  }
+
   // =========== PARSER DE TIPOS ===========
   private parseTypeAnnotation(): TypeNode {
     if (this.current().type === TokenType.LBracket) {
@@ -843,6 +868,7 @@ export class Parser {
       curr.type === TokenType.In ||
       curr.type === TokenType.Import ||
       curr.type === TokenType.Let ||
+      curr.type === TokenType.Const ||
       curr.type === TokenType.Mut ||
       curr.type === TokenType.Return ||
       curr.type === TokenType.Struct ||

@@ -32,5 +32,5 @@ func main() -> Int {
     return 0;
 }
 
-let const = main();
-print(const);
+let defer = main();
+print(defer);

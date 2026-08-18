@@ -21,6 +21,7 @@ export class Lexer {
     [TokenType.Continue, /^continue\b/],
     [TokenType.In, /^in\b/],
     [TokenType.Let, /^let\b/],
+    [TokenType.Const, /^const\b/],
     [TokenType.Mut, /^mut\b/],
     [TokenType.Enum, /^enum\b/],
     [TokenType.Match, /^match\b/],

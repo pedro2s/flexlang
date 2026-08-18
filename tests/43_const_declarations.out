@@ -1,0 +1,7 @@
+--- Teste Constantes ---
+Max retries: 3
+Tax rate: 0.15
+Bank: FlexBank S.A.
+Prod: true
+Limit: 10000
+Total: 30

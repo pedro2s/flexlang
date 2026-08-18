@@ -378,4 +378,51 @@ try {
 }
 assert(caughtE3001Map, "RFC-023: set em HashMap imutável emite erro estático E3001");
 
+// 11. Testes RFC-024 (Declarações const de Nível de Módulo)
+console.log("\n--- 11. Testes RFC-024 (Declarações const) ---");
+const rfc024Code = `
+const MAX_RETRIES = 3;
+const TAX_RATE = 0.15;
+const BANK_NAME = "FlexBank S.A.";
+const IS_PROD = true;
+const MAX_LIMIT: Int = 10000;
+
+func test_consts() {
+    let x = MAX_RETRIES + MAX_LIMIT;
+}
+`;
+
+const rfc024Tokens = new Lexer(rfc024Code).tokenize();
+const rfc024Ast = new Parser(rfc024Tokens, "rfc024.flex").parse();
+new TypeChecker().check(rfc024Ast, "rfc024.flex");
+assert(true, "RFC-024: declarações const de nível de módulo validadas");
+
+// Validação estática: reatribuição de const deve emitir E3003
+let caughtE3003 = false;
+try {
+    const invConstCode = `const TAX = 0.1; func main() { TAX = 0.2; }`;
+    const invConstTokens = new Lexer(invConstCode).tokenize();
+    const invConstAst = new Parser(invConstTokens, "invalid_const.flex").parse();
+    new TypeChecker().check(invConstAst, "invalid_const.flex");
+} catch (err: any) {
+    if (err.code === "E3003") {
+        caughtE3003 = true;
+    }
+}
+assert(caughtE3003, "RFC-024: reatribuição de const emite erro estático E3003");
+
+// Validação estática: const com inicializador não-literal deve emitir E2034
+let caughtE2034 = false;
+try {
+    const invInitCode = `func get_val() -> Int { return 10; } const TAX = get_val();`;
+    const invInitTokens = new Lexer(invInitCode).tokenize();
+    const invInitAst = new Parser(invInitTokens, "invalid_init.flex").parse();
+    new TypeChecker().check(invInitAst, "invalid_init.flex");
+} catch (err: any) {
+    if (err.code === "E2034") {
+        caughtE2034 = true;
+    }
+}
+assert(caughtE2034, "RFC-024: const inicializada com função emite erro estático E2034");
+
 console.log("\n✨ Todos os testes das Ferramentas VSCode passaram com 100% de sucesso!");

@@ -2,6 +2,7 @@ export enum TokenType {
   Number = "NUMBER",
   String = "STRING",
   Let = "LET",
+  Const = "CONST",
   Mut = "MUT",
   Enum = "ENUM",
   Match = "MATCH",
@@ -78,6 +79,7 @@ export interface Span {
 
 export type Stmt =
   | VarDeclaration
+  | ConstDeclaration
   | PrintStmt
   | IfStmt
   | ForStmt
@@ -328,6 +330,14 @@ export interface VarDeclaration {
   value: Expr;
   typeAnnotation?: TypeNode | undefined;
   isMut: boolean;
+  span?: Span;
+}
+
+export interface ConstDeclaration {
+  kind: "ConstDeclaration";
+  name: string;
+  value: Expr;
+  typeAnnotation?: TypeNode | undefined;
   span?: Span;
 }
 

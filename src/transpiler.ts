@@ -164,6 +164,10 @@ export class GoTranspiler {
             checkDuplicateSymbol(stmt.name, filePath);
             declarations.push(stmt);
             break;
+          case "ConstDeclaration":
+            checkDuplicateSymbol(stmt.name, filePath);
+            declarations.push(stmt);
+            break;
           case "ImplDeclaration":
             declarations.push(stmt);
             break;
@@ -180,7 +184,9 @@ export class GoTranspiler {
 
     this.emitLine("func main() {");
     this.indent();
+    this.funcDepth++;
     this.transpileStmts(mainStatements);
+    this.funcDepth--;
     this.dedent();
     this.emitLine("}");
 
@@ -320,6 +326,18 @@ export class GoTranspiler {
         this.goImports.add("fmt");
         const value = this.transpileExpr(stmt.value);
         this.emitLine(`fmt.Println(${value})`);
+        break;
+      }
+
+      case "ConstDeclaration": {
+        const value = this.transpileExpr(stmt.value);
+        const declaredType = stmt.typeAnnotation ? this.transpileType(stmt.typeAnnotation) : undefined;
+        if (declaredType) {
+          this.emitLine(`const ${this.goIdent(stmt.name)} ${declaredType} = ${value}`);
+        } else {
+          this.emitLine(`const ${this.goIdent(stmt.name)} = ${value}`);
+        }
+        this.emitDiscardIfUnused(stmt.name, rest);
         break;
       }
 
@@ -1369,6 +1387,7 @@ export class GoTranspiler {
    * legal em FlexLang. Quando o nome não é lido, emitimos `_ = nome`.
    */
   private emitDiscardIfUnused(name: string, rest: Stmt[]): void {
+    if (this.funcDepth === 0) return;
     if (!this.isUsedIn(rest, name)) {
       this.emitLine(`_ = ${this.goIdent(name)}`);
     }

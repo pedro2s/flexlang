@@ -47,15 +47,15 @@ export type TypeMap = Map<Expr, FlexType>;
 
 // --- Ambiente de Tipos (Environment para checagem estática) ---
 class TypeEnvironment {
-  private variables = new Map<string, { type: FlexType; isMut: boolean; isMoved: boolean }>();
+  private variables = new Map<string, { type: FlexType; isMut: boolean; isMoved: boolean; isConst?: boolean }>();
 
   constructor(private enclosing?: TypeEnvironment) {}
 
-  define(name: string, type: FlexType, isMut: boolean): void {
-    this.variables.set(name, { type, isMut, isMoved: false });
+  define(name: string, type: FlexType, isMut: boolean, isConst?: boolean): void {
+    this.variables.set(name, { type, isMut, isMoved: false, isConst });
   }
 
-  get(name: string): { type: FlexType; isMut: boolean; isMoved: boolean } | undefined {
+  get(name: string): { type: FlexType; isMut: boolean; isMoved: boolean; isConst?: boolean } | undefined {
     if (this.variables.has(name)) {
       return this.variables.get(name)!;
     }
@@ -320,6 +320,39 @@ export class TypeChecker {
           );
         }
         env.define(stmt.name, expected ?? valueType, stmt.isMut);
+        break;
+      }
+
+      case "ConstDeclaration": {
+        const isLiteral =
+          stmt.value.kind === "NumericLiteral" ||
+          stmt.value.kind === "StringLiteral" ||
+          stmt.value.kind === "BooleanLiteral" ||
+          (stmt.value.kind === "UnaryExpr" &&
+            (stmt.value.operator === "-" || stmt.value.operator === "+") &&
+            stmt.value.argument.kind === "NumericLiteral");
+
+        if (!isLiteral) {
+          throw new FlexError(
+            "E2034",
+            "const initializer must be a literal (number, string, or boolean)",
+            stmt.value.span ?? stmt.span,
+            "Constantes aceitam apenas valores literais computáveis em tempo de compilação.",
+          );
+        }
+
+        const expected = stmt.typeAnnotation ? this.resolveTypeNode(stmt.typeAnnotation) : undefined;
+        const valueType = this.checkExpr(stmt.value, env, expected);
+
+        if (expected && !this.isTypeAssignable(expected, valueType)) {
+          throw new FlexError(
+            "E2001",
+            `Cannot assign value of type '${this.typeToString(valueType)}' to constant '${stmt.name}' of type '${this.typeToString(expected)}'`,
+            stmt.value.span ?? stmt.span,
+          );
+        }
+
+        env.define(stmt.name, expected ?? valueType, false, true);
         break;
       }
 
@@ -1428,6 +1461,14 @@ export class TypeChecker {
 
         if (expr.assignee.kind === "Identifier") {
           const varData = env.get(expr.assignee.symbol);
+          if (varData?.isConst) {
+            throw new FlexError(
+              "E3003",
+              `Cannot assign to constant '${expr.assignee.symbol}'`,
+              expr.span,
+              "Constantes são estritamente imutáveis.",
+            );
+          }
           if (varData && !varData.isMut) {
             throw new FlexError(
               "E3001",

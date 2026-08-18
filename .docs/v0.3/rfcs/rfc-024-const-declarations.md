@@ -1,6 +1,6 @@
 # RFC-024 — Declarações `const` de Nível de Módulo
 
-> **Status:** Proposto · **Prioridade:** P1 · **Depende de:** nada
+> **Status:** Implementado · **Prioridade:** P1 · **Depende de:** nada
 
 ## 1. Motivação
 
