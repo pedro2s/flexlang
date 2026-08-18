@@ -1,6 +1,6 @@
 # RFC-021 — Closures com Captura de Escopo
 
-> **Status:** Proposto · **Prioridade:** P0 — bloqueante · **Depende de:** nada
+> **Status:** Implementado · **Prioridade:** P0 — bloqueante · **Depende de:** nada
 
 ## 1. Motivação
 

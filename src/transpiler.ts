@@ -760,7 +760,7 @@ export class GoTranspiler {
       case "LambdaExpr": {
         // Lambda vira closure literal em Go: func(params) ReturnType { body }
         const retType = this.types.get(expr);
-        const retSuffix = retType && retType.kind !== "Void" && retType.kind !== "Any" ? ` ${this.goType(retType)}` : "";
+        const retSuffix = retType && retType.kind !== "Void" ? ` ${this.goType(retType)}` : "";
         const params = expr.parameters
           .map((p) => {
             const pTypeNode = p.typeAnnotation;
@@ -873,15 +873,15 @@ export class GoTranspiler {
           case "map": {
             const resType = this.types.get(expr);
             const resElemType = resType && resType.kind === "Array" ? this.goType(resType.elementType) : "any";
-            return `func() []${resElemType} { __res := []${resElemType}{}; for _, __item := range ${obj} { __res = append(__res, ${this.transpileExpr(expr.args[0])}(__item)) }; return __res }()`;
+            return `func() []${resElemType} {\n  __fn := ${this.transpileExpr(expr.args[0])}\n  __res := []${resElemType}{}\n  for _, __item := range ${obj} {\n    __res = append(__res, __fn(__item))\n  }\n  return __res\n}()`;
           }
           case "filter":
-            return `func() []${elemGoType} { __res := []${elemGoType}{}; for _, __item := range ${obj} { if ${this.transpileExpr(expr.args[0])}(__item) { __res = append(__res, __item) } }; return __res }()`;
+            return `func() []${elemGoType} {\n  __fn := ${this.transpileExpr(expr.args[0])}\n  __res := []${elemGoType}{}\n  for _, __item := range ${obj} {\n    if __fn(__item) {\n      __res = append(__res, __item)\n    }\n  }\n  return __res\n}()`;
           case "find":
             this.usedBuiltins.add("Option");
-            return `func() Option { for _, __item := range ${obj} { if ${this.transpileExpr(expr.args[0])}(__item) { return Option_Some_new(__item) } }; return Option_None }()`;
+            return `func() Option {\n  __fn := ${this.transpileExpr(expr.args[0])}\n  for _, __item := range ${obj} {\n    if __fn(__item) {\n      return Option_Some_new(__item)\n    }\n  }\n  return Option_None\n}()`;
           case "for_each":
-            return `func() { for _, __item := range ${obj} { ${this.transpileExpr(expr.args[0])}(__item) } }()`;
+            return `func() {\n  __fn := ${this.transpileExpr(expr.args[0])}\n  for _, __item := range ${obj} {\n    __fn(__item)\n  }\n}()`;
         }
       }
 

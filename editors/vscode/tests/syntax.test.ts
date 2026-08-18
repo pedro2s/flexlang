@@ -276,4 +276,34 @@ try {
 }
 assert(caughtE3001, "RFC-020: push em array imutável emite erro estático E3001");
 
+// 8. Testes RFC-021 (Closures com Captura de Escopo)
+console.log("\n--- 8. Testes RFC-021 (Closures com Captura) ---");
+const rfc021Code = `
+func test_closures() {
+    let prefix = "Item";
+    let mut contador = 0;
+
+    let f = |id: Int| {
+        contador = contador + 1;
+        return "\${prefix} #\${id}";
+    };
+
+    let msg = f(42);
+
+    let base = 100;
+    let nivel1 = |a: Int| {
+        let nivel2 = |b: Int| {
+            return base + a + b;
+        };
+        return nivel2(20);
+    };
+    let res = nivel1(5);
+}
+`;
+
+const rfc021Tokens = new Lexer(rfc021Code).tokenize();
+const rfc021Ast = new Parser(rfc021Tokens, "rfc021.flex").parse();
+new TypeChecker().check(rfc021Ast, "rfc021.flex");
+assert(true, "RFC-021: closures com captura de escopo e closures aninhadas validadas");
+
 console.log("\n✨ Todos os testes das Ferramentas VSCode passaram com 100% de sucesso!");

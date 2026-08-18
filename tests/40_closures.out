@@ -1,0 +1,12 @@
+--- Teste Captura Basica ---
+Item #1
+Item #2
+--- Teste Captura Mutavel ---
+Contador final: 3
+--- Teste Captura em Metodos de Alta Ordem ---
+Acima de 15: 25
+Acima de 15: 30
+Acima de 15: 18
+Soma dos filtrados: 73
+--- Teste Closures Aninhadas ---
+Resultado aninhado: 125

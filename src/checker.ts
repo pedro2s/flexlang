@@ -85,6 +85,7 @@ export class TypeChecker {
   private inScopeContext: number = 0;
   private loopDepth: number = 0;
   private typeMap: TypeMap = new Map();
+  private lambdaReturnStack: (FlexType | undefined)[] = [];
 
   /**
    * Checa o programa e devolve a anotação de tipos de cada expressão.
@@ -481,6 +482,9 @@ export class TypeChecker {
       case "ReturnStmt":
         if (stmt.value) {
           const returnedType = this.checkExpr(stmt.value, env);
+          if (this.lambdaReturnStack.length > 0) {
+            this.lambdaReturnStack[this.lambdaReturnStack.length - 1] = returnedType;
+          }
           const expectedReturn = env.get("__RETURN_TYPE__");
           // Valida a instanciação dos embutidos: `Result.Ok(x)` aceita qualquer x
           // (T é livre na construção), então é aqui que o T declarado é cobrado.
@@ -1360,6 +1364,7 @@ export class TypeChecker {
       }
 
       case "LambdaExpr": {
+        this.lambdaReturnStack.push(undefined);
         const lambdaEnv = new TypeEnvironment(env);
         for (const param of expr.parameters) {
           const pType =
@@ -1368,32 +1373,9 @@ export class TypeChecker {
               : (param as any).__inferredType ?? { kind: "Any" };
           lambdaEnv.define(param.name, pType, !!param.isMut);
         }
-        let returnType: FlexType | undefined = undefined;
-        const scanReturns = (stmts: Stmt[]) => {
-          for (const s of stmts) {
-            if (s.kind === "ReturnStmt") {
-              if (s.value) {
-                returnType = this.checkExpr(s.value, lambdaEnv);
-              } else {
-                returnType = { kind: "Void" };
-              }
-            } else if (s.kind === "IfStmt") {
-              scanReturns(s.consequent.body);
-              if (s.alternate) {
-                if (s.alternate.kind === "IfStmt") {
-                  scanReturns([s.alternate]);
-                } else {
-                  scanReturns(s.alternate.body);
-                }
-              }
-            } else if (s.kind === "BlockStmt") {
-              scanReturns(s.body);
-            }
-          }
-        };
-        scanReturns(expr.body.body);
         this.checkStmt(expr.body, lambdaEnv);
-        const resType = returnType ?? { kind: "Void" };
+        const inferred = this.lambdaReturnStack.pop();
+        const resType = inferred ?? { kind: "Void" };
         this.typeMap.set(expr, resType);
         return resType;
       }
@@ -1487,48 +1469,10 @@ export class TypeChecker {
    * nada, então propagar `Option<User>` de uma função `-> Option<String>` é seguro.
    */
   private checkHigherOrderArg(arg: Expr, elemType: FlexType, env: TypeEnvironment): FlexType {
-    if (arg.kind === "LambdaExpr") {
-      const lambdaEnv = new TypeEnvironment(env);
-      if (arg.parameters.length > 0) {
-        const p = arg.parameters[0];
-        const pType =
-          p.typeAnnotation && (p.typeAnnotation as any).name !== "Any"
-            ? this.resolveTypeNode(p.typeAnnotation)
-            : elemType;
-        (p as any).__inferredType = pType;
-        lambdaEnv.define(p.name, pType, !!p.isMut);
-      }
-      let returnType: FlexType | undefined = undefined;
-      const scanReturns = (stmts: Stmt[]) => {
-        for (const s of stmts) {
-          if (s.kind === "ReturnStmt") {
-            if (s.value) {
-              returnType = this.checkExpr(s.value, lambdaEnv);
-            } else {
-              returnType = { kind: "Void" };
-            }
-          } else if (s.kind === "IfStmt") {
-            scanReturns(s.consequent.body);
-            if (s.alternate) {
-              if (s.alternate.kind === "IfStmt") {
-                scanReturns([s.alternate]);
-              } else {
-                scanReturns(s.alternate.body);
-              }
-            }
-          } else if (s.kind === "BlockStmt") {
-            scanReturns(s.body);
-          }
-        }
-      };
-      scanReturns(arg.body.body);
-      this.checkStmt(arg.body, lambdaEnv);
-      const resType = returnType ?? { kind: "Void" };
-      this.typeMap.set(arg, resType);
-      return resType;
-    } else {
-      return this.checkExpr(arg, env);
+    if (arg.kind === "LambdaExpr" && arg.parameters.length > 0) {
+      (arg.parameters[0] as any).__inferredType = elemType;
     }
+    return this.checkExpr(arg, env);
   }
 
   private checkPropagatedPayload(tryType: FlexType, returnType: FlexType, span?: Span): void {
