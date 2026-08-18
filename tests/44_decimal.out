@@ -1,0 +1,33 @@
+--- 1. Aritmetica Basica ---
+0.1 + 0.2 = 0.3
+100.50 - 0.25 = 100.25
+12.5 * 4.0 = 50
+100.0 / 4.0 = 25
+Div por zero esperada: division by zero
+10.5 % 3.0 = 1.5
+neg(42.75) = -42.75
+abs(-99.99) = 99.99
+--- 2. Arredondamento e Potencia ---
+round(2.5, 0) = 2
+round(3.5, 0) = 4
+round(2.55, 1) = 2.6
+round(2.54, 1) = 2.5
+round(2.56, 1) = 2.6
+2.0 ^ 4 = 16
+--- 3. Comparacoes e Conversoes ---
+10 == 10: true
+10 < 20: true
+20 > 10: true
+10 <= 10: true
+20 >= 10: true
+cmp(10, 20): -1
+is_zero(0): true
+is_pos(10): true
+is_neg(-5): true
+to_float: 3.14159
+to_int: 3
+--- 4. Caso de Uso Bancario (Split de Pagamento) ---
+Parcela: 33.33
+Parcela: 33.33
+Ultima parcela: 33.34
+Soma total conferida: 100

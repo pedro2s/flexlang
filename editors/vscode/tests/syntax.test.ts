@@ -425,4 +425,35 @@ try {
 }
 assert(caughtE2034, "RFC-024: const inicializada com função emite erro estático E2034");
 
+// 12. Testes RFC-025 (Módulo math/decimal)
+console.log("\n--- 12. Testes RFC-025 (Módulo math/decimal) ---");
+const rfc025Code = `
+import { Decimal } from "math/decimal";
+
+func test_decimal_suite() -> Result<Decimal, String> {
+    let d1 = Decimal.new("100.50");
+    let d2 = Decimal.from_int(2);
+    let soma = d1.add(d2);
+    let sub = d1.sub(d2);
+    let mul = d1.mul(d2);
+    let div = d1.div(d2)?;
+    let rem = d1.modulo(d2);
+    let neg = d1.neg();
+    let abs = d1.abs();
+    let r = d1.round(1);
+    let p = d2.pow(3);
+    let eq = d1.eq(d2);
+    let is_z = d1.is_zero();
+    let s = d1.to_string();
+    let f = d1.to_float();
+    let n = d1.to_int();
+    return Result.Ok(div);
+}
+`;
+
+const rfc025Tokens = new Lexer(rfc025Code).tokenize();
+const rfc025Ast = new Parser(rfc025Tokens, "rfc025.flex").parse();
+new TypeChecker().check(rfc025Ast, "rfc025.flex");
+assert(true, "RFC-025: módulo math/decimal com todas as operações e Result validado");
+
 console.log("\n✨ Todos os testes das Ferramentas VSCode passaram com 100% de sucesso!");

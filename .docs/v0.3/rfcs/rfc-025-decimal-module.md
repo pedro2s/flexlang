@@ -1,6 +1,6 @@
 # RFC-025 — Módulo `math/decimal` — Aritmética Monetária de Precisão Arbitrária
 
-> **Status:** Proposto · **Prioridade:** P0 — bloqueante · **Depende de:** RFC-022 (to_string para Decimal)
+> **Status:** Implementado · **Prioridade:** P0 — bloqueante · **Depende de:** RFC-022 (to_string para Decimal)
 
 ## 1. Motivação
 

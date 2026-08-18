@@ -2,6 +2,7 @@ import type { NativeModule } from "./types";
 import { httpModule } from "./http";
 import { postgresModule } from "./postgres";
 import { logModule } from "./log";
+import { decimalModule } from "./decimal";
 
 export class ModuleRegistry {
   private modules = new Map<string, NativeModule>();
@@ -25,4 +26,5 @@ export const registry = new ModuleRegistry();
 registry.register(httpModule);
 registry.register(postgresModule);
 registry.register(logModule);
+registry.register(decimalModule);
 

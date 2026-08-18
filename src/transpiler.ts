@@ -838,32 +838,37 @@ export class GoTranspiler {
     if (expr.caller.kind === "MemberExpr") {
       const member = expr.caller;
 
-      // Conversões numéricas e de tipo explícitas (RFC-013, RFC-022)
-      if (member.property === "to_string") {
-        this.goImports.add("strconv");
+      const objType = this.types.get(member.object);
+      const isStructWithMethod =
+        objType &&
+        objType.kind === "Struct" &&
+        this.nativeTypes.get(objType.name)?.methods?.some((m) => m.name === member.property);
+
+      if (member.property === "to_string" && !isStructWithMethod) {
         const obj = this.transpileExpr(member.object);
-        const objType = this.types.get(member.object);
         if (objType?.kind === "Int" || member.object.kind === "NumericLiteral") {
+          this.goImports.add("strconv");
           return `strconv.Itoa(${obj})`;
         }
         if (objType?.kind === "Float") {
+          this.goImports.add("strconv");
           return `strconv.FormatFloat(${obj}, 'f', -1, 64)`;
         }
         if (objType?.kind === "Bool" || member.object.kind === "BooleanLiteral") {
+          this.goImports.add("strconv");
           return `strconv.FormatBool(${obj})`;
         }
         this.goImports.add("fmt");
         return `fmt.Sprint(${obj})`;
       }
-      if (member.property === "to_float") {
+      if (member.property === "to_float" && !isStructWithMethod) {
         return `float64(${this.transpileExpr(member.object)})`;
       }
-      if (member.property === "to_int") {
+      if (member.property === "to_int" && !isStructWithMethod) {
         return `int(${this.transpileExpr(member.object)})`;
       }
 
       // Métodos de String (RFC-019)
-      const objType = this.types.get(member.object);
       const isStringMethod =
         objType?.kind === "String" ||
         member.object.kind === "StringLiteral" ||
