@@ -7,6 +7,9 @@ import { envModule } from "./env";
 import { timeModule } from "./time";
 import { cryptoModule } from "./crypto";
 import { dotenvModule } from "./dotenv";
+import { hexModule } from "./hex";
+import { base64Module } from "./base64";
+import { jsonModule } from "./json";
 
 export class ModuleRegistry {
   private modules = new Map<string, NativeModule>();
@@ -35,4 +38,7 @@ registry.register(envModule);
 registry.register(timeModule);
 registry.register(cryptoModule);
 registry.register(dotenvModule);
+registry.register(hexModule);
+registry.register(base64Module);
+registry.register(jsonModule);
 

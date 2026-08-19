@@ -1,6 +1,6 @@
 # RFC-033 — Módulo Universal de JSON e Codificações (`encoding/json`, `encoding/base64`, `encoding/hex`)
 
-> **Status:** Proposto · **Prioridade:** P0 · **Depende de:** nada
+> **Status:** Implementado · **Prioridade:** P0 · **Depende de:** nada
 
 ---
 

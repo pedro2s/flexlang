@@ -49,8 +49,8 @@ gantt
 | Status | RFC | Funcionalidade |
 |---|---|---|
 | ✅ | RFC-031 | Cliente HTTP Nativo |
-| ⏳ | RFC-032 | Módulo `config` e leitura dotenv |
-| ⏳ | RFC-033 | Serialização `std/json` e Encoding |
+| ✅ | RFC-032 | Módulo `config` e leitura dotenv |
+| ✅ | RFC-033 | Serialização `std/json` e Encoding |
 | ⏳ | RFC-034 | `std/fs` e manipulador de Paths |
 | ⏳ | RFC-035 | `crypto/jwt` (RS256/HS256) |
 | ⏳ | RFC-036 | Driver nativo Redis e Locks Distribuídos |
