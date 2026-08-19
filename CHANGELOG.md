@@ -6,6 +6,22 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e o
 
 ## [Não lançado]
 
+## [0.3.1] - 2026-08-19
+
+Release de refinamento, lançamento do portal de documentação oficial multilíngue e melhorias na CLI.
+
+### Adicionado
+- **Flags de Versão e Ajuda na CLI**: Adicionado suporte às flags `flex --version`, `-v`, `version` e `flex --help`, `-h`, `help` com saída padronizada e amigável.
+- **Resolução Dinâmica de Versão na CLI**: A constante `FLEX_VERSION` agora é resolvida dinamicamente a partir do `package.json`, eliminando divergências manuais entre manifesto e binário.
+- **Suíte de Testes Automatizados da CLI**: Adicionado `tests/49_cli_version.ts` validando o comportamento de todas as flags e variações de comandos de versão e ajuda.
+- **Portal Oficial de Documentação (Astro v5 + Starlight)**: Criado portal completo de referência técnica em `reference/` hospedado no GitHub Pages ([https://pedro2s.github.io/flexlang/](https://pedro2s.github.io/flexlang/)), com suporte nativo a internacionalização (Português do Brasil `pt-BR` e Inglês `en`), gramática TextMate oficial da FlexLang no Shiki, e suporte a temas claro e escuro.
+- **Pipeline CI/CD de Deploy da Documentação**: Criado workflow `.github/workflows/docs.yml` para compilação e deploy contínuo das documentações no GitHub Pages.
+
+### Modificado
+- **README.md Internacional**: Transcrição integral do `README.md` para o Inglês, facilitando a adoção global da linguagem, com badges oficiais, links do portal e catálogo de exemplos.
+- **Atualização da Sintaxe de Pattern Matching nas Referências**: Removido o operador legado `=>` em todas as páginas de documentação de `match` e `enums`, padronizando os exemplos com a sintaxe oficial de blocos `{ ... }`.
+- **Documentação de Observabilidade em `net/http`**: Documentação detalhada dos recursos corporativos do servidor HTTP: endpoint de health check nativo (`/healthz`), isolamento e recuperação automática de panics, tracing estruturado com `core/log` e desligamento gracioso (*graceful shutdown*) com `server.on_shutdown()`.
+
 ## [0.3.0] - 2026-08-18
 
 Terceira release pública da FlexLang. Focada em backend enterprise, precisão financeira, observabilidade e ergonomia de código moderno. Implementa integralmente as RFCs 017 a 030 (ver [`.docs/v0.3/rfcs/`](.docs/v0.3/rfcs/)).
@@ -57,7 +73,8 @@ Apenas documentação — sem mudança de comportamento. O `README.md` publicado
 
 Primeira versão pública do FlexLang. Implementa as RFCs 001–009 (ver [`.docs/v1/rfcs/`](.docs/v1/rfcs/)): paridade completa entre o modo interpretado e o transpiler Go, `Result`/`Option` nativos, módulos nativos (`net/http`, `db/postgres`), sistema de módulos locais, CLI (`flex init`/`run`/`build`/`test`), e a baseline de observabilidade e segurança para produção.
 
-[Não lançado]: https://github.com/pedro2s/flexlang/compare/v0.3.0...HEAD
+[Não lançado]: https://github.com/pedro2s/flexlang/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/pedro2s/flexlang/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/pedro2s/flexlang/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/pedro2s/flexlang/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/pedro2s/flexlang/compare/v0.1.0...v0.1.1
