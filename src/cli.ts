@@ -14,7 +14,7 @@ import { FileWatcher } from "./watcher";
 const FLEX_VERSION = "0.3.0";
 
 function printUsage() {
-    console.log(`🚀 FlexLang CLI
+    console.log(`🚀 FlexLang CLI (v${FLEX_VERSION})
 
 Usage:
   flex init <name>               - Creates a new FlexLang project
@@ -22,6 +22,8 @@ Usage:
   flex run --watch [file.flex]   - Runs in watch mode, reloading on any file changes
   flex build [file.flex]         - Transpiles to Go and compiles to a native binary
   flex test [path]               - Runs golden file tests (matches *_test.flex)
+  flex --version, -v             - Displays the installed FlexLang compiler version
+  flex --help, -h                - Displays this help usage menu
 `);
 }
 
@@ -353,7 +355,13 @@ async function main() {
     const command = args[0];
     const restArgs = args.slice(1);
     
-    if (command === "init") {
+    if (command === "--version" || command === "-v" || command === "version") {
+        console.log(`flex version ${FLEX_VERSION}`);
+        process.exit(0);
+    } else if (command === "--help" || command === "-h" || command === "help") {
+        printUsage();
+        process.exit(0);
+    } else if (command === "init") {
         await runInit(restArgs[0]);
     } else if (command === "run") {
         await runRun(restArgs);
