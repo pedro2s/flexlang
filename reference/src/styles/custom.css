@@ -44,6 +44,20 @@ h1, h2, h3, h4, h5, h6 {
   -webkit-text-fill-color: transparent;
 }
 
+/* Imagem do Hero proporcional, cantos arredondados e glow suave */
+.hero img {
+  max-height: 220px;
+  width: auto;
+  border-radius: 32px;
+  filter: drop-shadow(0 16px 40px rgba(0, 210, 255, 0.4));
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), filter 0.3s ease;
+}
+
+.hero img:hover {
+  transform: scale(1.05) translateY(-4px);
+  filter: drop-shadow(0 22px 50px rgba(0, 210, 255, 0.6));
+}
+
 /* Efeito Glow nos cards de destaque */
 .card {
   position: relative;
