@@ -1,6 +1,6 @@
 # RFC-031 — Módulo Nativo de Cliente HTTP (`net/http: Client`)
 
-> **Status:** Proposto · **Prioridade:** P0 — Bloqueante (Solicitado) · **Depende de:** RFC-004 (`net/http`), RFC-027 (`core/time`)
+> **Status:** Implementado · **Prioridade:** P0 — Bloqueante (Solicitado) · **Depende de:** RFC-004 (`net/http`), RFC-027 (`core/time`)
 
 ---
 
