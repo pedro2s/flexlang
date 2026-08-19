@@ -3,8 +3,6 @@ title: math/decimal — Aritmética de Precisão Arbitrária
 description: Cálculos monetários e financeiros exatos sem erros binários de ponto flutuante.
 ---
 
-# `math/decimal` — Aritmética Financeira
-
 Pontos flutuantes tradicionais (`Float` IEEE-754) sofrem com imprecisões binárias (ex: `0.1 + 0.2 = 0.30000000000000004`), o que é inaceitável em finanças. O módulo `math/decimal` resolve isso com precisão decimal exata.
 
 ```flexlang

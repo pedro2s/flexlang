@@ -3,8 +3,6 @@ title: Arquitetura em Camadas (Le Salvi API)
 description: Padrão arquitetural em camadas com Routes, Services, Repositories e Traits.
 ---
 
-# Arquitetura em Camadas (Le Salvi API)
-
 O projeto **Le Salvi API** (`examples/08_le_salvi_api`) demonstra a separação clara de responsabilidades recomendada para aplicações FlexLang corporativas.
 
 ---

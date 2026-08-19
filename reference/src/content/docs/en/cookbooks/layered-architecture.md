@@ -3,8 +3,6 @@ title: Layered Architecture (Le Salvi API)
 description: Layered architecture patterns with Routes, Services, Repositories, and Traits.
 ---
 
-# Layered Architecture (Le Salvi API)
-
 The **Le Salvi API** (`examples/08_le_salvi_api`) showcases the recommended separation of concerns for enterprise FlexLang backends.
 
 ---

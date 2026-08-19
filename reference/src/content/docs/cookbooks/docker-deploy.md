@@ -3,8 +3,6 @@ title: Deploy em Produção & Docker
 description: Como empacotar, compilar e executar serviços FlexLang em contêineres Docker ultra-leves.
 ---
 
-# Deploy em Produção & Docker
-
 Como o comando `flex build` gera um binário nativo Go autônomo, suas imagens Docker de produção podem usar a imagem base `scratch` ou `alpine` pesando menos de **25 MB**.
 
 ---

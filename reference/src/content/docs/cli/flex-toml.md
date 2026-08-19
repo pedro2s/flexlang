@@ -3,8 +3,6 @@ title: Manifesto flex.toml
 description: Especificação de todos os campos e opções de configuração do arquivo flex.toml.
 ---
 
-# Especificação do `flex.toml`
-
 O arquivo `flex.toml` é o manifesto declarativo obrigatório de todo projeto FlexLang.
 
 ---

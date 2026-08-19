@@ -3,8 +3,6 @@ title: core/log — Logging Estruturado & Segurança
 description: Logs em JSON estruturado com timestamps ISO 8601 e mascaramento automático de dados sensíveis.
 ---
 
-# `core/log` — Logging Estruturado
-
 O módulo `core/log` emite registros em formato JSON estruturado direto para `stdout`/`stderr`, com proteção ativa para mascarar segredos e senhas.
 
 ```flexlang

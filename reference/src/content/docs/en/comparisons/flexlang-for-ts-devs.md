@@ -3,8 +3,6 @@ title: FlexLang for TypeScript Developers
 description: Migrating from Node/TS to FlexLang — Native compilation, no 'async coloring', and real type safety.
 ---
 
-# FlexLang for TypeScript Developers
-
 TypeScript developers love rich type ergonomics, but often face Node.js/V8 runtime overhead and viral `async/await` propagation (*function coloring*).
 
 ---

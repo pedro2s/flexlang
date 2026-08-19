@@ -3,8 +3,6 @@ title: 6. Enums & Pattern Matching
 description: Sum Types with positional payloads and exhaustive pattern matching with match.
 ---
 
-# Enums & Pattern Matching
-
 In FlexLang, `enum` goes beyond simple integer lists — they are true **Sum Types (Tagged Unions)** that carry strongly typed data payloads inside variants.
 
 ---

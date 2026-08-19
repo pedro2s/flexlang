@@ -3,8 +3,6 @@ title: CLI Commands (flex)
 description: Complete reference for all subcommands and flags in the official FlexLang CLI.
 ---
 
-# CLI Commands (`flex`)
-
 The `flex` command-line interface provides unified project management, execution, testing, and compilation.
 
 ---

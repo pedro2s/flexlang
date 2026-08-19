@@ -3,8 +3,6 @@ title: Visão Geral & Filosofia
 description: Conheça os pilares de design e os objetivos fundamentais da FlexLang.
 ---
 
-# Visão Geral & Filosofia da FlexLang
-
 A **FlexLang** é uma linguagem de programação compilada e estaticamente tipada, projetada desde o primeiro dia para resolver os desafios reais do desenvolvimento de **backends modernos, altamente concorrentes e financeiramente críticos**.
 
 ---

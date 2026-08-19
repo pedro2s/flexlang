@@ -3,8 +3,6 @@ title: 9. Módulos Locais e flex.toml
 description: Como organizar projetos em múltiplos arquivos, importar código local e configurar o flex.toml.
 ---
 
-# Módulos Locais e `flex.toml`
-
 Projetos FlexLang reais são organizados em múltiplos arquivos e pastas com importações limpas e resolução estática de dependências.
 
 ---

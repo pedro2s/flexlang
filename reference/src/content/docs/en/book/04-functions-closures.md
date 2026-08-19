@@ -3,8 +3,6 @@ title: 4. Functions & Closures
 description: Function signatures, return types, mutable parameters, and closures with lexical capture.
 ---
 
-# Functions & Closures
-
 Functions are first-class citizens in FlexLang. They can be passed as arguments, returned from other functions, and stored in data structures.
 
 ---

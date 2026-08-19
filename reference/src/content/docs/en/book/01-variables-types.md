@@ -3,8 +3,6 @@ title: 1. Variables, Mutability & Const
 description: Master let, let mut, const, and FlexLang's mutability isolation model.
 ---
 
-# Variables, Mutability & Constants
-
 In FlexLang, memory safety and data-race freedom start directly at variable declarations.
 
 ---

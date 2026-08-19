@@ -3,8 +3,6 @@ title: 9. Local Modules & flex.toml
 description: Organizing multi-file projects, importing local files, and configuring flex.toml.
 ---
 
-# Local Modules & `flex.toml`
-
 Real-world FlexLang applications are organized into modular multi-file directories with static dependency resolution.
 
 ---

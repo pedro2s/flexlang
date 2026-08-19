@@ -3,8 +3,6 @@ title: 5. Structs, Methods & Traits
 description: Data modeling with structs, behavior with impl blocks, and polymorphic traits.
 ---
 
-# Structs, Methods & Traits
-
 FlexLang cleanly decouples **data** (stored in `struct`) from **behavior** (defined in `impl` and `trait` blocks), promoting clean architecture without class inheritance pitfalls.
 
 ---

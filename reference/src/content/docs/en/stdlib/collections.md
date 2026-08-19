@@ -3,8 +3,6 @@ title: Collections & Native Methods
 description: High-performance utility methods for Strings, Arrays, and HashMaps.
 ---
 
-# Collections & Native Methods
-
 FlexLang provides an extensive set of built-in methods for working with text, arrays, and maps.
 
 ---

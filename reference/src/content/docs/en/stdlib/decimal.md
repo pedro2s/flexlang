@@ -3,8 +3,6 @@ title: math/decimal — Arbitrary-Precision Math
 description: Exact financial and monetary arithmetic without IEEE-754 binary rounding errors.
 ---
 
-# `math/decimal` — Financial Arithmetic
-
 Standard IEEE-754 floats introduce binary inaccuracies (e.g. `0.1 + 0.2 = 0.30000000000000004`), which is unacceptable in banking. The `math/decimal` module provides exact arbitrary-precision arithmetic.
 
 ```flexlang

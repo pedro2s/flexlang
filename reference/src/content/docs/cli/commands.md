@@ -3,8 +3,6 @@ title: Comandos da CLI (flex)
 description: Referência completa de todos os subcomandos e flags da CLI oficial da FlexLang.
 ---
 
-# Comandos da CLI (`flex`)
-
 A ferramenta de linha de comando `flex` é a interface unificada para gerenciar todo o ciclo de vida de projetos FlexLang.
 
 ---

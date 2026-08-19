@@ -3,8 +3,6 @@ title: net/http — Servidores REST e Roteamento
 description: API de servidores HTTP de alta performance, roteamento por verbos, middlewares, CORS e tratamento de erros.
 ---
 
-# `net/http` — Servidores REST
-
 O módulo `net/http` fornece um servidor HTTP de alta performance com suporte completo a verbos REST, parâmetros de rota, leitura de corpo JSON, middlewares, CORS e recuperação automática de panics.
 
 ```flexlang

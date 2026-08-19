@@ -3,8 +3,6 @@ title: Installation in 60 Seconds
 description: Install the FlexLang compiler and CLI toolchain.
 ---
 
-# Installing FlexLang
-
 The unified `flex` CLI provides everything you need: compiler, interpreter, test runner, and Go build toolchain integration.
 
 ---

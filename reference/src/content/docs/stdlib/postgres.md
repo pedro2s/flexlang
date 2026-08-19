@@ -3,8 +3,6 @@ title: db/postgres — Driver PostgreSQL Nativo
 description: Pool de conexões, queries 100% parametrizadas, transações ACID e mapeamento de tipos.
 ---
 
-# `db/postgres` — Driver PostgreSQL
-
 O módulo `db/postgres` provê acesso transacional de alta performance ao banco PostgreSQL com proteção nativa contra SQL Injection via consultas parametrizadas obrigatórias.
 
 ```flexlang

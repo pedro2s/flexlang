@@ -3,8 +3,6 @@ title: FlexLang para Desenvolvedores Rust
 description: Segurança de dados, Result/Option e traits sem a complexidade extrema de lifetimes e borrow checker.
 ---
 
-# FlexLang para Desenvolvedores Rust
-
 Desenvolvedores Rust valorizam imutabilidade por padrão, `Result`/`Option`, pattern matching exaustivo e traits. No entanto, em backends corporativos com modelos de dados complexos (grafos, árvores, caches e controladores HTTP), lutar contra o *borrow checker* e anotações de *lifetimes* pode consumir dias de engenharia.
 
 ---

@@ -3,8 +3,6 @@ title: 3. Control Flow
 description: Master if, else if, while, for..in, and loop control in FlexLang.
 ---
 
-# Control Flow
-
 FlexLang provides clean, concise, and predictable control flow constructs.
 
 ---

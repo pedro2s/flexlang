@@ -3,8 +3,6 @@ title: 4. Funções e Closures
 description: Assinaturas de funções, tipos de retorno, mutabilidade de parâmetros e closures com captura léxica.
 ---
 
-# Funções e Closures
-
 Funções são cidadãos de primeira classe na FlexLang. Elas podem ser passadas como argumentos, retornadas de outras funções e armazenadas em estruturas.
 
 ---

@@ -3,8 +3,6 @@ title: core/log — Structured Logging & Security
 description: Structured JSON logging with ISO 8601 timestamps and automatic secret masking.
 ---
 
-# `core/log` — Structured Logging
-
 The `core/log` module outputs structured JSON directly to standard streams with active security sanitization for secrets and passwords.
 
 ```flexlang

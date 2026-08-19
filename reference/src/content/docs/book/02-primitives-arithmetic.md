@@ -3,8 +3,6 @@ title: 2. Tipos Primitivos & Aritmética Estrita
 description: Tipos primitivos, IEEE-754 Float, inteiros e segurança aritmética na FlexLang.
 ---
 
-# Tipos Primitivos & Aritmética Estrita
-
 A FlexLang possui um sistema de tipos primitivos conciso e focado em evitar comportamentos indefinidos ou truncamentos acidentais.
 
 ---

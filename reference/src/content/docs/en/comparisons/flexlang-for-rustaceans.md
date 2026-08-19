@@ -3,8 +3,6 @@ title: FlexLang for Rustaceans
 description: Data safety, Result/Option, and traits without the steep friction of lifetimes and borrow checking.
 ---
 
-# FlexLang for Rustaceans
-
 Rust developers appreciate immutability by default, `Result`/`Option`, exhaustive pattern matching, and traits. However, in enterprise backend domains with graph-like state, fighting the borrow checker and annotating complex lifetimes can slow down delivery.
 
 ---

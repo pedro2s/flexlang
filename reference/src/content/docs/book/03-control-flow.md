@@ -3,8 +3,6 @@ title: 3. Controle de Fluxo
 description: Domine if, else if, while, for..in e controle de laços na FlexLang.
 ---
 
-# Controle de Fluxo
-
 A FlexLang oferece estruturas de controle de fluxo limpas e previsíveis.
 
 ---

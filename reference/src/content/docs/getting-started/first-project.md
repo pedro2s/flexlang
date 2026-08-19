@@ -3,8 +3,6 @@ title: Seu Primeiro Projeto em 5 Minutos
 description: Crie, teste, execute e compile seu primeiro serviço FlexLang.
 ---
 
-# Seu Primeiro Projeto em 5 Minutos
-
 Neste guia, você criará um novo projeto FlexLang, entenderá a estrutura gerada, executará testes e compilará um binário nativo.
 
 ---

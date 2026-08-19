@@ -3,8 +3,6 @@ title: 7. Tratamento de Erros Moderno
 description: Result, Option, operador de propagação ?, e expressões catch inline.
 ---
 
-# Tratamento de Erros Moderno
-
 A FlexLang rejeita exceções implícitas (`throw/try/catch` tradicional) que ocultam fluxos de controle e quebram a previsibilidade. Erros na FlexLang são **valores explícitos**.
 
 ---

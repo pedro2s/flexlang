@@ -3,8 +3,6 @@ title: Instalação em 60 Segundos
 description: Instale o compilador e CLI da FlexLang em seu ambiente.
 ---
 
-# Instalação da FlexLang
-
 A CLI unificada `flex` fornece todo o ferramental necessário: compilador, interpretador, executor de testes e integração com Go.
 
 ---

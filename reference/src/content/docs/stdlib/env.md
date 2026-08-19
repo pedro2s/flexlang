@@ -3,8 +3,6 @@ title: os/env — Variáveis de Ambiente
 description: Leitura segura, defaults e validação estrita de variáveis de ambiente.
 ---
 
-# `os/env` — Variáveis de Ambiente
-
 O módulo `os/env` fornece acesso seguro a configurações de ambiente e credenciais injetadas em contêineres de produção.
 
 ```flexlang

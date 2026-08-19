@@ -3,8 +3,6 @@ title: Coleções & Métodos Nativos
 description: Métodos utilitários de alta performance para Strings, Arrays e HashMaps.
 ---
 
-# Coleções & Métodos Nativos
-
 A FlexLang possui uma rica biblioteca de métodos integrados para manipulação de textos, listas e mapas.
 
 ---

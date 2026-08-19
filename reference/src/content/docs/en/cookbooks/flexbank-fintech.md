@@ -3,8 +3,6 @@ title: "Case Study: FlexBank API"
 description: Building an enterprise Fintech Banking API with FlexLang, Decimal, PostgreSQL, Auth, and Observability.
 ---
 
-# Case Study: FlexBank API (Fintech)
-
 The **FlexBank API** (`examples/09_flexbank_api`) is FlexLang's enterprise reference application. It showcases how to build a robust, secure, and binary-rounding-free banking service.
 
 ---

@@ -3,8 +3,6 @@ title: 8. Concorrência Estruturada & Canais
 description: Green threads leves, escopos de concorrência estruturada, canais rendezvous e isolamento de mutabilidade.
 ---
 
-# Concorrência Estruturada & Canais
-
 A FlexLang foi construída para atender a milhões de conexões simultâneas com baixo consumo de memória, sem risco de vazamento de tarefas em segundo plano.
 
 ---

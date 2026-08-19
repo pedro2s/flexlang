@@ -3,8 +3,6 @@ title: FlexLang for Go Developers
 description: Direct comparison between Go and FlexLang — Structured Concurrency, Result/match, and no more 'if err != nil'.
 ---
 
-# FlexLang for Go Developers
-
 If you write Go, you will feel immediately productive with FlexLang. It retains the lightweight goroutine execution model and low-pause GC while resolving Go's biggest pain points.
 
 ---

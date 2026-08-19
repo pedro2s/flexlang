@@ -3,8 +3,6 @@ title: Compiler Diagnostics Guide
 description: Complete catalog of static compiler error codes in FlexLang.
 ---
 
-# Compiler Diagnostics Guide
-
 The FlexLang compiler delivers clean, actionable error diagnostics with file paths, line/column coordinates, and contextual code underlines.
 
 ---

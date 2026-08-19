@@ -3,8 +3,6 @@ title: Guia de Diagnósticos de Erro
 description: Catálogo completo dos códigos de erro estáticos do compilador FlexLang.
 ---
 
-# Guia de Diagnósticos de Erro do Compilador
-
 O compilador da FlexLang fornece mensagens de erro claras com indicação precisa de arquivo, linha, coluna e trecho de código sublinhado.
 
 ---

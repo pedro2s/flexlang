@@ -3,8 +3,6 @@ title: 6. Enums e Pattern Matching
 description: Tipos soma (Sum Types) com payloads posicionais e desestruturação exaustiva com match.
 ---
 
-# Enums e Pattern Matching
-
 Na FlexLang, `enum` não é apenas uma lista de constantes numéricas — são **Sum Types (Tipos Soma)** que podem carregar dados e payloads tipados em cada variante.
 
 ---

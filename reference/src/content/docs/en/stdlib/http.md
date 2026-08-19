@@ -3,8 +3,6 @@ title: net/http — REST Servers & Routing
 description: High-performance HTTP server API, REST verb routing, middlewares, CORS, and panic recovery.
 ---
 
-# `net/http` — REST Servers
-
 The `net/http` native module delivers a production-grade HTTP server with full REST verbs, route parameters, JSON body parsing, middlewares, CORS, and automatic panic recovery.
 
 ```flexlang

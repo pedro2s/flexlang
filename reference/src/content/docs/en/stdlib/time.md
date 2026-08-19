@@ -3,8 +3,6 @@ title: core/time — Time & Durations
 description: UTC timestamps, ISO 8601 formatting, Unix epochs, and duration calculations.
 ---
 
-# `core/time` — Time & Durations
-
 The `core/time` module handles UTC timestamps and interval calculations (*Duration*).
 
 ```flexlang

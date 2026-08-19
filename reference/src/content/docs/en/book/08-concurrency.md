@@ -3,8 +3,6 @@ title: 8. Structured Concurrency & Channels
 description: Lightweight green threads, structured concurrency scopes, rendezvous channels, and mutability isolation.
 ---
 
-# Structured Concurrency & Channels
-
 FlexLang is engineered to handle millions of concurrent connections with minimal memory overhead, preventing task leaks by design.
 
 ---

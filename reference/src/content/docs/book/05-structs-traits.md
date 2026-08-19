@@ -3,8 +3,6 @@ title: 5. Structs, Métodos e Traits
 description: Modelagem de dados orientada a dados com structs, blocos impl e polimorfismo seguro com traits.
 ---
 
-# Structs, Métodos e Traits
-
 A FlexLang separa claramente **dados** (armazenados em `struct`) de **comportamento** (definido em blocos `impl` e `trait`), promovendo uma arquitetura limpa sem a complexidade de herança de classes.
 
 ---

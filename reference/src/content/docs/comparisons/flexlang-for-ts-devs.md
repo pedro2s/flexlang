@@ -3,8 +3,6 @@ title: FlexLang para Desenvolvedores TypeScript
 description: Por que migrar de Node/TS para FlexLang — Compilação nativa, fim do 'async coloring' e tipos reais.
 ---
 
-# FlexLang para Desenvolvedores TypeScript
-
 Desenvolvedores TypeScript adoram a expressividade e ergonomia dos tipos modernos, mas frequentemente sofrem com o overhead de runtime do Node.js/V8 e com a contaminação de `async/await` em toda a base de código (*function coloring*).
 
 ---

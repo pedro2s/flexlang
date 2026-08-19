@@ -3,8 +3,6 @@ title: VSCode Setup & Tooling
 description: Setup the official FlexLang VSCode extension with LSP, syntax highlighting, and CodeLens.
 ---
 
-# VSCode Setup for FlexLang
-
 FlexLang provides official first-class support for **Visual Studio Code** via the built-in extension in `editors/vscode`.
 
 ---

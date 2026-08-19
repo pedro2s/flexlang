@@ -3,8 +3,6 @@ title: 1. Variáveis, Imutabilidade e Constantes
 description: Aprenda sobre let, let mut, const e o sistema de isolamento de mutabilidade da FlexLang.
 ---
 
-# Variáveis, Imutabilidade e Constantes
-
 Na FlexLang, a segurança de dados e a ausência de condições de corrida (*data races*) começam na declaração de variáveis.
 
 ---

@@ -3,8 +3,6 @@ title: FlexLang para Desenvolvedores Go
 description: Comparativo direto entre Go e FlexLang — Concorrência Estruturada, Result/match, e fim do 'if err != nil'.
 ---
 
-# FlexLang para Desenvolvedores Go
-
 Se você programa em Go, vai se sentir em casa na FlexLang. A linguagem mantém o modelo de execução leve com goroutines e GC de baixa pausa, mas resolve os três maiores pontos de dor do Go.
 
 ---

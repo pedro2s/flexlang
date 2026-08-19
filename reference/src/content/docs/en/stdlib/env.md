@@ -3,8 +3,6 @@ title: os/env — Environment Variables
 description: Secure reading, default values, and strict validation for environment variables.
 ---
 
-# `os/env` — Environment Variables
-
 The `os/env` module provides access to environment configuration and secret variables injected into production containers.
 
 ```flexlang

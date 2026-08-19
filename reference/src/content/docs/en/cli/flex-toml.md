@@ -3,8 +3,6 @@ title: flex.toml Manifest
 description: Specification of all configuration keys and options in the flex.toml manifest.
 ---
 
-# `flex.toml` Specification
-
 The `flex.toml` file is the declarative manifest required at the root of every FlexLang application.
 
 ---

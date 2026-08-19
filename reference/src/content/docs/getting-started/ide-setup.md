@@ -3,8 +3,6 @@ title: Configuração do VSCode & Tooling
 description: Configure a extensão oficial do VSCode com suporte a LSP, realce de sintaxe e CodeLens.
 ---
 
-# Configuração do VSCode para FlexLang
-
 A FlexLang possui suporte oficial de primeira classe para o **Visual Studio Code** através da extensão integrada no repositório (`editors/vscode`).
 
 ---

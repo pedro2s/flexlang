@@ -3,8 +3,6 @@ title: Production Deploy & Docker
 description: Packaging, compiling, and deploying FlexLang microservices in minimal Docker containers.
 ---
 
-# Production Deploy & Docker
-
 Because `flex build` compiles into a standalone native binary, production Docker images can leverage `scratch` or `alpine` bases weighting under **25 MB**.
 
 ---

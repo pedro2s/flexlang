@@ -3,8 +3,6 @@ title: core/time — Tempo e Durações
 description: Manipulação de timestamps UTC, formato ISO 8601, Epoch e durações na FlexLang.
 ---
 
-# `core/time` — Tempo & Durações
-
 O módulo `core/time` fornece manipulação precisa de timestamps UTC e cálculos de intervalos temporais (*Duration*).
 
 ```flexlang

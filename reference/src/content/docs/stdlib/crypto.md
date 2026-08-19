@@ -3,8 +3,6 @@ title: crypto — Criptografia e Hashes
 description: Hashing de senhas com bcrypt, geração de UUID v4, assinaturas HMAC e SHA-256.
 ---
 
-# `crypto` — Criptografia & Hashes
-
 O módulo `crypto` provê utilitários seguros para proteção de senhas, criação de identificadores únicos e assinaturas de segurança.
 
 ```flexlang

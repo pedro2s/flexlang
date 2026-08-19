@@ -3,8 +3,6 @@ title: 2. Primitive Types & Arithmetic
 description: Primitive types, IEEE-754 Floats, Integers, and strict arithmetic parity in FlexLang.
 ---
 
-# Primitive Types & Strict Arithmetic
-
 FlexLang provides a concise primitive type system designed to prevent undefined behavior and unexpected truncation bugs.
 
 ---

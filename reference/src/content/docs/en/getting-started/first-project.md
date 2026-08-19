@@ -3,8 +3,6 @@ title: Your First Project in 5 Minutes
 description: Create, test, run, and compile your first FlexLang application.
 ---
 
-# Your First Project in 5 Minutes
-
 In this guide, you will scaffold a new FlexLang project, explore its structure, run automated tests, and compile a native binary.
 
 ---

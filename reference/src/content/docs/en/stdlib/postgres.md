@@ -3,8 +3,6 @@ title: db/postgres — PostgreSQL Driver
 description: Connection pools, 100% parameterized queries, ACID transactions, and struct mapping.
 ---
 
-# `db/postgres` — PostgreSQL Driver
-
 The `db/postgres` module provides high-throughput transactional access to PostgreSQL with native SQL injection prevention via mandatory parameterized statements.
 
 ```flexlang

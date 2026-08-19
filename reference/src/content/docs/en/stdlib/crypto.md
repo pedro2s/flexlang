@@ -3,8 +3,6 @@ title: crypto — Cryptography & Hashes
 description: Password hashing with bcrypt, UUID v4 generation, HMAC-SHA256 signatures, and SHA-256 digests.
 ---
 
-# `crypto` — Cryptography & Hashes
-
 The `crypto` module provides secure primitives for authentication, unique identifiers, and payload signatures.
 
 ```flexlang

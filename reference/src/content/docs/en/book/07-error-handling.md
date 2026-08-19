@@ -3,8 +3,6 @@ title: 7. Modern Error Handling
 description: Result, Option, propagation operator ?, and inline catch expressions.
 ---
 
-# Modern Error Handling
-
 FlexLang rejects unchecked exceptions (`throw/try/catch`), which obscure control flow. Errors in FlexLang are **explicit, first-class values**.
 
 ---

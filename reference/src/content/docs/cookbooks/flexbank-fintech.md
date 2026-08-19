@@ -3,8 +3,6 @@ title: "Estudo de Caso: FlexBank API"
 description: Como construir uma API Bancária Fintech completa com FlexLang, Decimal, PostgreSQL, Auth e Observabilidade.
 ---
 
-# Estudo de Caso: FlexBank API (Fintech)
-
 O **FlexBank API** (`examples/09_flexbank_api`) é o projeto de referência enterprise da FlexLang. Ele demonstra como construir um sistema financeiro robusto, seguro e livre de erros de arredondamento.
 
 ---

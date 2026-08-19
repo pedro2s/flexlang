@@ -3,8 +3,6 @@ title: Overview & Philosophy
 description: Discover the design principles and core objectives behind FlexLang.
 ---
 
-# Overview & Philosophy of FlexLang
-
 **FlexLang** is a compiled, statically-typed programming language designed from day one to address the real-world challenges of building **modern, highly concurrent, and financially critical backends**.
 
 ---
