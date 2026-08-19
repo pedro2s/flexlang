@@ -35,14 +35,17 @@ A instrução `match` desestrutura enums com segurança e extrai os valores cont
 ```flexlang
 func processar(status: StatusTransacao) {
     match status {
-        StatusTransacao.Pendente => {
+        StatusTransacao.Pendente {
             print("Aguardando processamento...");
         },
-        StatusTransacao.Aprovada(recibo) => {
-            print("Transação aprovada! Recibo: ${recibo}");
+        StatusTransacao.Aprovada(recibo) {
+            print("Transação aprovada! Recibo: ");
+            print(recibo);
         },
-        StatusTransacao.Rejeitada(codigo, motivo) => {
-            print("Transação falhou [${codigo}]: ${motivo}");
+        StatusTransacao.Rejeitada(codigo, motivo) {
+            print("Transação rejeitada com código: ");
+            print(codigo);
+            print(motivo);
         }
     }
 }

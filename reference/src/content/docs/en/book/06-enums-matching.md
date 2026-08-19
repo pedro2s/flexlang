@@ -33,16 +33,19 @@ let t3 = TransactionStatus.Rejected(402, "Insufficient balance");
 The `match` statement safely destructures enums and binds payload arguments:
 
 ```flexlang
-func handle_status(status: TransactionStatus) {
+func process(status: TransactionStatus) {
     match status {
-        TransactionStatus.Pending => {
-            print("Awaiting gateway processing...");
+        TransactionStatus.Pending {
+            print("Pending processing...");
         },
-        TransactionStatus.Approved(receipt) => {
-            print("Payment settled! Receipt: ${receipt}");
+        TransactionStatus.Approved(receipt) {
+            print("Transaction approved! Receipt: ");
+            print(receipt);
         },
-        TransactionStatus.Rejected(code, reason) => {
-            print("Payment failed [${code}]: ${reason}");
+        TransactionStatus.Rejected(code, reason) {
+            print("Transaction rejected with code: ");
+            print(code);
+            print(reason);
         }
     }
 }
