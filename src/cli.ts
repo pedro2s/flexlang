@@ -2,6 +2,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { fileURLToPath } from "url";
 import { execSync } from "child_process";
 import { loadModuleGraph } from "./loader";
 import { TypeChecker } from "./checker";
@@ -10,8 +11,32 @@ import { GoTranspiler } from "./transpiler";
 import { FlexError, formatDiagnostic } from "./diagnostics";
 import { FileWatcher } from "./watcher";
 
-// Versão atual do compilador FlexLang
-const FLEX_VERSION = "0.3.0";
+/** Obtém dinamicamente a versão da FlexLang a partir do package.json com fallback seguro */
+function getFlexVersion(): string {
+    try {
+        let currentDir = typeof __dirname !== "undefined"
+            ? __dirname
+            : path.dirname(fileURLToPath(import.meta.url));
+
+        const root = path.parse(currentDir).root;
+        while (currentDir && currentDir !== root) {
+            const pkgPath = path.join(currentDir, "package.json");
+            if (fs.existsSync(pkgPath)) {
+                const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+                if (pkg.name === "@flexlang/cli" && pkg.version) {
+                    return pkg.version;
+                }
+            }
+            currentDir = path.dirname(currentDir);
+        }
+    } catch {
+        // Fallback caso não seja possível ler o arquivo
+    }
+    return "0.3.0";
+}
+
+// Versão atual do compilador FlexLang (lida dinamicamente do package.json)
+const FLEX_VERSION = getFlexVersion();
 
 function printUsage() {
     console.log(`🚀 FlexLang CLI (v${FLEX_VERSION})
