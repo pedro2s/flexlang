@@ -17,7 +17,8 @@ try {
 }
 
 export default defineConfig({
-  site: 'https://flexlang.dev',
+  site: 'https://pedro2s.github.io',
+  base: '/flexlang',
   integrations: [
     starlight({
       title: 'FlexLang Docs',
