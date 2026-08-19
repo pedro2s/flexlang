@@ -1,0 +1,96 @@
+---
+title: FlexLang — The Modern Backend Language
+description: The speed and concurrency of Go paired with the type safety of Rust and the ergonomics of TypeScript.
+template: splash
+hero:
+  tagline: Structured concurrency, green threads, Result/match type safety, and backpressure by default.
+  image:
+    file: ../../../assets/logo.svg
+  actions:
+    - text: Get Started in 5 min
+      link: /en/getting-started/overview/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/pedro2s/flexlang
+      icon: external
+      variant: secondary
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Why FlexLang?
+
+<CardGrid stagger>
+  <Card title="⚡ Go With a Superior Type System" icon="rocket">
+    M:N Goroutines and concurrent GC inherited from Go's battle-tested production runtime, combined with `Result<T, E>`, `Option<T>`, and exhaustive `match` to eliminate `if err != nil`.
+  </Card>
+
+  <Card title="🛡️ Native Structured Concurrency" icon="shield">
+    No orphaned background tasks or goroutine leaks. Every `spawn` lives within a hierarchical `scope` with automatic timeout propagation and cancellation.
+  </Card>
+
+  <Card title="🔒 Data-Race Freedom Without Lifetimes" icon="lock">
+    Immutability by default (`let`). Mutable variables (`mut`) belong to a single thread and are **moved** when sent over channels (*Move Semantics*), preventing data races without the steep curve of a borrow checker.
+  </Card>
+
+  <Card title="💰 Batteries-Included Enterprise Stdlib" icon="seti:db">
+    First-class native modules for REST APIs (`net/http`), PostgreSQL with parameterized queries (`db/postgres`), Arbitrary-Precision Financial Math (`math/decimal`), Time (`core/time`), and Cryptography (`crypto`).
+  </Card>
+
+  <Card title="🔄 Full Execution Parity" icon="puzzle">
+    Instant interpreted development mode (`flex run`) and native production binary compilation (`flex build`), guaranteeing 100% behavioral parity.
+  </Card>
+
+  <Card title="🛠️ Day-Zero Integrated Tooling" icon="setting">
+    Unified CLI (`flex init`, `flex test`, `flex build`, `flex run --watch`), compiler diagnostics with source spans, and an official VSCode extension with LSP.
+  </Card>
+</CardGrid>
+
+---
+
+## A Real-World Example in 30 Seconds
+
+See how concise and readable a complete REST API with database queries, clean error handling, and structured concurrency is in FlexLang:
+
+```flexlang
+import { Server, Request, Response } from "net/http";
+import { Pool } from "db/postgres";
+import { Decimal } from "math/decimal";
+import { log } from "core/log";
+
+struct Account {
+    id: String,
+    owner: String,
+    balance: Decimal
+}
+
+func get_balance(req: Request, mut res: Response) {
+    let account_id = req.param("id")?;
+    
+    // Clean inline error handling via the ? operator
+    let mut account = db.query_one("SELECT id, owner, balance FROM accounts WHERE id = $1", [account_id])?;
+    
+    log.info("Balance query executed", { account: account_id });
+    res.json(account);
+}
+
+func main() {
+    let db = Pool.connect(env.require("DATABASE_URL"))?;
+    
+    let mut server = Server.new(":8080");
+    server.use(cors_middleware);
+    server.get("/accounts/:id", get_balance);
+    
+    log.info("FlexLang server running on port 8080");
+    server.start();
+}
+```
+
+---
+
+<div style="text-align: center; margin-top: 3rem; margin-bottom: 2rem;">
+  <a href="/en/getting-started/overview/" class="badge-pro" style="text-decoration: none; font-size: 1rem; padding: 0.8rem 1.6rem;">
+    Explore the Complete Documentation →
+  </a>
+</div>

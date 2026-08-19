@@ -1,0 +1,17 @@
+{
+  "name": "@flexlang/reference-docs",
+  "version": "0.3.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.32.5",
+    "astro": "^5.4.2"
+  }
+}

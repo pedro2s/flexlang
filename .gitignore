@@ -3,3 +3,7 @@ dist/
 .env
 build/
 out/
+.astro/
+reference/dist/
+reference/node_modules/
+reference/.astro/
