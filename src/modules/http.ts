@@ -461,6 +461,93 @@ class FlexServer {
   }
 }
 
+class FlexMultipartForm {
+  readonly [NATIVE_TAG] = "MultipartForm";
+  public formData = new FormData();
+
+  add_field(name: string, value: string): null {
+    this.formData.append(name, value);
+    return null;
+  }
+
+  add_file(name: string, filename: string, content: string): null {
+    // Node 18+ nativo File/Blob support for fetch
+    const blob = new Blob([content], { type: "application/octet-stream" });
+    this.formData.append(name, blob, filename);
+    return null;
+  }
+}
+
+class FlexClientResponse {
+  readonly [NATIVE_TAG] = "ClientResponse";
+  constructor(
+    private readonly _status: number,
+    private readonly _body: string,
+    private readonly _headers: Map<string, string>
+  ) {}
+
+  status(): number { return this._status; }
+  body(): string { return this._body; }
+}
+
+class FlexHttpClient {
+  readonly [NATIVE_TAG] = "Client";
+  private timeoutMs: number;
+
+  constructor(config?: Map<string, unknown>) {
+    const t = config?.get("timeout_ms");
+    this.timeoutMs = typeof t === "number" && t > 0 ? t : 10000;
+  }
+
+  private async doFetch(url: string, init: RequestInit): Promise<any> {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const res = await fetch(url, { ...init, signal: controller.signal });
+      clearTimeout(id);
+      const body = await res.text();
+      const headers = new Map<string, string>();
+      res.headers.forEach((v, k) => headers.set(k, v));
+      return resultOk(new FlexClientResponse(res.status, body, headers));
+    } catch (e: any) {
+      clearTimeout(id);
+      if (e.name === "AbortError") return resultErr("timeout");
+      return resultErr(e.message || String(e));
+    }
+  }
+
+  async get(url: string): Promise<any> {
+    return this.doFetch(url, { method: "GET" });
+  }
+
+  async post(url: string, body: string): Promise<any> {
+    return this.doFetch(url, { method: "POST", body });
+  }
+
+  async post_json(url: string, data: Map<string, unknown>): Promise<any> {
+    return this.doFetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(Object.fromEntries(data)),
+    });
+  }
+
+  async put(url: string, body: string): Promise<any> {
+    return this.doFetch(url, { method: "PUT", body });
+  }
+
+  async delete(url: string): Promise<any> {
+    return this.doFetch(url, { method: "DELETE" });
+  }
+
+  async post_multipart(url: string, form: FlexMultipartForm): Promise<any> {
+    return this.doFetch(url, {
+      method: "POST",
+      body: form.formData, // O fetch gerencia automaticamente o Content-Type com o boundary
+    });
+  }
+}
+
 const GO_BOILERPLATE = [
   "// --- FlexLang HTTP Boilerplate (RFC-004 / RFC-011 / RFC-015) ---",
   "type ServerConfig struct {",
@@ -833,6 +920,103 @@ const GO_BOILERPLATE = [
   '    fmt.Printf("HTTP server shutdown error: %v\\n", err)',
   "  }",
   "}",
+  "",
+  "type ClientConfig struct {",
+  "  timeout_ms int",
+  "}",
+  "",
+  "type ClientResponse struct {",
+  "  _status  int",
+  "  _body    string",
+  "  _headers map[string]string",
+  "}",
+  "",
+  "func ClientResponse_status(res any) int { return res.(*ClientResponse)._status }",
+  "func ClientResponse_body(res any) string { return res.(*ClientResponse)._body }",
+  "",
+  "type MultipartForm struct {",
+  "  buf    *bytes.Buffer",
+  "  writer *multipart.Writer",
+  "}",
+  "",
+  "func NewMultipartForm() *MultipartForm {",
+  "  b := &bytes.Buffer{}",
+  "  return &MultipartForm{buf: b, writer: multipart.NewWriter(b)}",
+  "}",
+  "",
+  "func (m *MultipartForm) add_field(name string, value string) {",
+  "  m.writer.WriteField(name, value)",
+  "}",
+  "",
+  "func (m *MultipartForm) add_file(name string, filename string, content string) {",
+  "  part, _ := m.writer.CreateFormFile(name, filename)",
+  "  part.Write([]byte(content))",
+  "}",
+  "",
+  "type Client struct {",
+  "  raw *http.Client",
+  "}",
+  "",
+  "func Client_default() *Client {",
+  "  return NewClient(nil)",
+  "}",
+  "",
+  "func NewClient(cfg *ClientConfig) *Client {",
+  "  t := 10000",
+  "  if cfg != nil && cfg.timeout_ms > 0 { t = cfg.timeout_ms }",
+  "  return &Client{",
+  "    raw: &http.Client{Timeout: time.Duration(t) * time.Millisecond},",
+  "  }",
+  "}",
+  "",
+  "func (c *Client) doFetch(req *http.Request) Result {",
+  "  res, err := c.raw.Do(req)",
+  "  if err != nil {",
+  "    if os.IsTimeout(err) { return Result_Err_new(\"timeout\") }",
+  "    return Result_Err_new(err.Error())",
+  "  }",
+  "  defer res.Body.Close()",
+  "  b, _ := io.ReadAll(res.Body)",
+  "  headers := map[string]string{}",
+  "  for k, v := range res.Header {",
+  "    if len(v) > 0 { headers[k] = v[0] }",
+  "  }",
+  "  return Result_Ok_new(&ClientResponse{_status: res.StatusCode, _body: string(b), _headers: headers})",
+  "}",
+  "",
+  "func (c *Client) get(url string) Result {",
+  "  req, _ := http.NewRequest(\"GET\", url, nil)",
+  "  return c.doFetch(req)",
+  "}",
+  "",
+  "func (c *Client) delete(url string) Result {",
+  "  req, _ := http.NewRequest(\"DELETE\", url, nil)",
+  "  return c.doFetch(req)",
+  "}",
+  "",
+  "func (c *Client) post(url string, body string) Result {",
+  "  req, _ := http.NewRequest(\"POST\", url, strings.NewReader(body))",
+  "  return c.doFetch(req)",
+  "}",
+  "",
+  "func (c *Client) put(url string, body string) Result {",
+  "  req, _ := http.NewRequest(\"PUT\", url, strings.NewReader(body))",
+  "  return c.doFetch(req)",
+  "}",
+  "",
+  "func (c *Client) post_json(url string, data any) Result {",
+  "  b, _ := json.Marshal(data)",
+  "  req, _ := http.NewRequest(\"POST\", url, bytes.NewReader(b))",
+  "  req.Header.Set(\"Content-Type\", \"application/json\")",
+  "  return c.doFetch(req)",
+  "}",
+  "",
+  "func (c *Client) post_multipart(url string, form *MultipartForm) Result {",
+  "  form.writer.Close()",
+  "  req, _ := http.NewRequest(\"POST\", url, form.buf)",
+  "  req.Header.Set(\"Content-Type\", form.writer.FormDataContentType())",
+  "  return c.doFetch(req)",
+  "}",
   "// ---------------------------------",
 ].join("\n");
 
@@ -914,6 +1098,48 @@ export const httpModule: NativeModule = {
         { name: "max_age", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
       ],
     },
+    {
+      name: "ClientConfig",
+      properties: [
+        { name: "timeout_ms", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
+      ],
+    },
+    {
+      name: "ClientResponse",
+      goPointer: true,
+      statics: [
+        { name: "status", arity: 1, returns: { kind: "Int" } },
+        { name: "body", arity: 1, returns: { kind: "String" } },
+      ],
+      methods: [],
+    },
+    {
+      name: "MultipartForm",
+      goPointer: true,
+      statics: [
+        { name: "new", arity: 0, returns: { kind: "Struct", name: "MultipartForm", genericArgs: [] } },
+      ],
+      methods: [
+        { name: "add_field", arity: 2, returns: { kind: "Void" } },
+        { name: "add_file", arity: 3, returns: { kind: "Void" } },
+      ],
+    },
+    {
+      name: "Client",
+      goPointer: true,
+      statics: [
+        { name: "default", arity: 0, returns: { kind: "Struct", name: "Client", genericArgs: [] } },
+        { name: "new", arity: 1, returns: { kind: "Struct", name: "Client", genericArgs: [] } },
+      ],
+      methods: [
+        { name: "get", arity: 1, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "Struct", name: "ClientResponse", genericArgs: [] }, { kind: "String" }] } },
+        { name: "delete", arity: 1, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "Struct", name: "ClientResponse", genericArgs: [] }, { kind: "String" }] } },
+        { name: "post", arity: 2, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "Struct", name: "ClientResponse", genericArgs: [] }, { kind: "String" }] } },
+        { name: "post_json", arity: 2, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "Struct", name: "ClientResponse", genericArgs: [] }, { kind: "String" }] } },
+        { name: "put", arity: 2, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "Struct", name: "ClientResponse", genericArgs: [] }, { kind: "String" }] } },
+        { name: "post_multipart", arity: 2, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "Struct", name: "ClientResponse", genericArgs: [] }, { kind: "String" }] } },
+      ],
+    },
   ],
 
   usesBuiltins: ["Result", "Option"],
@@ -941,10 +1167,31 @@ export const httpModule: NativeModule = {
         { name: "max_age", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
       ],
     },
+    MultipartForm: {
+      [NATIVE_TAG]: "MultipartForm",
+      new: () => new FlexMultipartForm(),
+    },
+    Client: {
+      [NATIVE_TAG]: "Client",
+      default: () => new FlexHttpClient(),
+      new: (config?: Map<string, unknown>) => new FlexHttpClient(config),
+    },
+    ClientConfig: {
+      kind: "StructDeclaration",
+      name: "ClientConfig",
+      properties: [
+        { name: "timeout_ms", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
+      ],
+    },
+    ClientResponse: {
+      [NATIVE_TAG]: "ClientResponse",
+      status: (res: any) => res.status(),
+      body: (res: any) => res.body(),
+    },
   }),
 
   goCodegen: {
-    imports: ["net/http", "net/url", "encoding/json", "io", "strconv", "strings", "time", "context", "os", "os/signal", "syscall", "fmt"],
+    imports: ["net/http", "net/url", "encoding/json", "io", "strconv", "strings", "time", "context", "os", "os/signal", "syscall", "fmt", "bytes", "mime/multipart"],
     boilerplate: GO_BOILERPLATE,
   },
 };

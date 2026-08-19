@@ -44,7 +44,29 @@ gantt
 
 ---
 
-## 3. Matriz de Riscos e Mitigações
+## 3. Status das Funcionalidades (RFCs)
+
+| Status | RFC | Funcionalidade |
+|---|---|---|
+| ✅ | RFC-031 | Cliente HTTP Nativo |
+| ⏳ | RFC-032 | Módulo `config` e leitura dotenv |
+| ⏳ | RFC-033 | Serialização `std/json` e Encoding |
+| ⏳ | RFC-034 | `std/fs` e manipulador de Paths |
+| ⏳ | RFC-035 | `crypto/jwt` (RS256/HS256) |
+| ⏳ | RFC-036 | Driver nativo Redis e Locks Distribuídos |
+| ⏳ | RFC-037 | Motor de validação `std/validator` |
+| ⏳ | RFC-038 | Módulo `core/resilience` (Circuit Breaker) |
+| ⏳ | RFC-039 | Telemetria `core/telemetry` |
+| ⏳ | RFC-040 | Conector `mq/kafka` |
+| ⏳ | RFC-041 | Framework de Testes Nativo |
+| ⏳ | RFC-042 | Motor de Idempotência `finance/idempotency` |
+| ⏳ | RFC-043 | Carga E2E (FlexBank) |
+| ⏳ | RFC-044 | Motor de Expressões Regulares (`std/regex`) |
+| ⏳ | RFC-045 | Agendador de Tarefas (`core/scheduler`) |
+
+---
+
+## 4. Matriz de Riscos e Mitigações
 
 | Risco Técnico | Probabilidade | Impacto | Mitigação |
 |---|---|---|---|
@@ -54,7 +76,7 @@ gantt
 
 ---
 
-## 4. Definition of Done (DoD)
+## 5. Definition of Done (DoD)
 
 - [ ] Todas as 13 RFCs (031 a 043) implementadas.
 - [ ] 100% dos testes unitários e de integração passando (`npm test`, `npm run test:parity`).
