@@ -6,6 +6,7 @@ import { decimalModule } from "./decimal";
 import { envModule } from "./env";
 import { timeModule } from "./time";
 import { cryptoModule } from "./crypto";
+import { dotenvModule } from "./dotenv";
 
 export class ModuleRegistry {
   private modules = new Map<string, NativeModule>();
@@ -33,4 +34,5 @@ registry.register(decimalModule);
 registry.register(envModule);
 registry.register(timeModule);
 registry.register(cryptoModule);
+registry.register(dotenvModule);
 

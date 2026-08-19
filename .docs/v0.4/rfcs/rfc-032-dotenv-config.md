@@ -1,6 +1,6 @@
 # RFC-032 — Módulo de Carregamento de Configurações `.env` (`config/dotenv`)
 
-> **Status:** Proposto · **Prioridade:** P0 — Bloqueante (Solicitado) · **Depende de:** RFC-026 (`os/env`), RFC-034 (`std/fs`)
+> **Status:** Implementado · **Prioridade:** P0 — Bloqueante (Solicitado) · **Depende de:** RFC-026 (`os/env`), RFC-034 (`std/fs`)
 
 ---
 
