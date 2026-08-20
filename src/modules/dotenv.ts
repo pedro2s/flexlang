@@ -124,7 +124,7 @@ export const dotenvModule: NativeModule = {
         { name: "load", arity: 0, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "Void" }, { kind: "String" }] } },
         { name: "load_file", arity: 1, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "Void" }, { kind: "String" }] } },
         { name: "load_with", arity: 1, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "Void" }, { kind: "String" }] } },
-        { name: "parse", arity: 1, returns: { kind: "MapTypeNode", valueType: { kind: "NamedTypeNode", name: "String" } } },
+        { name: "parse", arity: 1, returns: { kind: "Map" } },
       ],
       methods: [],
     },

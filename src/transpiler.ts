@@ -1199,7 +1199,7 @@ export class GoTranspiler {
   private transpileCatch(expr: Extract<Expr, { kind: "CatchExpr" }>): string {
     this.usedBuiltins.add("Result");
     const inner = this.transpileExpr(expr.expression);
-    const enumDecl = this.enumOf(expr.expression) ?? this.resolveEnum("Result");
+    const enumDecl = this.enumOf(expr.expression) ?? this.enums.get("Result");
 
     if (!enumDecl) {
       throw new Error(
@@ -1208,7 +1208,7 @@ export class GoTranspiler {
     }
 
     const okVariant = successVariant(enumDecl)!;
-    const errVariant = enumDecl.variants.find((v) => v.name === "Err") ?? enumDecl.variants[1];
+    const errVariant = enumDecl.variants.find((v: any) => v.name === "Err") ?? enumDecl.variants[1]!;
     const tmp = this.nextTmp("catch");
     const bound = this.nextTmp("cv");
     const caseOk = this.variantTypeName(enumDecl.name, okVariant.name);

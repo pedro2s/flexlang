@@ -34,9 +34,9 @@ export const base64Module: NativeModule = {
     {
       name: "base64",
       statics: [
-        { name: "encode", arity: 1, returns: { kind: "NamedTypeNode", name: "String" } },
+        { name: "encode", arity: 1, returns: { kind: "String" } },
         { name: "decode", arity: 1, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "String" }, { kind: "String" }] } },
-        { name: "encode_url_safe", arity: 1, returns: { kind: "NamedTypeNode", name: "String" } },
+        { name: "encode_url_safe", arity: 1, returns: { kind: "String" } },
         { name: "decode_url_safe", arity: 1, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "String" }, { kind: "String" }] } },
       ],
       methods: [],

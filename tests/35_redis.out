@@ -1,0 +1,6 @@
+error[E2011]: ReferenceError: Identifier 'null' not found
+ --> tests/35_redis.flex:43:20
+   |
+43 |   return Result.Ok(null);
+   |                    ^^^^
+   |

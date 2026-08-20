@@ -61,8 +61,8 @@ async function main() {
     const testErrorScript = `
       import { Pool } from "db/postgres";
       match Pool.connect("postgres://localhost:59999/invalid") {
-        Result.Ok(p) => { print("nao esperado"); },
-        Result.Err(e) => { print("ok: erro capturado"); }
+        Result.Ok(p) { print("nao esperado"); },
+        Result.Err(e) { print("ok: erro capturado"); }
       }
     `;
 
@@ -119,8 +119,8 @@ async function main() {
     }
 
     match test_db() {
-      Result.Ok(v) => { print("suite_completa_ok"); },
-      Result.Err(e) => { print("erro: \${e}"); }
+      Result.Ok(v) { print("suite_completa_ok"); },
+      Result.Err(e) { print("erro: \${e}"); }
     }
   `;
 

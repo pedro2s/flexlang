@@ -1,7 +1,6 @@
 import { NATIVE_TAG, type NativeModule } from "./types";
 import { resultOk, resultErr } from "../stdlib";
-import _jwt from "jsonwebtoken";
-const jwt: any = _jwt;
+import jwt, { type SignOptions, type VerifyOptions } from "jsonwebtoken";
 
 const GO_BOILERPLATE = `// --- FlexLang crypto/jwt ---
 func jwt_sign(payload any, options any) Result {
@@ -208,10 +207,10 @@ export const jwtModule: NativeModule = {
     {
       name: "jwt",
       statics: [
-        { name: "sign", arity: 2, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "NamedTypeNode", name: "String" }, { kind: "NamedTypeNode", name: "String" }] } },
-        { name: "sign_rsa", arity: 2, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "NamedTypeNode", name: "String" }, { kind: "NamedTypeNode", name: "String" }] } },
-        { name: "verify", arity: 2, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "Any" }, { kind: "NamedTypeNode", name: "String" }] } },
-        { name: "verify_rsa", arity: 2, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "Any" }, { kind: "NamedTypeNode", name: "String" }] } },
+        { name: "sign", arity: 2, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "String" }, { kind: "String" }] } },
+        { name: "sign_rsa", arity: 2, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "String" }, { kind: "String" }] } },
+        { name: "verify", arity: 2, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "Any" }, { kind: "String" }] } },
+        { name: "verify_rsa", arity: 2, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "Any" }, { kind: "String" }] } },
       ],
       methods: [],
     },
@@ -228,7 +227,7 @@ export const jwtModule: NativeModule = {
           const jsOpts = flexToJs(options);
           const secret = jsOpts.secret || "";
           
-          const signOpts: jwt.SignOptions = {};
+          const signOpts: SignOptions = {};
           if (jsOpts.algorithm) signOpts.algorithm = jsOpts.algorithm;
           if (typeof jsOpts.expires_in === "number") signOpts.expiresIn = jsOpts.expires_in; // in seconds
           if (jsOpts.issuer) signOpts.issuer = jsOpts.issuer;
@@ -245,7 +244,7 @@ export const jwtModule: NativeModule = {
           const jsOpts = flexToJs(options);
           const privateKey = jsOpts.private_key_pem || "";
           
-          const signOpts: jwt.SignOptions = {};
+          const signOpts: SignOptions = {};
           signOpts.algorithm = jsOpts.algorithm || "RS256";
           if (typeof jsOpts.expires_in === "number") signOpts.expiresIn = jsOpts.expires_in;
           if (jsOpts.issuer) signOpts.issuer = jsOpts.issuer;
@@ -261,7 +260,7 @@ export const jwtModule: NativeModule = {
           const jsOpts = flexToJs(options);
           const secret = jsOpts.secret || "";
           
-          const verifyOpts: jwt.VerifyOptions = {};
+          const verifyOpts: VerifyOptions = {};
           if (jsOpts.expected_issuer) verifyOpts.issuer = jsOpts.expected_issuer;
 
           const decoded = jwt.verify(token, secret, verifyOpts);
@@ -275,7 +274,7 @@ export const jwtModule: NativeModule = {
           const jsOpts = flexToJs(options);
           const publicKey = jsOpts.public_key_pem || "";
           
-          const verifyOpts: jwt.VerifyOptions = {};
+          const verifyOpts: VerifyOptions = {};
           if (jsOpts.expected_issuer) verifyOpts.issuer = jsOpts.expected_issuer;
           verifyOpts.algorithms = ["RS256", "RS384", "RS512"];
 

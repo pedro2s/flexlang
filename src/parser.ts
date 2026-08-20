@@ -23,6 +23,9 @@ import {
   type ImportDeclaration,
   type LambdaExpr,
   type Span,
+  type IfStmt,
+  type MatchStmt,
+  type ConstDeclaration,
 } from "./ast";
 import { Lexer } from "./lexer";
 import { FlexError } from "./diagnostics";
@@ -374,7 +377,7 @@ export class Parser {
         const selfToken = this.consume(TokenType.Self);
         parameters.push({
           name: "self",
-          typeAnnotation: { kind: "Any" },
+          typeAnnotation: { kind: "NamedTypeNode", name: "Any" },
           isMut,
           span: this.spanFrom(selfToken, selfToken),
         });

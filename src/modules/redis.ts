@@ -242,13 +242,13 @@ export const redisModule: NativeModule = {
   types: [
     {
       name: "RedisConfig",
-      fields: [
-        { name: "host", type: { kind: "String" } },
-        { name: "port", type: { kind: "Int" } },
-        { name: "password", type: { kind: "Enum", name: "Option", genericArgs: [{ kind: "String" }] } },
-        { name: "db", type: { kind: "Int" } },
-        { name: "max_pool_size", type: { kind: "Int" } },
-        { name: "connect_timeout", type: { kind: "Struct", name: "Duration", genericArgs: [] } },
+      properties: [
+        { name: "host", typeAnnotation: { kind: "NamedTypeNode", name: "String" } },
+        { name: "port", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
+        { name: "password", typeAnnotation: { kind: "GenericTypeNode", name: "Option", typeArguments: [{ kind: "NamedTypeNode", name: "String" }] } },
+        { name: "db", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
+        { name: "max_pool_size", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
+        { name: "connect_timeout", typeAnnotation: { kind: "NamedTypeNode", name: "Duration" } },
       ],
     },
     {
@@ -310,8 +310,23 @@ export const redisModule: NativeModule = {
   usesBuiltins: ["Result", "Option"],
 
   runtimeBinding: () => ({
-    RedisConfig: { kind: "StructDeclaration" },
-    RedisLock: { kind: "StructDeclaration" },
+    RedisConfig: {
+      kind: "StructDeclaration",
+      name: "RedisConfig",
+      properties: [
+        { name: "host", typeAnnotation: { kind: "NamedTypeNode", name: "String" } },
+        { name: "port", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
+        { name: "password", typeAnnotation: { kind: "GenericTypeNode", name: "Option", typeArguments: [{ kind: "NamedTypeNode", name: "String" }] } },
+        { name: "db", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
+        { name: "max_pool_size", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
+        { name: "connect_timeout", typeAnnotation: { kind: "NamedTypeNode", name: "Duration" } },
+      ],
+    },
+    RedisLock: {
+      kind: "StructDeclaration",
+      name: "RedisLock",
+      properties: [],
+    },
     Redis: {
       [NATIVE_TAG]: "Redis",
       connect: async (config: Map<string, any>) => {

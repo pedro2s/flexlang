@@ -87,9 +87,9 @@ export const jsonModule: NativeModule = {
     {
       name: "json",
       statics: [
-        { name: "parse", arity: 1, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "MapTypeNode", valueType: { kind: "Any" } }, { kind: "NamedTypeNode", name: "String" }] } },
-        { name: "stringify", arity: 1, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "NamedTypeNode", name: "String" }, { kind: "NamedTypeNode", name: "String" }] } },
-        { name: "stringify_pretty", arity: 2, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "NamedTypeNode", name: "String" }, { kind: "NamedTypeNode", name: "String" }] } },
+        { name: "parse", arity: 1, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "Map" }, { kind: "String" }] } },
+        { name: "stringify", arity: 1, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "String" }, { kind: "String" }] } },
+        { name: "stringify_pretty", arity: 2, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "String" }, { kind: "String" }] } },
         { name: "get", arity: 2, returns: { kind: "Enum", name: "Option", genericArgs: [{ kind: "Any" }] } },
         { name: "set", arity: 3, returns: { kind: "Void" } },
       ],

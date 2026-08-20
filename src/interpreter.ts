@@ -747,7 +747,7 @@ export class Interpreter {
                 throw new Error(`TypeError: Method '${(expr.caller as any).property}' not found`);
               }
 
-              const args = [];
+              const args: any[] = [];
               for (const arg of expr.args) {
                   args.push(await this.evaluateExpr(arg, env));
               }

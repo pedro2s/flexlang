@@ -38,12 +38,12 @@ export const pathModule: NativeModule = {
     {
       name: "path",
       statics: [
-        { name: "join", arity: 1, returns: { kind: "NamedTypeNode", name: "String" } },
-        { name: "normalize", arity: 1, returns: { kind: "NamedTypeNode", name: "String" } },
-        { name: "basename", arity: 1, returns: { kind: "NamedTypeNode", name: "String" } },
-        { name: "dirname", arity: 1, returns: { kind: "NamedTypeNode", name: "String" } },
-        { name: "ext", arity: 1, returns: { kind: "NamedTypeNode", name: "String" } },
-        { name: "is_absolute", arity: 1, returns: { kind: "NamedTypeNode", name: "Bool" } },
+        { name: "join", arity: 1, returns: { kind: "String" } },
+        { name: "normalize", arity: 1, returns: { kind: "String" } },
+        { name: "basename", arity: 1, returns: { kind: "String" } },
+        { name: "dirname", arity: 1, returns: { kind: "String" } },
+        { name: "ext", arity: 1, returns: { kind: "String" } },
+        { name: "is_absolute", arity: 1, returns: { kind: "Bool" } },
       ],
       methods: [],
     },

@@ -22,7 +22,7 @@ export const hexModule: NativeModule = {
     {
       name: "hex",
       statics: [
-        { name: "encode", arity: 1, returns: { kind: "NamedTypeNode", name: "String" } },
+        { name: "encode", arity: 1, returns: { kind: "String" } },
         { name: "decode", arity: 1, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "String" }, { kind: "String" }] } },
       ],
       methods: [],

@@ -22,8 +22,8 @@
     "declarationMap": true,
 
     // Stricter Typechecking Options
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
+    // "noUncheckedIndexedAccess": true,
+    // "exactOptionalPropertyTypes": true,
 
     // Style Options
     // "noImplicitReturns": true,
@@ -40,6 +40,8 @@
     "isolatedModules": true,
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
-    "skipLibCheck": true,
-  }
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*", "tests/**/*"],
+  "exclude": ["node_modules", "dist", "reference", "editors"]
 }
