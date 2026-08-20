@@ -10,6 +10,8 @@ import { dotenvModule } from "./dotenv";
 import { hexModule } from "./hex";
 import { base64Module } from "./base64";
 import { jsonModule } from "./json";
+import { pathModule } from "./path";
+import { fsModule } from "./fs";
 
 export class ModuleRegistry {
   private modules = new Map<string, NativeModule>();
@@ -41,4 +43,6 @@ registry.register(dotenvModule);
 registry.register(hexModule);
 registry.register(base64Module);
 registry.register(jsonModule);
+registry.register(pathModule);
+registry.register(fsModule);
 

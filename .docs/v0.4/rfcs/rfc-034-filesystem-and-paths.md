@@ -1,6 +1,6 @@
 # RFC-034 — Módulo de Sistema de Arquivos e Caminhos (`std/fs`, `std/path`)
 
-> **Status:** Proposto · **Prioridade:** P0 · **Depende de:** nada
+> **Status:** Implementado · **Prioridade:** P0 · **Depende de:** nada
 
 ---
 
