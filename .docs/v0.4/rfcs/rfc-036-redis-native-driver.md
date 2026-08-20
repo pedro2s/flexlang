@@ -1,6 +1,6 @@
 # RFC-036 — Driver Nativo de Cache e Locks Distribuídos (`db/redis`)
 
-> **Status:** Proposto · **Prioridade:** P1 · **Depende de:** RFC-027 (`core/time`)
+> **Status:** IMPLEMENTADO · **Prioridade:** P1 · **Depende de:** RFC-027 (`core/time`)
 
 ---
 
