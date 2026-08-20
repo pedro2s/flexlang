@@ -21,18 +21,15 @@ Esta RFC introduz a suíte padrão de manipulação e codificação de dados.
 ```flexlang
 import { json } from "encoding/json";
 
-// 1. Parsing Type-Safe de String JSON para Structs (Paridade com unmarshal Go)
-struct AccountStatus {
-    account_id: String,
-    amount: String,
-    active: Bool
-}
-
+// 1. Parsing dinâmico de String JSON para Maps (Estilo Clássico)
 let json_str = "{\"account_id\": \"123\", \"amount\": \"500.00\", \"active\": true}";
-let data = json.parse_as<AccountStatus>(json_str)?;
+let data_map = json.parse(json_str)?;
 
-print(data.account_id); // "123"
-print(data.active);     // true
+// Extração segura utilizando Option e métodos utilitários
+let account_id = json.get(data_map, "account_id").unwrap(); // "123"
+
+// Modificação de propriedades do Map em runtime
+json.set(data_map, "active", false);
 
 // 2. Serialização de dados estritos FlexLang para String JSON
 let payload = {
@@ -114,12 +111,12 @@ func create_signed_webhook_payload(event_type: String, account_id: String, amoun
 ## 5. Implementação e Paridade
 
 ### 5.1 Modo Interpretado (TypeScript)
-- `json.parse_as<T>` mapeia para `JSON.parse`, seguido de uma verificação estrutural (shape validation) contra a definição do tipo `T` exportada no AST para garantir que não há `any` ou dados corrompidos.
+- `json.parse` mapeia dinamicamente para `JSON.parse` instanciando um Map.
 - `base64` utiliza `Buffer.from(s, 'utf-8').toString('base64')` e `Buffer.from(b64, 'base64').toString('utf-8')`.
 - `hex` utiliza `Buffer.from(s, 'utf-8').toString('hex')`.
 
 ### 5.2 Modo Compilado (Go)
-- `encoding/json` mapeia para `json.Unmarshal` passando a referência da struct Go associada a `T`, alcançando 100% de type-safety estático.
+- `encoding/json` mapeia o parsing para `json.Unmarshal` usando mapa de interface genérica `map[string]any` com suporte integral a conversão bidirecional.
 - `encoding/base64` mapeia para `encoding/base64.StdEncoding` e `encoding/base64.URLEncoding`.
 - `encoding/hex` mapeia para `encoding/hex.EncodeToString` e `encoding/hex.DecodeString`.
 
