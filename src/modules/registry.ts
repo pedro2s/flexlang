@@ -15,6 +15,7 @@ import { fsModule } from "./fs";
 import { jwtModule } from "./jwt";
 import { redisModule } from "./redis";
 import { validatorModule } from "./validator";
+import { resilienceModule } from "./resilience";
 
 export class ModuleRegistry {
   private modules = new Map<string, NativeModule>();
@@ -51,4 +52,5 @@ registry.register(fsModule);
 registry.register(jwtModule);
 registry.register(redisModule);
 registry.register(validatorModule);
+registry.register(resilienceModule);
 

@@ -135,6 +135,9 @@ export class GoTranspiler {
             for (const nativeType of mod?.types ?? []) {
               this.nativeTypes.set(nativeType.name, nativeType);
             }
+            for (const enumDecl of mod?.enums ?? []) {
+              this.enums.set(enumDecl.name, enumDecl);
+            }
             // O módulo pode referenciar Result/Option direto no seu boilerplate Go
             // (ex: net/http, RFC-004) sem que o programa do usuário os use em
             // nenhum outro lugar — sem isso o cabeçalho não emitiria a definição.
@@ -210,6 +213,11 @@ export class GoTranspiler {
     // Injetar Native Modules importados
     const boilerplates: string[] = [];
     for (const [name, mod] of this.nativeModules) {
+      if (mod.enums) {
+        for (const enumDecl of mod.enums) {
+          boilerplates.push(this.capture(() => this.transpileEnum(enumDecl)).trimEnd());
+        }
+      }
       if (!mod.goCodegen) continue;
       for (const goImport of mod.goCodegen.imports) this.goImports.add(goImport);
       if (mod.goCodegen.thirdParty) {

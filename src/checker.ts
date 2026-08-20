@@ -186,6 +186,9 @@ export class TypeChecker {
               fileStructs.set(nativeType.name, nativeStructDeclaration(nativeType));
               fileNativeTypes.set(nativeType.name, nativeType);
             }
+            for (const enumDecl of mod.enums ?? []) {
+              fileEnums.set(enumDecl.name, enumDecl);
+            }
             for (const nativeFunc of mod.functions ?? []) {
               fileNativeFunctions.set(nativeFunc.name, nativeFunc);
             }
@@ -530,6 +533,7 @@ export class TypeChecker {
           const returnedType = this.checkExpr(stmt.value, env);
           if (this.lambdaReturnStack.length > 0) {
             this.lambdaReturnStack[this.lambdaReturnStack.length - 1] = returnedType;
+            break;
           }
           const expectedReturn = env.get("__RETURN_TYPE__");
           // Valida a instanciação dos embutidos: `Result.Ok(x)` aceita qualquer x

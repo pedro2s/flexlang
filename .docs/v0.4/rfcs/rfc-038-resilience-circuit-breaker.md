@@ -1,6 +1,6 @@
 # RFC-038 — Módulo de Resiliência: Circuit Breaker, Retries e Rate Limiting (`core/resilience`)
 
-> **Status:** Proposto · **Prioridade:** P1 · **Depende de:** RFC-027 (`core/time`), RFC-031 (`net/http: Client`)
+> **Status:** IMPLEMENTADO · **Prioridade:** P1 · **Depende de:** RFC-027 (`core/time`), RFC-031 (`net/http: Client`)
 
 ---
 
