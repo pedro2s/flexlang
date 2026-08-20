@@ -1,6 +1,6 @@
 # RFC-037 — Módulo de Validação Declarativa de Dados (`std/validator`)
 
-> **Status:** Proposto · **Prioridade:** P1 · **Depende de:** RFC-019 (`String methods`), RFC-025 (`math/decimal`)
+> **Status:** IMPLEMENTADO · **Prioridade:** P1 · **Depende de:** RFC-019 (`String methods`), RFC-025 (`math/decimal`)
 
 ---
 

@@ -200,6 +200,7 @@ async function runParity() {
     process.exit(1);
   }
   fs.rmSync(workDir, { recursive: true, force: true });
+  process.exit(0);
 }
 
 runParity();

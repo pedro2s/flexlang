@@ -1,7 +1,7 @@
 import { Redis, RedisConfig, RedisLock } from "db/redis";
 import { Duration } from "core/time";
 
-func run_test() -> Result<Void, String> {
+func run_test() -> Result<Int, String> {
   let redis = Redis.connect(RedisConfig {
     host: "127.0.0.1",
     port: 6379,
@@ -19,7 +19,7 @@ func run_test() -> Result<Void, String> {
   redis.set_ex("parity:key1", "foo", Duration.seconds(5))?;
   let val = redis.get("parity:key1")?;
   match val {
-    Option.Some(v) { print("GET OK: \${v}"); },
+    Option.Some(v) { print("GET OK: ${v}"); },
     Option.None { print("GET MISS"); }
   }
 
@@ -27,7 +27,7 @@ func run_test() -> Result<Void, String> {
   redis.del("parity:counter")?;
   let c1 = redis.incr("parity:counter")?;
   let c2 = redis.incr("parity:counter")?;
-  print("INCR: \${c2}");
+  print("INCR: ${c2}");
 
   // 4. Distributed Lock (Sucesso na primeira e falha na concorrência)
   let lock = redis.acquire_lock("parity:key_lock", Duration.seconds(10))?;
@@ -40,10 +40,10 @@ func run_test() -> Result<Void, String> {
   lock.release()?;
   print("LOCK RELEASED");
   
-  return Result.Ok(null);
+  return Result.Ok(1);
 }
 
 match run_test() {
   Result.Ok(v) { print("Fim"); },
-  Result.Err(e) { print("ERRO MAIN: \${e}"); }
+  Result.Err(e) { print("ERRO MAIN: ${e}"); }
 }

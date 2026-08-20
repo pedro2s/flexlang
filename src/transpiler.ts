@@ -755,9 +755,13 @@ export class GoTranspiler {
       this.indent();
       for (let i = 0; i < arm.binders.length; i++) {
         const binder = arm.binders[i]!;
-        const { cast } = this.payloadAccess(decl, payload[i], genericArgs);
-        this.emitLine(`${this.goIdent(binder)} := ${bound}.Field${i}${cast}`);
-        this.emitDiscardIfUnused(binder, arm.body.body);
+        if (binder === "_") {
+          this.emitLine(`_ = ${bound}.Field${i}`);
+        } else {
+          const { cast } = this.payloadAccess(decl, payload[i], genericArgs);
+          this.emitLine(`${this.goIdent(binder)} := ${bound}.Field${i}${cast}`);
+          this.emitDiscardIfUnused(binder, arm.body.body);
+        }
       }
       this.transpileStmts(arm.body.body);
       this.dedent();
@@ -1498,6 +1502,7 @@ export class GoTranspiler {
    * legal em FlexLang. Quando o nome não é lido, emitimos `_ = nome`.
    */
   private emitDiscardIfUnused(name: string, rest: Stmt[]): void {
+    if (name === "_") return;
     if (this.funcDepth === 0) return;
     if (!this.isUsedIn(rest, name)) {
       this.emitLine(`_ = ${this.goIdent(name)}`);

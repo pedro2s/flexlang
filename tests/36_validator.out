@@ -1,0 +1,14 @@
+cpf_ok: true
+cpf_fake: false
+cnpj_ok: true
+cnpj_fake: false
+email_ok: true
+email_fake: false
+uuid_ok: true
+uuid_fake: false
+DTO OK
+ERRORS COUNT: 3
+err: account -> account deve ter no mínimo 4 caracteres
+err: pix -> pix é obrigatório
+err: amount -> amount must be positive
+SUITE COMPLETED
