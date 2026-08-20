@@ -29,9 +29,10 @@ const GO_RESERVED = new Set([
 
 export class GoTranspiler {
   private out: string = "";
-  private indentLevel: number = 0;
-  private importedModules = new Set<string>();
-  private goImports = new Set<string>();
+  private indentLevel = 0;
+  private goImports = new Set<string>(["fmt"]);
+  public thirdPartyDeps = new Set<string>();
+  private usedBuiltins = new Set<string>();
 
   // Tabelas de declarações, preenchidas antes de emitir qualquer código.
   private enums = new Map<string, EnumDeclaration>();
@@ -43,12 +44,9 @@ export class GoTranspiler {
   private structDecls = new Map<string, StructDeclaration>();
   private traitNames = new Set<string>();
 
-  // Tipos embutidos (Result/Option) referenciados pelo programa: só esses são
-  // emitidos, para não poluir a saída de quem não usa nenhum dos dois.
-  private usedBuiltins = new Set<string>();
-
   // Superfície dos módulos nativos importados (RFC-003), por nome de tipo.
   private nativeTypes = new Map<string, NativeType>();
+  private nativeModules = new Map<string, any>();
 
   // Anotação de tipos vinda do TypeChecker (ver RFC-001).
   private types: TypeMap = new Map();
@@ -66,13 +64,14 @@ export class GoTranspiler {
     this.indentLevel = 0;
     this.tmpCount = 0;
     this.funcDepth = 0;
-    this.goImports.clear();
-    this.importedModules.clear();
+    this.goImports = new Set(["fmt"]);
+    this.thirdPartyDeps = new Set();
+    this.nativeModules.clear();
     this.enums.clear();
     this.structNames.clear();
     this.structDecls.clear();
     this.traitNames.clear();
-    this.usedBuiltins.clear();
+    this.usedBuiltins = new Set();
     this.usedStringHelpers = false;
     this.usedParseIntHelper = false;
     this.usedParseFloatHelper = false;
@@ -131,8 +130,8 @@ export class GoTranspiler {
               // Imports locais não geram import no código Go compilado
               break;
             }
-            this.importedModules.add(stmt.moduleName);
             const mod = registry.get(modulePath(stmt.moduleName));
+            if (mod) this.nativeModules.set(stmt.moduleName, mod);
             for (const nativeType of mod?.types ?? []) {
               this.nativeTypes.set(nativeType.name, nativeType);
             }
@@ -208,13 +207,14 @@ export class GoTranspiler {
   private buildHeader(): string {
     const lines: string[] = ["package main", ""];
 
-    // Cada módulo importado diz o que precisa em Go — nenhum nome de módulo
-    // aparece aqui dentro (RFC-003).
+    // Injetar Native Modules importados
     const boilerplates: string[] = [];
-    for (const moduleName of this.importedModules) {
-      const mod = registry.get(modulePath(moduleName));
-      if (!mod) continue; // import inválido já foi recusado pelo checker
+    for (const [name, mod] of this.nativeModules) {
+      if (!mod.goCodegen) continue;
       for (const goImport of mod.goCodegen.imports) this.goImports.add(goImport);
+      if (mod.goCodegen.thirdParty) {
+          for (const tp of mod.goCodegen.thirdParty) this.thirdPartyDeps.add(tp);
+      }
       if (mod.goCodegen.boilerplate) boilerplates.push(mod.goCodegen.boilerplate);
     }
 
@@ -673,17 +673,19 @@ export class GoTranspiler {
     // Go serve a todas as instanciações, e a asserção acontece na extração.
     const typeParams = new Set(decl.typeParams ?? []);
 
-    this.emitLine(`type ${enumName} interface{ ${marker}() }`);
+    this.emitLine(`type ${enumName} interface{ ${marker}(); unwrap() any }`);
     this.emitLine("");
 
     for (const variant of decl.variants) {
       const typeName = this.variantTypeName(decl.name, variant.name);
       const value = this.variantValueName(decl.name, variant.name);
       const payload = variant.payload ?? [];
+      const isSuccess = variant === decl.variants[0];
 
       if (payload.length === 0) {
         this.emitLine(`type ${typeName} struct{}`);
         this.emitLine(`func (${typeName}) ${marker}() {}`);
+        this.emitLine(`func (${typeName}) unwrap() any { panic("Cannot unwrap unit variant") }`);
         this.emitLine(`var ${value} ${enumName} = ${typeName}{}`);
       } else {
         const fields = payload.map((t, i) => `Field${i} ${this.transpileType(t, typeParams)}`).join("; ");
@@ -691,6 +693,11 @@ export class GoTranspiler {
         const init = payload.map((_, i) => `Field${i}: f${i}`).join(", ");
         this.emitLine(`type ${typeName} struct{ ${fields} }`);
         this.emitLine(`func (${typeName}) ${marker}() {}`);
+        if (isSuccess) {
+            this.emitLine(`func (s ${typeName}) unwrap() any { return s.Field0 }`);
+        } else {
+            this.emitLine(`func (s ${typeName}) unwrap() any { panic(s.Field0) }`);
+        }
         this.emitLine(`func ${value}_new(${params}) ${enumName} { return ${typeName}{${init}} }`);
       }
       this.emitLine("");

@@ -52,7 +52,7 @@ gantt
 | ✅ | RFC-032 | Módulo `config` e leitura dotenv |
 | ✅ | RFC-033 | Serialização `std/json` e Encoding |
 | ✅ | RFC-034 | `std/fs` e manipulador de Paths |
-| ⏳ | RFC-035 | `crypto/jwt` (RS256/HS256) |
+| ✅ | RFC-035 | `crypto/jwt` (RS256/HS256) |
 | ⏳ | RFC-036 | Driver nativo Redis e Locks Distribuídos |
 | ⏳ | RFC-037 | Motor de validação `std/validator` |
 | ⏳ | RFC-038 | Módulo `core/resilience` (Circuit Breaker) |

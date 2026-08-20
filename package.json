@@ -43,6 +43,7 @@
   "type": "module",
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.2.0",
     "@types/pg": "^8.21.0",
     "ts-node": "^10.9.2",
@@ -52,6 +53,7 @@
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
+    "jsonwebtoken": "^9.0.3",
     "pg": "^8.23.0"
   }
 }

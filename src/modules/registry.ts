@@ -12,6 +12,7 @@ import { base64Module } from "./base64";
 import { jsonModule } from "./json";
 import { pathModule } from "./path";
 import { fsModule } from "./fs";
+import { jwtModule } from "./jwt";
 
 export class ModuleRegistry {
   private modules = new Map<string, NativeModule>();
@@ -45,4 +46,5 @@ registry.register(base64Module);
 registry.register(jsonModule);
 registry.register(pathModule);
 registry.register(fsModule);
+registry.register(jwtModule);
 

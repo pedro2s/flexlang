@@ -1,6 +1,6 @@
 # RFC-035 — Módulo Nativo de Autenticação JWT (`crypto/jwt`)
 
-> **Status:** Proposto · **Prioridade:** P0 — Bloqueante · **Depende de:** RFC-028 (`crypto`), RFC-033 (`encoding/base64`, `encoding/json`), RFC-027 (`core/time`)
+> **Status:** IMPLEMENTADO · **Prioridade:** P0 — Bloqueante · **Depende de:** RFC-028 (`crypto`), RFC-033 (`encoding/base64`, `encoding/json`), RFC-027 (`core/time`)
 
 ---
 

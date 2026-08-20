@@ -68,9 +68,10 @@ export interface NativeModule {
   runtimeBinding: (interpreter: Interpreter) => Record<string, unknown>;
 
   /** O que o transpiler injeta no arquivo Go quando o módulo é importado. */
-  goCodegen: {
+  goCodegen?: {
     imports: string[];
     boilerplate: string;
+    thirdParty?: string[];
   };
 }
 
