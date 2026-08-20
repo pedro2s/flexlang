@@ -25,6 +25,7 @@
     "test:parity": "npx tsx tests/parity_runner.ts",
     "test:http": "npx tsx tests/http_integration.ts",
     "test:db": "npx tsx tests/postgres_integration.ts",
+    "test:redis": "npx tsx tests/redis_integration.ts",
     "test:watch": "npx tsx tests/watch_integration.ts",
     "test:vscode": "npx tsx editors/vscode/tests/syntax.test.ts",
     "test:flexbank": "npx tsx tests/flexbank_integration.ts",
@@ -43,6 +44,7 @@
   "type": "module",
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
+    "@types/ioredis": "^4.28.10",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.2.0",
     "@types/pg": "^8.21.0",
@@ -53,6 +55,7 @@
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
+    "ioredis": "^6.0.0",
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.23.0"
   }

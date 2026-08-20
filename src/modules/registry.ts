@@ -13,6 +13,7 @@ import { jsonModule } from "./json";
 import { pathModule } from "./path";
 import { fsModule } from "./fs";
 import { jwtModule } from "./jwt";
+import { redisModule } from "./redis";
 
 export class ModuleRegistry {
   private modules = new Map<string, NativeModule>();
@@ -47,4 +48,5 @@ registry.register(jsonModule);
 registry.register(pathModule);
 registry.register(fsModule);
 registry.register(jwtModule);
+registry.register(redisModule);
 
