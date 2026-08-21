@@ -1,6 +1,6 @@
 # RFC-041 — Framework Nativo de Testes Unitários (`std/testing` e `flex test`)
 
-> **Status:** Proposto · **Prioridade:** P0 — Bloqueante · **Depende de:** nada
+> **Status:** IMPLEMENTADO · **Prioridade:** P0 — Bloqueante · **Depende de:** nada
 
 ---
 

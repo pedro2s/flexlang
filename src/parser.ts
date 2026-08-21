@@ -26,6 +26,7 @@ import {
   type IfStmt,
   type MatchStmt,
   type ConstDeclaration,
+  type AttributeNode,
 } from "./ast";
 import { Lexer } from "./lexer";
 import { FlexError } from "./diagnostics";
@@ -139,6 +140,13 @@ export class Parser {
         return this.parseWhileStmt();
       case TokenType.Func:
         return this.parseFunctionDeclaration();
+      case TokenType.Hash: {
+        const attributes = this.parseAttributes();
+        if (this.current().type === TokenType.Func) {
+          return this.parseFunctionDeclaration(attributes);
+        }
+        throw new FlexError("E1001", `Unexpected attribute before '${this.current().value}'`, this.currentSpan());
+      }
       case TokenType.Return:
         return this.parseReturnStatement();
       case TokenType.Break: {
@@ -360,7 +368,39 @@ export class Parser {
     };
   }
 
-  private parseFunctionDeclaration(): FunctionDeclaration {
+  private parseAttributes(): AttributeNode[] {
+    const attributes: AttributeNode[] = [];
+    while (this.current().type === TokenType.Hash) {
+      const hashToken = this.consume(TokenType.Hash);
+      this.consume(TokenType.LBracket);
+      const nameToken = this.consume(TokenType.Identifier);
+      let args: Expr[] | undefined = undefined;
+      if (this.current().type === TokenType.LParen) {
+        this.consume(TokenType.LParen);
+        args = [];
+        while (
+          this.current().type !== TokenType.RParen &&
+          this.current().type !== TokenType.EOF
+        ) {
+          args.push(this.parseExpression());
+          if (this.current().type === TokenType.Comma) {
+            this.consume(TokenType.Comma);
+          }
+        }
+        this.consume(TokenType.RParen);
+      }
+      const rBracket = this.consume(TokenType.RBracket);
+      attributes.push({
+        kind: "Attribute",
+        name: nameToken.value,
+        args,
+        span: this.spanFrom(hashToken, rBracket),
+      });
+    }
+    return attributes;
+  }
+
+  private parseFunctionDeclaration(attributes?: AttributeNode[]): FunctionDeclaration {
     const startToken = this.consume(TokenType.Func);
     const name = this.consume(TokenType.Identifier).value;
 
@@ -408,13 +448,16 @@ export class Parser {
 
     const body = this.parseBlock();
 
+    const firstToken = attributes && attributes.length > 0 ? (attributes[0].span ? startToken : startToken) : startToken;
+
     return {
       kind: "FunctionDeclaration",
       name,
       parameters,
       returnType,
       body,
-      span: this.spanFrom(startToken, this.previous()),
+      attributes,
+      span: this.spanFrom(firstToken, this.previous()),
     };
   }
 

@@ -138,6 +138,10 @@ export class Interpreter {
     }
   }
 
+  public getGlobal(name: string): any {
+    return this.globalEnv.has(name) ? this.globalEnv.get(name) : undefined;
+  }
+
   /**
    * Executa uma função FlexLang com argumentos já avaliados. É por aqui que um
    * módulo nativo chama de volta o código do usuário (ex: o handler de uma rota
