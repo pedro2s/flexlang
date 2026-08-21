@@ -6,6 +6,31 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e o
 
 ## [Não lançado]
 
+## [0.4.0] - 2026-08-21
+
+Quarta grande release pública da FlexLang. Focada na consolidação da infraestrutura para sistemas distribuídos, resiliência enterprise, streaming de eventos em larga escala, tooling profissional para editores de código e paridade estrita nos dois modos de execução (Node.js e Go). Implementa integralmente as RFCs 031 a 046 (ver [`.docs/v0.4/rfcs/`](.docs/v0.4/rfcs/)).
+
+### Adicionado
+- **Cliente HTTP Resiliente e Uploads no Servidor (RFC-031 / RFC-046)**:
+  - Cliente HTTP `Client` com pooling de conexões, timeouts granulares e montagem de formulários multipart (`MultipartForm`).
+  - Suporte completo no servidor HTTP (`Server` / `Request`) para recebimento de formulários `multipart/form-data` e `application/x-www-form-urlencoded` através de `req.form_value(name)` e `req.form_file(name)` com a estrutura tipada `UploadedFile`.
+- **Injeção de Configuração com `config/dotenv` (RFC-032)**: Carregamento e injeção automática de arquivos `.env` com suporte a comentários, aspas simples/duplas e substituição declarativa via `dotenv.load()`, `dotenv.load_file()` e `dotenv.config()`.
+- **Serialização e Codificação Multiformato com `encoding` (RFC-033)**: Conversões atômicas JSON (`json.stringify`, `json.parse`), Base64 (`base64.encode`, `base64.decode`) e Hexadecimal (`hex.encode`, `hex.decode`).
+- **I/O e Manipulação de Caminhos com `std/fs` e `std/path` (RFC-034)**: Operações completas de arquivos (`read_file`, `write_file`, `append_file`, `exists`, `remove_file`, `create_dir`, `read_dir`) e normalização multiplataforma de diretórios e caminhos (`join`, `dir`, `base`, `ext`, `is_abs`).
+- **Autenticação Segura com Tokens JWT via `crypto/jwt` (RFC-035)**: Assinatura, decodificação e validação criptográfica de tokens com HMAC-SHA256 e parsing de claims tipadas.
+- **Cache Distribuído e Locks Atômicos com `storage/redis` (RFC-036)**: Driver Redis de alto desempenho com operações chave-valor (`get`, `set`, `set_ex`, `del`, `exists`, `expire`, `ttl`, `incr`, `decr`) e distributed locks atômicos `acquire`/`release` baseados em TTL e token único de dono.
+- **Validação Declarativa Fluente com `data/validator` (RFC-037)**: Validador estruturado de payloads com encadeamento de regras (`required`, `email`, `min_len`, `max_len`, `min`, `max`, `pattern`, `uuid`) e retorno acumulado de erros em `ValidationError`.
+- **Engenharia de Resiliência Distribuída com `core/resilience` (RFC-038)**: Circuit Breaker de 3 estados (Closed, Open, Half-Open), Retry com Exponential Backoff e Jitter determinístico, e Rate Limiter baseado em Token Bucket.
+- **Observabilidade e Tracing Distribuído com `core/telemetry` (RFC-039)**: Métricas Prometheus nativas (`Counter`, `Gauge`, `Histogram`) com exposição em `/metrics` e Rastreamento OpenTelemetry (`Tracer`, `Span`) com injeção/extração de cabeçalhos de contexto W3C `traceparent`.
+- **Mensageria e Streaming de Eventos com `mq/kafka` (RFC-040)**: Driver nativo para Apache Kafka com suporte a `Producer` particionado de alto rendimento e `Consumer` concorrente gerenciado por Consumer Groups.
+- **Framework de Testes Integrado com `std/testing` e CLI `flex test` (RFC-041)**: Testes unitários com atributos `#[test]`, `#[test(skip)]`, `#[test(timeout_ms = ...)]`, runner concorrente e flags `--native`, `-v`, `--filter`.
+- **Motor de Idempotência Financeira com `finance/idempotency` (RFC-042)**: Prevenção de duplicidade transacional Exactly-Once em transferências e liquidações Pix com suporte a Redis e PostgreSQL.
+- **Arquitetura de Referência FlexBank Distributed (RFC-043)**: Ecossistema de microsserviços distribuídos (`examples/10_flexbank_distributed`) homologado com 100% de paridade em `tests/flexbank_distributed_integration.ts`.
+- **Expressões Regulares RE2 Seguras com `std/regex` (RFC-044)**: Motor de expressões regulares lineares O(N) imunes a ataques ReDoS (`is_match`, `find`, `find_all`, `replace`, `replace_all`, `split`).
+- **Agendador de Tarefas Periódicas com `core/scheduler` (RFC-045)**: Scheduler em background para execução de tarefas periódicas via expressões cron de 5/6 campos e intervalos de tempo tipados.
+- **Extensão Oficial para Visual Studio Code (`editors/vscode`)**: Syntax highlighting completo (TextMate), Servidor LSP inteligente (diagnósticos estáticos em tempo real, auto-completion, tooltips Markdown para os 15 módulos da Stdlib), CodeLens interativo com ações de teste e formatador oficial integrado.
+- **Portal Oficial de Documentação Técnica (`reference/`)**: Guias atualizados de todos os módulos da biblioteca padrão, comparativos detalhados para desenvolvedores TypeScript, Rust e Go, e receitas de produção com Docker.
+
 ## [0.3.1] - 2026-08-19
 
 Release de refinamento, lançamento do portal de documentação oficial multilíngue e melhorias na CLI.
@@ -73,7 +98,8 @@ Apenas documentação — sem mudança de comportamento. O `README.md` publicado
 
 Primeira versão pública do FlexLang. Implementa as RFCs 001–009 (ver [`.docs/v1/rfcs/`](.docs/v1/rfcs/)): paridade completa entre o modo interpretado e o transpiler Go, `Result`/`Option` nativos, módulos nativos (`net/http`, `db/postgres`), sistema de módulos locais, CLI (`flex init`/`run`/`build`/`test`), e a baseline de observabilidade e segurança para produção.
 
-[Não lançado]: https://github.com/pedro2s/flexlang/compare/v0.3.1...HEAD
+[Não lançado]: https://github.com/pedro2s/flexlang/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/pedro2s/flexlang/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/pedro2s/flexlang/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/pedro2s/flexlang/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/pedro2s/flexlang/compare/v0.1.1...v0.2.0
