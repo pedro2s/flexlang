@@ -1464,15 +1464,32 @@ export class TypeChecker {
               return callerType.genericArgs.length > 0 ? callerType.genericArgs[0] : { kind: "Any" };
             }
           }
-          // Método de instância de um tipo nativo: `server.get(...)`, etc.
+          // Método de instância de um tipo nativo: `server.get(...)`, `consumer.listen(...)`, etc.
           if (callerType.kind === "Struct") {
-            if (callerType.name === "Server" && caller.property === "route") {
-              throw new FlexError(
-                "E2024",
-                "`server.route` foi removido na v0.2.0 — use `server.get`, `server.post`, `server.put`, `server.patch` ou `server.delete`",
-                expr.span,
-                "veja RFC-011 — o roteamento agora considera o verbo HTTP",
-              );
+            if (callerType.name === "Server") {
+              if (caller.property === "route") {
+                throw new FlexError(
+                  "E2024",
+                  "`server.route` foi removido na v0.2.0 — use `server.get`, `server.post`, `server.put`, `server.patch` ou `server.delete`",
+                  expr.span,
+                  "veja RFC-011 — o roteamento agora considera o verbo HTTP",
+                );
+              }
+              if (["get", "post", "put", "patch", "delete"].includes(caller.property) && expr.args[1]?.kind === "LambdaExpr") {
+                const lambda = expr.args[1];
+                if (lambda.parameters.length > 0) {
+                  (lambda.parameters[0] as any).__inferredType = { kind: "Struct", name: "Request", genericArgs: [] };
+                }
+                if (lambda.parameters.length > 1) {
+                  (lambda.parameters[1] as any).__inferredType = { kind: "Struct", name: "Response", genericArgs: [] };
+                }
+              }
+            }
+            if (callerType.name === "Consumer" && caller.property === "listen" && expr.args[0]?.kind === "LambdaExpr") {
+              const lambda = expr.args[0];
+              if (lambda.parameters.length > 0) {
+                (lambda.parameters[0] as any).__inferredType = { kind: "Struct", name: "EventMessage", genericArgs: [] };
+              }
             }
             const methodSig = this.nativeTypes
               .get(callerType.name)

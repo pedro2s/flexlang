@@ -17,6 +17,7 @@ import { redisModule } from "./redis";
 import { validatorModule } from "./validator";
 import { resilienceModule } from "./resilience";
 import { telemetryModule } from "./telemetry";
+import { kafkaModule, eventsModule } from "./kafka";
 
 export class ModuleRegistry {
   private modules = new Map<string, NativeModule>();
@@ -55,4 +56,6 @@ registry.register(redisModule);
 registry.register(validatorModule);
 registry.register(resilienceModule);
 registry.register(telemetryModule);
+registry.register(kafkaModule);
+registry.register(eventsModule);
 

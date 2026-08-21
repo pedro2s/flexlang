@@ -1,6 +1,6 @@
 # RFC-040 — Mensageria de Eventos Financeiros (`mq/events`, `mq/kafka`)
 
-> **Status:** Proposto · **Prioridade:** P1 · **Depende de:** RFC-033 (`encoding/json`), RFC-028 (`crypto`)
+> **Status:** IMPLEMENTADO · **Prioridade:** P1 · **Depende de:** RFC-033 (`encoding/json`), RFC-028 (`crypto`)
 
 ---
 
