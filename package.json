@@ -31,6 +31,7 @@
     "test:telemetry": "npx tsx tests/telemetry_integration.ts",
     "test:kafka": "npx tsx tests/kafka_integration.ts",
     "test:unit-framework": "npx tsx tests/testing_framework_integration.ts",
+    "test:idempotency": "npx tsx tests/idempotency_integration.ts",
     "test:watch": "npx tsx tests/watch_integration.ts",
     "test:vscode": "npx tsx editors/vscode/tests/syntax.test.ts",
     "test:flexbank": "npx tsx tests/flexbank_integration.ts",

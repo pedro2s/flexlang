@@ -1,6 +1,6 @@
 # RFC-042 — Motor de Idempotência e Transações Financeiras (`finance/idempotency`)
 
-> **Status:** Proposto · **Prioridade:** P1 · **Depende de:** RFC-036 (`db/redis`), RFC-027 (`core/time`)
+> **Status:** IMPLEMENTADO · **Prioridade:** P1 · **Depende de:** RFC-036 (`db/redis`), RFC-027 (`core/time`)
 
 ---
 

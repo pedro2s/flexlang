@@ -1,0 +1,10 @@
+--- Running RFC-042 Idempotency Engine Test ---
+1. New transaction detected (no cache)
+2. Distributed lock acquired for transaction
+3. Concurrent request blocked: transaction in progress
+4. Transaction completed and response cached
+5. Idempotent replay: cached response returned
+201
+{\"transfer_id\":\"tr_pix_999\",\"status\":\"COMPLETED\",\"amount\":150.00}
+6. Key cleared successfully
+RFC-042 Idempotency Engine verified successfully!
