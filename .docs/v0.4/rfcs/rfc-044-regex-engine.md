@@ -1,6 +1,6 @@
 # RFC-044 — Expressões Regulares Nativas (`std/regex`)
 
-> **Status:** Proposto · **Prioridade:** P1 · **Depende de:** RFC-033 (`std/validator`)
+> **Status:** IMPLEMENTADO · **Prioridade:** P1 · **Depende de:** RFC-033 (`std/validator`)
 
 ---
 

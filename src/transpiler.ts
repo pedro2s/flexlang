@@ -973,7 +973,7 @@ export class GoTranspiler {
       // Métodos de Array (RFC-020)
       if (objType?.kind === "Array" || member.object.kind === "ArrayLiteral") {
         const obj = this.transpileExpr(member.object);
-        const elemType = objType && objType.kind === "Array" ? objType.elementType : { kind: "Any" } as FlexType;
+        const elemType = (objType && objType.kind === "Array" && objType.elementType) ? objType.elementType : { kind: "Any" } as FlexType;
         const elemGoType = this.goType(elemType);
 
         switch (member.property) {

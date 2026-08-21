@@ -20,6 +20,7 @@ import { telemetryModule } from "./telemetry";
 import { kafkaModule, eventsModule } from "./kafka";
 import { testingModule } from "./testing";
 import { idempotencyModule } from "./idempotency";
+import { regexModule } from "./regex";
 
 export class ModuleRegistry {
   private modules = new Map<string, NativeModule>();
@@ -62,4 +63,5 @@ registry.register(kafkaModule);
 registry.register(eventsModule);
 registry.register(testingModule);
 registry.register(idempotencyModule);
+registry.register(regexModule);
 
