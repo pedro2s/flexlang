@@ -21,6 +21,7 @@ import { kafkaModule, eventsModule } from "./kafka";
 import { testingModule } from "./testing";
 import { idempotencyModule } from "./idempotency";
 import { regexModule } from "./regex";
+import { schedulerModule } from "./scheduler";
 
 export class ModuleRegistry {
   private modules = new Map<string, NativeModule>();
@@ -64,4 +65,5 @@ registry.register(eventsModule);
 registry.register(testingModule);
 registry.register(idempotencyModule);
 registry.register(regexModule);
+registry.register(schedulerModule);
 

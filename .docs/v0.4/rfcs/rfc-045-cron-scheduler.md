@@ -1,6 +1,6 @@
 # RFC-045 — Agendador de Tarefas em Background / Cron (`core/scheduler`)
 
-> **Status:** Proposto · **Prioridade:** P1 · **Depende de:** RFC-007 (`spawn`), RFC-027 (`core/time`)
+> **Status:** IMPLEMENTADO · **Prioridade:** P1 · **Depende de:** RFC-007 (`spawn`), RFC-027 (`core/time`)
 
 ---
 
