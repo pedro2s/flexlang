@@ -1,8 +1,6 @@
-<div align="center">
-  <img src="https://raw.githubusercontent.com/pedro2s/flexlang/main/assets/octans-logo.svg" alt="FlexLang" width="96" height="96" />
-  <h1>FlexLang para Visual Studio Code</h1>
-  <p><strong>A extensão oficial de desenvolvimento produtivo, dinâmico e inteligente para a linguagem FlexLang (v0.4.0).</strong></p>
-</div>
+# FlexLang para Visual Studio Code
+
+**A extensão oficial de desenvolvimento produtivo, dinâmico e inteligente para a linguagem FlexLang (v0.4.0).**
 
 ---
 

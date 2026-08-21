@@ -7,3 +7,4 @@ out/
 reference/dist/
 reference/node_modules/
 reference/.astro/
+*.vsix

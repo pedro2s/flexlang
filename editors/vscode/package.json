@@ -4,7 +4,6 @@
   "description": "Suporte oficial de alta performance e inteligência para a linguagem FlexLang no VSCode: Syntax Highlighting, LSP, IntelliSense, Auto-Format, Snippets, CodeLens e Comandos Interativos.",
   "version": "0.4.0",
   "publisher": "flexlang",
-  "icon": "assets/flexlang-icon.png",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -51,11 +50,7 @@
         "extensions": [
           ".flex"
         ],
-        "configuration": "./language-configuration.json",
-        "icon": {
-          "light": "./assets/file-icon.png",
-          "dark": "./assets/file-icon.png"
-        }
+        "configuration": "./language-configuration.json"
       }
     ],
     "grammars": [
