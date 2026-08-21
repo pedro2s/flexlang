@@ -284,15 +284,28 @@ function findTestFiles(dir: string, fileList: string[] = []): string[] {
     for (const file of files) {
         const fullPath = path.join(dir, file);
         if (fs.statSync(fullPath).isDirectory()) {
-            findTestFiles(fullPath, fileList);
-        } else if (fullPath.endsWith("_test.flex")) {
+            if (file !== "node_modules" && file !== "dist" && file !== "build") {
+                findTestFiles(fullPath, fileList);
+            }
+        } else if (fullPath.endsWith("_test.flex") || (dir.endsWith("tests") && fullPath.endsWith(".flex"))) {
             fileList.push(fullPath);
         }
     }
     return fileList;
 }
 
-async function runTest(targetPath: string) {
+async function runTest(args: string[]) {
+    let targetPath: string | undefined = undefined;
+    let isNative = false;
+
+    for (const arg of args) {
+        if (arg === "--native" || arg === "-n") {
+            isNative = true;
+        } else if (!arg.startsWith("-")) {
+            targetPath = arg;
+        }
+    }
+
     const searchPath = targetPath ? path.resolve(targetPath) : process.cwd();
     
     if (!fs.existsSync(searchPath)) {
@@ -303,69 +316,195 @@ async function runTest(targetPath: string) {
     let testFiles: string[] = [];
     if (fs.statSync(searchPath).isDirectory()) {
         testFiles = findTestFiles(searchPath);
-    } else if (searchPath.endsWith("_test.flex")) {
+    } else if (searchPath.endsWith(".flex")) {
         testFiles.push(searchPath);
     } else {
-        console.error(`Error: Provided path is not a directory or a *_test.flex file.`);
+        console.error(`Error: Provided path is not a directory or a .flex test file.`);
         process.exit(1);
     }
 
     if (testFiles.length === 0) {
-        console.log(`No *_test.flex files found in ${searchPath}.`);
+        console.log(`No test files found in ${searchPath}.`);
         return;
     }
 
-    let passed = 0;
-    let failed = 0;
-    
-    console.log(`\nRunning ${testFiles.length} test(s)...\n`);
+    let totalPassed = 0;
+    let totalFailed = 0;
+    const startTimeTotal = Date.now();
+
+    console.log(`\nrunning ${testFiles.length} test suite(s)...`);
 
     for (const flexPath of testFiles) {
         const file = path.basename(flexPath);
-        const outPath = flexPath.replace(".flex", ".out");
-        
-        let capturedOutput = "";
-        const stdout = (msg: string) => {
-            capturedOutput += msg + "\n";
-        };
+        const relPath = path.relative(process.cwd(), flexPath);
 
-        try {
-            const graph = loadModuleGraph(flexPath);
-            const typeChecker = new TypeChecker();
-            typeChecker.check(graph);
+        const graph = loadModuleGraph(flexPath);
+        const typeChecker = new TypeChecker();
+        const types = typeChecker.check(graph);
 
-            const interpreter = new Interpreter(stdout);
-            await interpreter.run(graph);
-        } catch (e: any) {
-            if (e instanceof FlexError) {
-                capturedOutput += formatDiagnostic(e, { isTTY: false }) + "\n";
-            } else {
-                capturedOutput += e.message + "\n";
+        // Coleta funções anotadas com #[test] ou prefixadas com test_
+        const entryFile = graph.files.get(graph.entryPath);
+        const testFuncs: string[] = [];
+        if (entryFile) {
+            for (const stmt of entryFile.ast) {
+                if (stmt.kind === "FunctionDeclaration") {
+                    const hasTestAttr = stmt.attributes?.some((a) => a.name === "test");
+                    const startsWithTest = stmt.name.startsWith("test_");
+                    if (hasTestAttr || startsWithTest) {
+                        testFuncs.push(stmt.name);
+                    }
+                }
             }
         }
 
-        if (!fs.existsSync(outPath)) {
-            fs.writeFileSync(outPath, capturedOutput, "utf-8");
-            console.log(`\x1b[33m[GENERATED]\x1b[0m ${file}`);
-            passed++;
-            continue;
-        }
+        // Se houver funções de teste unitárias: executa cada função isoladamente
+        if (testFuncs.length > 0) {
+            console.log(`\nrunning ${testFuncs.length} test(s) in ${relPath}:`);
 
-        const expectedOutput = fs.readFileSync(outPath, "utf-8");
-        
-        if (capturedOutput === expectedOutput) {
-            console.log(`\x1b[32m[PASS]\x1b[0m ${file}`);
-            passed++;
+            if (isNative) {
+                // Modo nativo Go: gera harness que invoca as funções de teste
+                const transpiler = new GoTranspiler();
+                const baseGoCode = transpiler.transpile(graph, types);
+                
+                const buildDir = path.join(process.cwd(), "build");
+                if (!fs.existsSync(buildDir)) {
+                    fs.mkdirSync(buildDir, { recursive: true });
+                }
+                const cleanName = path.basename(flexPath, ".flex").replace(/_test$/, "");
+                const testBin = path.join(buildDir, `test_${cleanName}`);
+                const testGoFile = path.join(buildDir, `test_${cleanName}_runner.go`);
+
+                // Injeta runner nativo que executa cada função de teste com recover
+                let harnessGo = baseGoCode;
+                const runnerCode = `
+func main() {
+\ttotalPassed := 0
+\ttotalFailed := 0
+\tstart := time.Now()
+` + testFuncs.map((fn) => `
+\tfunc() {
+\t\tdefer func() {
+\t\t\tif r := recover(); r != nil {
+\t\t\t\tfmt.Printf("  test ${fn} ... \\033[31mFAILED\\033[0m\\n    %v\\n", r)
+\t\t\t\ttotalFailed++
+\t\t\t} else {
+\t\t\t\tfmt.Printf("  test ${fn} ... \\033[32mok\\033[0m\\n")
+\t\t\t\ttotalPassed++
+\t\t\t}
+\t\t}()
+\t\t${fn}()
+\t}()
+`).join("") + `
+\tduration := time.Since(start).Milliseconds()
+\tif totalFailed > 0 {
+\t\tfmt.Printf("\\ntest result: \\033[31mFAILED\\033[0m. %d passed; %d failed; finished in %dms\\n", totalPassed, totalFailed, duration)
+\t\tos.Exit(1)
+\t} else {
+\t\tfmt.Printf("\\ntest result: \\033[32mok\\033[0m. %d passed; %d failed; finished in %dms\\n", totalPassed, totalFailed, duration)
+\t}
+}
+`;
+                // Substitui main existente pelo runner
+                if (harnessGo.includes("func main() {")) {
+                    harnessGo = harnessGo.replace(/func main\(\) \{[\s\S]*?\n\}/, runnerCode.trim());
+                } else {
+                    harnessGo += "\n" + runnerCode;
+                }
+
+                if (!harnessGo.includes('"time"')) {
+                    harnessGo = harnessGo.replace('import (', 'import (\n\t"time"\n\t"os"');
+                }
+
+                fs.writeFileSync(testGoFile, harnessGo);
+                try {
+                    execSync(`go build -o ${testBin} ${testGoFile}`, { stdio: "pipe" });
+                    const out = execSync(`${testBin}`, { encoding: "utf-8" });
+                    process.stdout.write(out);
+                    totalPassed += testFuncs.length;
+                } catch (e: any) {
+                    const out = e.stdout ? e.stdout.toString() : e.message;
+                    process.stdout.write(out);
+                    totalFailed += 1;
+                }
+            } else {
+                // Modo interpretado: executa cada função isoladamente
+                let suitePassed = 0;
+                let suiteFailed = 0;
+                const suiteStart = Date.now();
+
+                const interpreter = new Interpreter();
+                await interpreter.run(graph);
+
+                for (const fnName of testFuncs) {
+                    const fnObj = interpreter.getGlobal(fnName);
+                    if (!fnObj) {
+                        console.log(`  test ${fnName} ... \x1b[31mFAILED\x1b[0m\n    function '${fnName}' not found in global scope`);
+                        suiteFailed++;
+                        continue;
+                    }
+
+                    try {
+                        await interpreter.callFunction(fnObj, []);
+                        console.log(`  test ${fnName} ... \x1b[32mok\x1b[0m`);
+                        suitePassed++;
+                    } catch (e: any) {
+                        console.log(`  test ${fnName} ... \x1b[31mFAILED\x1b[0m\n    ${e.message ?? e}`);
+                        suiteFailed++;
+                    }
+                }
+
+                const suiteDuration = Date.now() - suiteStart;
+                if (suiteFailed > 0) {
+                    console.log(`\ntest result: \x1b[31mFAILED\x1b[0m. ${suitePassed} passed; ${suiteFailed} failed; finished in ${suiteDuration}ms`);
+                } else {
+                    console.log(`\ntest result: \x1b[32mok\x1b[0m. ${suitePassed} passed; 0 failed; finished in ${suiteDuration}ms`);
+                }
+
+                totalPassed += suitePassed;
+                totalFailed += suiteFailed;
+            }
         } else {
-            console.log(`\x1b[31m[FAIL]\x1b[0m ${file}`);
-            console.log(`\n--- Expected ---\n${expectedOutput}`);
-            console.log(`--- Got ---\n${capturedOutput}\n`);
-            failed++;
+            // Modo Golden Test clássico (compara stdout capturado com .out)
+            const outPath = flexPath.replace(".flex", ".out");
+            let capturedOutput = "";
+            const stdout = (msg: string) => {
+                capturedOutput += msg + "\n";
+            };
+
+            try {
+                const interpreter = new Interpreter(stdout);
+                await interpreter.run(graph);
+            } catch (e: any) {
+                if (e instanceof FlexError) {
+                    capturedOutput += formatDiagnostic(e, { isTTY: false }) + "\n";
+                } else {
+                    capturedOutput += e.message + "\n";
+                }
+            }
+
+            if (!fs.existsSync(outPath)) {
+                fs.writeFileSync(outPath, capturedOutput, "utf-8");
+                console.log(`\x1b[33m[GENERATED]\x1b[0m ${file}`);
+                totalPassed++;
+                continue;
+            }
+
+            const expectedOutput = fs.readFileSync(outPath, "utf-8");
+            if (capturedOutput === expectedOutput) {
+                console.log(`\x1b[32m[PASS]\x1b[0m ${file}`);
+                totalPassed++;
+            } else {
+                console.log(`\x1b[31m[FAIL]\x1b[0m ${file}`);
+                console.log(`\n--- Expected ---\n${expectedOutput}`);
+                console.log(`--- Got ---\n${capturedOutput}\n`);
+                totalFailed++;
+            }
         }
     }
 
-    console.log(`\nTests Completed: ${passed} passed, ${failed} failed.\n`);
-    if (failed > 0) {
+    const totalDuration = Date.now() - startTimeTotal;
+    console.log(`\nTests Completed: ${totalPassed} passed, ${totalFailed} failed (finished in ${totalDuration}ms).\n`);
+    if (totalFailed > 0) {
         process.exit(1);
     }
 }
@@ -393,7 +532,7 @@ async function main() {
     } else if (command === "build") {
         await runBuild(restArgs);
     } else if (command === "test") {
-        await runTest(restArgs[0]);
+        await runTest(restArgs);
     } else {
         console.error(`Unknown command: ${command}`);
         printUsage();

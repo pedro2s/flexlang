@@ -138,6 +138,10 @@ export class Interpreter {
     }
   }
 
+  public getGlobal(name: string): any {
+    return this.globalEnv.has(name) ? this.globalEnv.get(name) : undefined;
+  }
+
   /**
    * Executa uma função FlexLang com argumentos já avaliados. É por aqui que um
    * módulo nativo chama de volta o código do usuário (ex: o handler de uma rota
@@ -497,6 +501,18 @@ export class Interpreter {
 
           const objectInstanceCall = await this.evaluateExpr(expr.caller.object, env);
 
+          if (isNativeObject(objectInstanceCall)) {
+            const nativeFn = objectInstanceCall[expr.caller.property];
+            if (typeof nativeFn !== "function") {
+              throw new Error(`RuntimeError: Native function '${expr.caller.property}' not found`);
+            }
+            const args = [];
+            for (const arg of expr.args) {
+                 args.push(await this.evaluateExpr(arg, env));
+            }
+            return await nativeFn.apply(objectInstanceCall, args);
+          }
+
           // Suporte a métodos de HashMap (RFC-023)
           if (objectInstanceCall instanceof Map) {
             const evaluatedArgs = [];
@@ -710,6 +726,16 @@ export class Interpreter {
           if (typeof objectInstanceCall === "object" && objectInstanceCall !== null && objectInstanceCall.kind === "EnumDeclaration") {
               // Pula o bloco if de método.
           } else {
+              if (typeof objectInstanceCall === "object" && objectInstanceCall !== null && objectInstanceCall.kind === "EnumVariant") {
+                  const nativeMethod = (objectInstanceCall as any)[(expr.caller as any).property];
+                  if (typeof nativeMethod === "function") {
+                      const args = [];
+                      for (const arg of expr.args) {
+                           args.push(await this.evaluateExpr(arg, env));
+                      }
+                      return await nativeMethod.apply(objectInstanceCall, args);
+                  }
+              }
               if (!(objectInstanceCall instanceof Map)) {
                 throw new Error("TypeError: Cannot call a method on a non-object.");
               }
@@ -725,7 +751,7 @@ export class Interpreter {
                 throw new Error(`TypeError: Method '${(expr.caller as any).property}' not found`);
               }
 
-              const args = [];
+              const args: any[] = [];
               for (const arg of expr.args) {
                   args.push(await this.evaluateExpr(arg, env));
               }

@@ -99,6 +99,12 @@ async function runParity() {
   let failed = 0;
   let skipped = 0;
 
+  try {
+    execFileSync(goBin, ["mod", "init", "parity"], { cwd: workDir, stdio: "pipe" });
+  } catch (e) {
+    console.error("Falha ao inicializar go mod init no dir de parity");
+  }
+
   console.log(`\nParity gate: ${flexFiles.length} testes (interpretado vs compilado)\n`);
 
   for (const file of flexFiles) {
@@ -148,7 +154,8 @@ async function runParity() {
     fs.writeFileSync(goPath, goCode, "utf-8");
 
     try {
-      execFileSync(goBin, ["build", "-o", binPath, goPath], { stdio: "pipe", timeout: RUN_TIMEOUT_MS });
+      execFileSync(goBin, ["mod", "tidy"], { cwd: workDir, stdio: "pipe" });
+      execFileSync(goBin, ["build", "-o", binPath, goPath], { cwd: workDir, stdio: "pipe", timeout: RUN_TIMEOUT_MS });
     } catch (e: any) {
       console.log(`${red("[FAIL]")} ${file} — 'go build' falhou:`);
       console.log(String(e.stderr ?? e.message).trim());
@@ -193,6 +200,7 @@ async function runParity() {
     process.exit(1);
   }
   fs.rmSync(workDir, { recursive: true, force: true });
+  process.exit(0);
 }
 
 runParity();

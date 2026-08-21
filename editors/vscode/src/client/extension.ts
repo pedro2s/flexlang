@@ -83,8 +83,24 @@ export function activate(context: vscode.ExtensionContext): void {
       runFlexCommand("build", uri);
     }),
 
+    vscode.commands.registerCommand("flexlang.checkFile", (uri?: vscode.Uri) => {
+      runFlexCommand("check", uri);
+    }),
+
     vscode.commands.registerCommand("flexlang.runTests", () => {
       runFlexCommand("test");
+    }),
+
+    vscode.commands.registerCommand("flexlang.runNativeTests", () => {
+      runFlexCommand("test --native");
+    }),
+
+    vscode.commands.registerCommand("flexlang.runTestFile", (uri?: vscode.Uri) => {
+      runFlexCommand("test", uri);
+    }),
+
+    vscode.commands.registerCommand("flexlang.runNativeTestFile", (uri?: vscode.Uri) => {
+      runFlexCommand("test --native", uri);
     }),
 
     vscode.commands.registerCommand("flexlang.restartServer", async () => {
@@ -122,8 +138,13 @@ function runFlexCommand(action: string, targetUri?: vscode.Uri): void {
 
   terminal.show();
 
-  if (action === "test") {
+  if (action === "test" && !uri) {
     terminal.sendText(`${cliPath} test`);
+    return;
+  }
+
+  if (action === "test --native" && !uri) {
+    terminal.sendText(`${cliPath} test --native`);
     return;
   }
 

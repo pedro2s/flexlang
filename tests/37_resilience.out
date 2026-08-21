@@ -1,0 +1,8 @@
+CB INITIAL: CLOSED
+CB AFTER FAILS: OPEN
+FAST FAIL ERR: circuit breaker is OPEN
+RETRY OK: recovered in 3 attempts
+LIMITER 1: true
+LIMITER 2: true
+LIMITER 3: false
+RESILIENCE SUITE SUCCESS

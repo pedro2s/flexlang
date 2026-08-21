@@ -2,7 +2,7 @@
   "name": "vscode-flexlang",
   "displayName": "FlexLang",
   "description": "Suporte oficial de alta performance e inteligência para a linguagem FlexLang no VSCode: Syntax Highlighting, LSP, IntelliSense, Auto-Format, Snippets, CodeLens e Comandos Interativos.",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "publisher": "flexlang",
   "icon": "assets/flexlang-icon.png",
   "engines": {
@@ -91,10 +91,22 @@
         "icon": "$(package)"
       },
       {
+        "command": "flexlang.checkFile",
+        "title": "FlexLang: Verificar Diagnósticos de Tipo (flex check)",
+        "category": "FlexLang",
+        "icon": "$(shield)"
+      },
+      {
         "command": "flexlang.runTests",
-        "title": "FlexLang: Executar Testes do Projeto (flex test)",
+        "title": "FlexLang: Executar Todos os Testes (flex test)",
         "category": "FlexLang",
         "icon": "$(beaker)"
+      },
+      {
+        "command": "flexlang.runNativeTests",
+        "title": "FlexLang: Executar Testes em Modo Nativo (flex test --native)",
+        "category": "FlexLang",
+        "icon": "$(rocket)"
       },
       {
         "command": "flexlang.formatDocument",
@@ -136,6 +148,11 @@
           "command": "flexlang.buildFile",
           "when": "resourceExtname == .flex",
           "group": "1_flexlang@3"
+        },
+        {
+          "command": "flexlang.checkFile",
+          "when": "resourceExtname == .flex",
+          "group": "1_flexlang@4"
         }
       ]
     },
@@ -176,7 +193,7 @@
         "flexlang.codeLens.enable": {
           "type": "boolean",
           "default": true,
-          "description": "Exibe ações interativas de CodeLens (▶ Run, ⚡ Watch) sobre funções principais e testes."
+          "description": "Exibe ações interativas de CodeLens (▶ Run, ⚡ Watch, 🧪 Test) sobre funções e testes."
         }
       }
     }

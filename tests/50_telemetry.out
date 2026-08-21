@@ -1,0 +1,32 @@
+--- 1. Counter ---
+Pix success count: 5
+Pix failed count: 1
+--- 2. Gauge ---
+Gauge set: 142
+Gauge after add: 153
+Gauge after sub: 150
+--- 3. Histogram ---
+Histogram count: 2
+Histogram sum > 0: true
+--- 4. Prometheus Export ---
+Prometheus export counter HELP: true
+Prometheus export counter TYPE: true
+Prometheus export counter series: true
+Prometheus export gauge HELP: true
+Prometheus export gauge val: true
+Prometheus export hist HELP: true
+Prometheus export hist bucket: true
+Prometheus export hist inf: true
+--- 5. Distributed Tracing W3C ---
+Span trace_id matches incoming: true
+Span parent_span_id matches incoming: true
+Span span_id length: 16
+Tag account_id: acc-12345
+Tag amount_brl: 1500.00
+Outgoing traceparent matches: true
+Outgoing tracestate preserved: true
+Child trace_id equals parent trace_id: true
+Child parent_span_id equals parent span_id: true
+Child span_id differs from parent: true
+Span is finished: true
+Child span is finished: true

@@ -3,14 +3,14 @@ title: CLI Commands (flex)
 description: Complete reference for all subcommands and flags in the official FlexLang CLI.
 ---
 
-The `flex` command-line interface provides unified project management, execution, testing, and compilation.
+The `flex` CLI is the unified toolchain to initialize, develop, test, type-check, and compile native FlexLang applications.
 
 ---
 
-## 📋 Subcommand Reference
+## 📋 Subcommands
 
 ### 1. `flex init <name>`
-Scaffolds a new FlexLang project with `flex.toml`, `src/main.flex`, module handlers, and test fixtures:
+Creates a new structured FlexLang project with `flex.toml`, `src/main.flex`, and test suites:
 
 ```bash
 flex init my-backend
@@ -19,47 +19,40 @@ flex init my-backend
 ---
 
 ### 2. `flex run [file.flex]`
-Runs in rapid asynchronous interpreted mode. If no file is passed, it uses the `entry` field from `flex.toml`:
+Runs the project in interpreted mode with instant feedback:
 
 ```bash
 flex run
-# or with an explicit path:
 flex run src/main.flex
-```
-
-#### Flag `--watch` (or `-w`)
-Automatically restarts the application on any file changes across the project's dependency graph:
-
-```bash
-flex run --watch
+flex run --watch # Hot reload
 ```
 
 ---
 
-### 3. `flex build [file.flex]`
-Transpiles FlexLang code to Go and compiles an optimized native binary inside the `build/` directory:
+### 3. `flex test [path] [flags]`
+Discovers and executes unit test suites in `*_test.flex` files:
+
+```bash
+flex test
+flex test --verbose (-v)
+flex test --filter "Auth" (-f "Auth")
+flex test --native (-n)
+```
+
+---
+
+### 4. `flex build [file.flex]`
+Transpiles FlexLang AST to Go and compiles an optimized native binary in `build/`:
 
 ```bash
 flex build
 ```
 
-The compiled binary will be placed at:
-```bash
-./build/main
-```
-
 ---
 
-### 4. `flex test [path]`
-Discovers and runs all golden test suites (`*_test.flex`):
+### 5. `flex check [file.flex]`
+Runs static type checking across the entire module graph without executing the program:
 
 ```bash
-flex test
-# or against a specific directory:
-flex test tests/
+flex check
 ```
-
----
-
-### 5. `flex --help` and `flex --version`
-Displays CLI help usage and installed compiler version.

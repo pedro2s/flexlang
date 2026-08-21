@@ -1,6 +1,6 @@
 {
   "name": "@flexlang/cli",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "A linguagem definitiva para Backends Escaláveis, Seguros e Altamente Performáticos.",
   "main": "index.js",
   "bin": {
@@ -25,9 +25,19 @@
     "test:parity": "npx tsx tests/parity_runner.ts",
     "test:http": "npx tsx tests/http_integration.ts",
     "test:db": "npx tsx tests/postgres_integration.ts",
+    "test:redis": "npx tsx tests/redis_integration.ts",
+    "test:validator": "npx tsx tests/validator_integration.ts",
+    "test:resilience": "npx tsx tests/resilience_integration.ts",
+    "test:telemetry": "npx tsx tests/telemetry_integration.ts",
+    "test:kafka": "npx tsx tests/kafka_integration.ts",
+    "test:unit-framework": "npx tsx tests/testing_framework_integration.ts",
+    "test:idempotency": "npx tsx tests/idempotency_integration.ts",
+    "test:regex": "npx tsx tests/regex_integration.ts",
+    "test:scheduler": "npx tsx tests/scheduler_integration.ts",
     "test:watch": "npx tsx tests/watch_integration.ts",
     "test:vscode": "npx tsx editors/vscode/tests/syntax.test.ts",
     "test:flexbank": "npx tsx tests/flexbank_integration.ts",
+    "test:flexbank-distributed": "npx tsx tests/flexbank_distributed_integration.ts",
     "docs:dev": "npm --prefix reference run dev",
     "docs:build": "npm --prefix reference run build"
   },
@@ -43,6 +53,8 @@
   "type": "module",
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
+    "@types/ioredis": "^4.28.10",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.2.0",
     "@types/pg": "^8.21.0",
     "ts-node": "^10.9.2",
@@ -52,6 +64,8 @@
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
+    "ioredis": "^6.0.0",
+    "jsonwebtoken": "^9.0.3",
     "pg": "^8.23.0"
   }
 }

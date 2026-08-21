@@ -63,6 +63,7 @@ export class Lexer {
     [TokenType.RBrace, /^\}/],
     [TokenType.LBracket, /^\[/],
     [TokenType.RBracket, /^\]/],
+    [TokenType.Hash, /^#/],
   ];
 
   constructor(private code: string) {}

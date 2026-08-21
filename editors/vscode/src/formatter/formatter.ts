@@ -5,6 +5,7 @@
  * - Ajuste preciso de indentação baseada em blocos delimitados por chaves `{}` e colchetes `[]`
  * - Normalização de espaçamentos em operadores binários, atribuições e setas (`->`, `=>`)
  * - Espaçamento consistente após vírgulas e dois-pontos
+ * - Suporte a anotações/atributos (`#[test]`, `#[derive(...)]`)
  * - Preservação e alinhamento de comentários de linha, bloco e documentação
  * - Remoção de espaços em branco residuais no final das linhas
  * - Limitação de linhas em branco consecutivas a no máximo 1 linha
@@ -70,7 +71,9 @@ export class FlexFormatter {
       rawLine = rawLine.replace(/^\}\s*else\s+if/g, "} else if");
 
       // Cálculo de fechamento antes da linha (ex: `}`, `]`, `};`, `},`, `} else {`)
-      const closingMatch = rawLine.match(/^(\}|\)|\])/);
+      // Ignora colchete se for anotação `#[`
+      const isAttribute = rawLine.startsWith("#[");
+      const closingMatch = !isAttribute && rawLine.match(/^(\}|\)|\])/);
       if (closingMatch && indentLevel > 0) {
         indentLevel--;
       }
@@ -139,7 +142,7 @@ export class FlexFormatter {
     formatted = formatted.replace(/,(\S)/g, ", $1");
     formatted = formatted.replace(/;(\S)/g, "; $1");
 
-    // 2. Espaçamento em dois-pontos (exceto rotas HTTP dinâmicas `:id`)
+    // 2. Espaçamento em dois-pontos (exceto rotas HTTP dinâmicas `:id` e atributos)
     formatted = formatted.replace(/(\w+)\s*:\s*([^:\s])/g, "$1: $2");
 
     // 3. Setas e operadores de controle primeiro (para proteger -> e =>)
@@ -170,7 +173,7 @@ export class FlexFormatter {
     formatted = formatted.replace(/\s*\.\.\s*/g, "..");
 
     // 9. Espaçamento após palavras-chave de controle
-    const controlKeywords = ["if", "while", "for", "match", "return"];
+    const controlKeywords = ["if", "while", "for", "match", "return", "catch"];
     for (const kw of controlKeywords) {
       const regex = new RegExp(`\\b${kw}\\s*\\(`, "g");
       formatted = formatted.replace(regex, `${kw} (`);

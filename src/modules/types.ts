@@ -1,4 +1,4 @@
-import type { StructDeclaration, TypeNode } from "../ast";
+import type { EnumDeclaration, StructDeclaration, TypeNode } from "../ast";
 import type { FlexType } from "../checker";
 import type { Interpreter } from "../interpreter";
 
@@ -52,6 +52,9 @@ export interface NativeModule {
   /** O que o TypeChecker pré-registra ao ver o import. */
   types: NativeType[];
 
+  /** Enums exportados diretamente pelo módulo nativo. */
+  enums?: EnumDeclaration[];
+
   /** Funções livres exportadas diretamente pelo módulo nativo. */
   functions?: NativeSignature[];
 
@@ -68,9 +71,10 @@ export interface NativeModule {
   runtimeBinding: (interpreter: Interpreter) => Record<string, unknown>;
 
   /** O que o transpiler injeta no arquivo Go quando o módulo é importado. */
-  goCodegen: {
+  goCodegen?: {
     imports: string[];
     boilerplate: string;
+    thirdParty?: string[];
   };
 }
 

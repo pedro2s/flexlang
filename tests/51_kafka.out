@@ -1,0 +1,10 @@
+--- 1. Producer Setup & Publish ---
+Producer published 3 events successfully
+--- 2. Consumer Setup & Listen ---
+Consumed event [banking.transfers.settled] key=acc-1001 value={\"event_id\":\"evt-01\",\"type\":\"PIX_SETTLED\",\"amount\":\"350.00\"}
+Consumed event [banking.transfers.settled] key=acc-1002 value={\"event_id\":\"evt-02\",\"type\":\"PIX_SETTLED\",\"amount\":\"120.00\"}
+Consumed event [banking.transfers.settled] key=acc-1003 value={\"event_id\":\"evt-03\",\"type\":\"PIX_SETTLED\",\"amount\":\"500.00\"}
+--- 3. Consumer Poll After Commit ---
+Remaining messages after commit: 0
+Producer and Consumer closed successfully
+Kafka test finished successfully

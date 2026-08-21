@@ -1,0 +1,20 @@
+--- Running RFC-044 Regex Engine Test ---
+true
+false
+Found match:
+e82f-41
+16
+23
+Muitos espacos aqui na string
+Split tokens count:
+5
+laranja
+banana
+uva
+maca
+morango
+is_match alpha:
+true
+Bad regex safely caught:
+true
+RFC-044 Regex Engine verified successfully!

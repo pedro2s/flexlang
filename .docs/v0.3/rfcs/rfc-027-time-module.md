@@ -26,6 +26,7 @@ import { Time, Duration } from "core/time";
 | `t.sub(other)` | `t.sub(other: Time)` | `Duration` | Diferença entre timestamps |
 | `t.before(other)` | `t.before(other: Time)` | `Bool` | Comparação |
 | `t.after(other)` | `t.after(other: Time)` | `Bool` | Comparação |
+| `t.to_string()` | instância | `String` | Alias string via ISO8601 |
 
 ### 2.2 Duração
 
@@ -37,6 +38,7 @@ import { Time, Duration } from "core/time";
 | `Duration.hours(n)` | `Duration.hours(n: Int)` | `Duration` | Duração em horas |
 | `d.as_seconds()` | instância | `Int` | Converte para segundos |
 | `d.as_millis()` | instância | `Int` | Converte para milissegundos |
+| `d.to_string()` | instância | `String` | Duração legível ("1000ms") |
 
 ### 2.3 Exemplos
 

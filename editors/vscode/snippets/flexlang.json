@@ -27,7 +27,7 @@
       "\t$0",
       "}"
     ],
-    "description": "Declara uma nova struct de dados"
+    "description": "Declara uma nova struct de dados imutável"
   },
   "Impl Block": {
     "prefix": "impl",
@@ -110,6 +110,15 @@
     ],
     "description": "Pattern matching sobre Option<T>"
   },
+  "Catch Expression": {
+    "prefix": "catch",
+    "body": [
+      "let ${1:val} = ${2:operation()} catch ${3:err} {",
+      "\t${4:fallback_value}",
+      "};"
+    ],
+    "description": "Tratamento inline de erros de Result com valor de fallback"
+  },
   "Structured Concurrency Scope": {
     "prefix": "scope",
     "body": [
@@ -163,10 +172,40 @@
     "body": [
       "server.${1|get,post,put,patch,delete|}(\"${2:/path}\", |req, res| {",
       "\t$0",
-      "\tres.json(200, { success: true });",
+      "\tres.json({ success: true });",
       "});"
     ],
     "description": "Registra uma rota HTTP em um servidor"
+  },
+  "HTTP Multipart Upload Handler": {
+    "prefix": "http-upload",
+    "body": [
+      "server.post(\"${1:/api/upload}\", |req, res| {",
+      "\tlet user_id = req.form_value(\"user_id\");",
+      "\tmatch req.form_file(\"${2:document}\") {",
+      "\t\tOption.Some(file) {",
+      "\t\t\tprint(\"Recebido: \\${file.filename} (\\${file.size} bytes)\");",
+      "\t\t\t$0",
+      "\t\t\tres.json({ status: \"ok\", filename: file.filename, bytes: file.size });",
+      "\t\t}",
+      "\t\tOption.None {",
+      "\t\t\tres.status(400).json({ error: \"Arquivo obrigatorio\" });",
+      "\t\t}",
+      "\t}",
+      "});"
+    ],
+    "description": "Registra uma rota de upload multipart/form-data no servidor (RFC-046)"
+  },
+  "HTTP Client Request": {
+    "prefix": "http-client",
+    "body": [
+      "import { Client, ClientConfig } from \"net/http\";",
+      "",
+      "let client = Client.new(ClientConfig { timeout_ms: ${1:5000} });",
+      "let res = client.${2|get,post,put,delete|}(\"${3:https://api.exemplo.com/recurso}\", {})?;",
+      "let body = res.json()?;"
+    ],
+    "description": "Executa uma requisição HTTP via cliente nativo"
   },
   "PostgreSQL Pool": {
     "prefix": "db-pool",
@@ -189,6 +228,115 @@
     ],
     "description": "Executa uma query parametrizada segura no PostgreSQL com propagação via '?'"
   },
+  "Redis Connect & Cache": {
+    "prefix": "redis-client",
+    "body": [
+      "import { Redis, RedisConfig } from \"storage/redis\";",
+      "",
+      "let mut cache = Redis.connect(RedisConfig {",
+      "\thost: \"${1:localhost}\",",
+      "\tport: ${2:6379}",
+      "})?;",
+      "",
+      "cache.set(\"${3:chave}\", \"${4:valor}\", ${5:60})?;",
+      "let val = cache.get(\"${3:chave}\")?;"
+    ],
+    "description": "Conexão e operações CRUD no Redis"
+  },
+  "Redis Distributed Lock": {
+    "prefix": "redis-lock",
+    "body": [
+      "let lock = cache.acquire_lock(\"${1:recurso:123}\", ${2:10000})?;",
+      "// ${3:Processamento seguro sob concorrência}",
+      "lock.release()?;"
+    ],
+    "description": "Adquire e libera um lock distribuído atômico no Redis"
+  },
+  "Dotenv Config": {
+    "prefix": "dotenv",
+    "body": [
+      "import { dotenv } from \"config/dotenv\";",
+      "",
+      "dotenv.load();",
+      "let ${1:port} = dotenv.get_or(\"${2:PORT}\", \"${3:8080}\");"
+    ],
+    "description": "Carrega variáveis de ambiente de arquivo .env"
+  },
+  "JSON Serialization": {
+    "prefix": "json",
+    "body": [
+      "import { json } from \"encoding\";",
+      "",
+      "let str = json.stringify(${1:data});",
+      "let parsed = json.parse(str)?;"
+    ],
+    "description": "Serialização e deserialização JSON"
+  },
+  "Validator Schema": {
+    "prefix": "validator",
+    "body": [
+      "import { Validator } from \"data/validator\";",
+      "",
+      "let validation = Validator.new()",
+      "\t.required(\"${1:field}\")",
+      "\t.min_length(\"${1:field}\", ${2:3})",
+      "\t.validate(${3:payload});",
+      "",
+      "if !validation.is_valid {",
+      "\tprint(\"Erros: \", validation.errors);",
+      "}"
+    ],
+    "description": "Validação declarativa fluente de estruturas ou mapas"
+  },
+  "Circuit Breaker": {
+    "prefix": "circuit-breaker",
+    "body": [
+      "import { CircuitBreaker, CircuitBreakerConfig } from \"core/resilience\";",
+      "",
+      "let cb = CircuitBreaker.new(CircuitBreakerConfig {",
+      "\tmax_failures: ${1:5},",
+      "\treset_timeout_ms: ${2:10000}",
+      "});",
+      "",
+      "let result = cb.call(|| {",
+      "\t${3:operacao_protegida()}",
+      "})?;"
+    ],
+    "description": "Executa operação protegida por Circuit Breaker"
+  },
+  "Telemetry Metrics": {
+    "prefix": "telemetry",
+    "body": [
+      "import { Counter, Histogram } from \"core/telemetry\";",
+      "",
+      "let req_counter = Counter.new(\"${1:http_requests_total}\", \"${2:Total de requisições}\");",
+      "req_counter.inc();"
+    ],
+    "description": "Métricas de telemetria compatíveis com Prometheus"
+  },
+  "Kafka Producer & Consumer": {
+    "prefix": "kafka",
+    "body": [
+      "import { Producer, ProducerConfig, Consumer, ConsumerConfig } from \"mq/kafka\";",
+      "",
+      "let producer = Producer.new(ProducerConfig { brokers: [\"${1:localhost:9092}\"] });",
+      "producer.send(\"${2:topico}\", \"${3:chave}\", \"${4:conteudo}\")?;"
+    ],
+    "description": "Produtor de mensageria Apache Kafka"
+  },
+  "Native Unit Test": {
+    "prefix": "test",
+    "body": [
+      "#[test]",
+      "func test_${1:feature}() {",
+      "\timport { assert_eq, assert_ok } from \"std/testing\";",
+      "\t",
+      "\tlet result = ${2:call()};",
+      "\tassert_eq(result, ${3:expected}, \"Deveria ser igual\");",
+      "}"
+    ],
+    "description": "Teste unitário nativo FlexLang (RFC-041)"
+  },
   "Structured Log Info": {
     "prefix": "log-info",
     "body": [
@@ -204,18 +352,6 @@
       "import { ${1:Symbol} } from \"${2:./module}\";"
     ],
     "description": "Importa símbolos de módulos locais ou nativos"
-  },
-  "Unit Test Template": {
-    "prefix": "test",
-    "body": [
-      "func test_${1:feature}() {",
-      "\tlet result = ${2:call()};",
-      "\tprint(\"Test ${1:feature}: \", result);",
-      "}",
-      "",
-      "test_${1:feature}();"
-    ],
-    "description": "Template de função de teste unitário"
   },
   "For In Collection": {
     "prefix": "for-in",

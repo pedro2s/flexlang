@@ -186,6 +186,9 @@ export class TypeChecker {
               fileStructs.set(nativeType.name, nativeStructDeclaration(nativeType));
               fileNativeTypes.set(nativeType.name, nativeType);
             }
+            for (const enumDecl of mod.enums ?? []) {
+              fileEnums.set(enumDecl.name, enumDecl);
+            }
             for (const nativeFunc of mod.functions ?? []) {
               fileNativeFunctions.set(nativeFunc.name, nativeFunc);
             }
@@ -530,6 +533,7 @@ export class TypeChecker {
           const returnedType = this.checkExpr(stmt.value, env);
           if (this.lambdaReturnStack.length > 0) {
             this.lambdaReturnStack[this.lambdaReturnStack.length - 1] = returnedType;
+            break;
           }
           const expectedReturn = env.get("__RETURN_TYPE__");
           // Valida a instanciação dos embutidos: `Result.Ok(x)` aceita qualquer x
@@ -1024,13 +1028,14 @@ export class TypeChecker {
         }
 
         if (expr.caller.kind === "MemberExpr") {
+          const caller = expr.caller;
           // Channel é primitivo da linguagem (não vem de import): `send` move o
           // valor, e `recv` devolve o tipo do canal — semânticas que uma
           // assinatura de módulo nativo não expressa.
           if (
-            expr.caller.object.kind === "Identifier" &&
-            expr.caller.object.symbol === "Channel" &&
-            expr.caller.property === "new"
+            caller.object.kind === "Identifier" &&
+            caller.object.symbol === "Channel" &&
+            caller.property === "new"
           ) {
             const genericArgs =
               expected && expected.kind === "Struct" && expected.name === "Channel"
@@ -1044,8 +1049,8 @@ export class TypeChecker {
           // contexto (`let body: T = req.json()?;`). Por isso é tratado à parte
           // da tabela genérica de `NativeSignature`, que não modela retorno
           // dependente do site de chamada.
-          if (expr.caller.property === "json" && expr.args.length === 0) {
-            const objType = this.checkExpr(expr.caller.object, env);
+          if (caller.property === "json" && expr.args.length === 0) {
+            const objType = this.checkExpr(caller.object, env);
             if (objType.kind === "Struct" && objType.name === "Request") {
               let payloadType: FlexType = { kind: "Any" };
               if (expected) {
@@ -1068,8 +1073,8 @@ export class TypeChecker {
           }
 
           // Construtor estático de HashMap (RFC-023)
-          if (expr.caller.object.kind === "Identifier" && expr.caller.object.symbol === "HashMap") {
-            if (expr.caller.property === "new") {
+          if (caller.object.kind === "Identifier" && caller.object.symbol === "HashMap") {
+            if (caller.property === "new") {
               if (expr.args.length !== 0)
                 throw new FlexError("E2012", "HashMap.new expects 0 arguments", expr.span);
               if (expected && expected.kind === "HashMap") {
@@ -1077,7 +1082,7 @@ export class TypeChecker {
               }
               return { kind: "HashMap", keyType: { kind: "Any" }, valueType: { kind: "Any" } };
             }
-            if (expr.caller.property === "from") {
+            if (caller.property === "from") {
               if (expr.args.length !== 1)
                 throw new FlexError("E2012", "HashMap.from expects 1 argument", expr.span);
               this.checkExpr(expr.args[0], env);
@@ -1088,19 +1093,19 @@ export class TypeChecker {
             }
             throw new FlexError(
               "E2024",
-              `Static method '${expr.caller.property}' not found on HashMap`,
+              `Static method '${caller.property}' not found on HashMap`,
               expr.span,
             );
           }
 
           // Construtor estático de módulo nativo: `Server.new(...)`
-          if (expr.caller.object.kind === "Identifier") {
+          if (caller.object.kind === "Identifier") {
             const staticSig = this.nativeTypes
-              .get(expr.caller.object.symbol)
-              ?.statics?.find((s) => s.name === expr.caller.property);
+              .get(caller.object.symbol)
+              ?.statics?.find((s) => s.name === caller.property);
             if (staticSig) {
               return this.checkNativeCall(
-                `${expr.caller.object.symbol}.${staticSig.name}`,
+                `${caller.object.symbol}.${staticSig.name}`,
                 staticSig,
                 expr.args,
                 env,
@@ -1109,65 +1114,65 @@ export class TypeChecker {
             }
           }
 
-          const callerType = this.checkExpr(expr.caller.object, env);
+          const callerType = this.checkExpr(caller.object, env);
           if (callerType.kind === "Int") {
-            if (expr.caller.property === "to_string") {
+            if (caller.property === "to_string") {
               if (expr.args.length !== 0)
                 throw new FlexError("E2012", "to_string expects 0 arguments", expr.span);
               return { kind: "String" };
             }
-            if (expr.caller.property === "to_float") {
+            if (caller.property === "to_float") {
               if (expr.args.length !== 0)
                 throw new FlexError("E2012", "to_float expects 0 arguments", expr.span);
               return { kind: "Float" };
             }
-            if (expr.caller.property === "to_int") {
+            if (caller.property === "to_int") {
               if (expr.args.length !== 0)
                 throw new FlexError("E2012", "to_int expects 0 arguments", expr.span);
               return { kind: "Int" };
             }
             throw new FlexError(
               "E2024",
-              `Method '${expr.caller.property}' not found on type Int`,
+              `Method '${caller.property}' not found on type Int`,
               expr.span,
             );
           }
           if (callerType.kind === "Float") {
-            if (expr.caller.property === "to_string") {
+            if (caller.property === "to_string") {
               if (expr.args.length !== 0)
                 throw new FlexError("E2012", "to_string expects 0 arguments", expr.span);
               return { kind: "String" };
             }
-            if (expr.caller.property === "to_int") {
+            if (caller.property === "to_int") {
               if (expr.args.length !== 0)
                 throw new FlexError("E2012", "to_int expects 0 arguments", expr.span);
               return { kind: "Int" };
             }
-            if (expr.caller.property === "to_float") {
+            if (caller.property === "to_float") {
               if (expr.args.length !== 0)
                 throw new FlexError("E2012", "to_float expects 0 arguments", expr.span);
               return { kind: "Float" };
             }
             throw new FlexError(
               "E2024",
-              `Method '${expr.caller.property}' not found on type Float`,
+              `Method '${caller.property}' not found on type Float`,
               expr.span,
             );
           }
           if (callerType.kind === "Bool") {
-            if (expr.caller.property === "to_string") {
+            if (caller.property === "to_string") {
               if (expr.args.length !== 0)
                 throw new FlexError("E2012", "to_string expects 0 arguments", expr.span);
               return { kind: "String" };
             }
             throw new FlexError(
               "E2024",
-              `Method '${expr.caller.property}' not found on type Bool`,
+              `Method '${caller.property}' not found on type Bool`,
               expr.span,
             );
           }
           if (callerType.kind === "String") {
-            const prop = expr.caller.property;
+            const prop = caller.property;
             switch (prop) {
               case "len":
                 if (expr.args.length !== 0)
@@ -1231,11 +1236,11 @@ export class TypeChecker {
             }
           }
           if (callerType.kind === "Array") {
-            const prop = expr.caller.property;
+            const prop = caller.property;
             const elemType = callerType.elementType;
 
             const checkMut = () => {
-              let root: Expr = expr.caller.object;
+              let root: Expr = caller.object;
               while (root.kind === "MemberExpr" || root.kind === "IndexExpr") {
                 root = (root as any).object;
               }
@@ -1357,10 +1362,10 @@ export class TypeChecker {
           if (callerType.kind === "HashMap" || callerType.kind === "Map") {
             const keyType = callerType.kind === "HashMap" ? callerType.keyType : { kind: "String" } as FlexType;
             const valueType = callerType.kind === "HashMap" ? callerType.valueType : { kind: "Any" } as FlexType;
-            const prop = expr.caller.property;
+            const prop = caller.property;
 
             const checkMut = () => {
-              let root: Expr = expr.caller.object;
+              let root: Expr = caller.object;
               while (root.kind === "MemberExpr" || root.kind === "IndexExpr") {
                 root = (root as any).object;
               }
@@ -1432,7 +1437,7 @@ export class TypeChecker {
             }
           }
           if (callerType.kind === "Struct" && callerType.name === "Channel") {
-            if (expr.caller.property === "send") {
+            if (caller.property === "send") {
               if (expr.args.length !== 1)
                 throw new FlexError(
                   "E2025",
@@ -1449,7 +1454,7 @@ export class TypeChecker {
                 }
               }
               return { kind: "Void" };
-            } else if (expr.caller.property === "recv") {
+            } else if (caller.property === "recv") {
               if (expr.args.length !== 0)
                 throw new FlexError(
                   "E2025",
@@ -1459,19 +1464,36 @@ export class TypeChecker {
               return callerType.genericArgs.length > 0 ? callerType.genericArgs[0] : { kind: "Any" };
             }
           }
-          // Método de instância de um tipo nativo: `server.get(...)`, etc.
+          // Método de instância de um tipo nativo: `server.get(...)`, `consumer.listen(...)`, etc.
           if (callerType.kind === "Struct") {
-            if (callerType.name === "Server" && expr.caller.property === "route") {
-              throw new FlexError(
-                "E2024",
-                "`server.route` foi removido na v0.2.0 — use `server.get`, `server.post`, `server.put`, `server.patch` ou `server.delete`",
-                expr.span,
-                "veja RFC-011 — o roteamento agora considera o verbo HTTP",
-              );
+            if (callerType.name === "Server") {
+              if (caller.property === "route") {
+                throw new FlexError(
+                  "E2024",
+                  "`server.route` foi removido na v0.2.0 — use `server.get`, `server.post`, `server.put`, `server.patch` ou `server.delete`",
+                  expr.span,
+                  "veja RFC-011 — o roteamento agora considera o verbo HTTP",
+                );
+              }
+              if (["get", "post", "put", "patch", "delete"].includes(caller.property) && expr.args[1]?.kind === "LambdaExpr") {
+                const lambda = expr.args[1];
+                if (lambda.parameters.length > 0) {
+                  (lambda.parameters[0] as any).__inferredType = { kind: "Struct", name: "Request", genericArgs: [] };
+                }
+                if (lambda.parameters.length > 1) {
+                  (lambda.parameters[1] as any).__inferredType = { kind: "Struct", name: "Response", genericArgs: [] };
+                }
+              }
+            }
+            if (callerType.name === "Consumer" && caller.property === "listen" && expr.args[0]?.kind === "LambdaExpr") {
+              const lambda = expr.args[0];
+              if (lambda.parameters.length > 0) {
+                (lambda.parameters[0] as any).__inferredType = { kind: "Struct", name: "EventMessage", genericArgs: [] };
+              }
             }
             const methodSig = this.nativeTypes
               .get(callerType.name)
-              ?.methods?.find((m) => m.name === expr.caller.property);
+              ?.methods?.find((m) => m.name === caller.property);
             if (methodSig) {
               return this.checkNativeCall(
                 `${callerType.name}.${methodSig.name}`,
@@ -1515,7 +1537,7 @@ export class TypeChecker {
           }
           assigneeType = this.checkExpr(expr.assignee, env);
         } else if (expr.assignee.kind === "IndexExpr" || expr.assignee.kind === "MemberExpr") {
-          let root = expr.assignee;
+          let root: Expr = expr.assignee;
           while (root.kind === "MemberExpr" || root.kind === "IndexExpr") {
             root = root.object as any;
           }

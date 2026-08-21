@@ -71,20 +71,21 @@ export interface EnumVariantValue {
   enumName: string;
   variantName: string;
   payload: unknown[];
+  unwrap?: () => unknown;
 }
 
 export function resultOk(value: unknown): EnumVariantValue {
-  return { kind: "EnumVariant", enumName: "Result", variantName: "Ok", payload: [value] };
+  return { kind: "EnumVariant", enumName: "Result", variantName: "Ok", payload: [value], unwrap: function() { return (this as any).payload[0]; } };
 }
 
 export function resultErr(message: unknown): EnumVariantValue {
-  return { kind: "EnumVariant", enumName: "Result", variantName: "Err", payload: [message] };
+  return { kind: "EnumVariant", enumName: "Result", variantName: "Err", payload: [message], unwrap: function() { throw new Error((this as any).payload[0]); } };
 }
 
 export function optionSome(value: unknown): EnumVariantValue {
-  return { kind: "EnumVariant", enumName: "Option", variantName: "Some", payload: [value] };
+  return { kind: "EnumVariant", enumName: "Option", variantName: "Some", payload: [value], unwrap: function() { return (this as any).payload[0]; } };
 }
 
 export function optionNone(): EnumVariantValue {
-  return { kind: "EnumVariant", enumName: "Option", variantName: "None", payload: [] };
+  return { kind: "EnumVariant", enumName: "Option", variantName: "None", payload: [], unwrap: function() { throw new Error("Unwrap on None"); } };
 }

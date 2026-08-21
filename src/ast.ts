@@ -59,6 +59,7 @@ export enum TokenType {
   Break = "BREAK", // break
   Continue = "CONTINUE", // continue
   Catch = "CATCH", // catch (RFC-029)
+  Hash = "HASH", // # (RFC-041 attributes como #[test])
 }
 
 export interface Token {
@@ -271,12 +272,20 @@ export interface Parameter {
   span?: Span;
 }
 
+export interface AttributeNode {
+  kind: "Attribute";
+  name: string;
+  args?: Expr[];
+  span?: Span;
+}
+
 export interface FunctionDeclaration {
   kind: "FunctionDeclaration";
   name: string;
   parameters: Parameter[];
   returnType?: TypeNode | undefined;
   body: BlockStmt;
+  attributes?: AttributeNode[];
   span?: Span;
 }
 

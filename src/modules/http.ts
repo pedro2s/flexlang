@@ -69,8 +69,102 @@ interface FlexCorsConfig {
   max_age: number;
 }
 
+function parseMultipartBuffer(
+  body: string,
+  contentTypeHeader: string,
+): { fields: Map<string, string>; files: Map<string, Map<string, unknown>> } {
+  const fields = new Map<string, string>();
+  const files = new Map<string, Map<string, unknown>>();
+
+  const boundaryMatch = contentTypeHeader.match(/boundary=([^;]+)/i);
+  if (!boundaryMatch) {
+    return { fields, files };
+  }
+
+  let boundary = boundaryMatch[1]!.trim();
+  if ((boundary.startsWith('"') && boundary.endsWith('"')) || (boundary.startsWith("'") && boundary.endsWith("'"))) {
+    boundary = boundary.slice(1, -1);
+  }
+
+  const boundaryDelimiter = `--${boundary}`;
+  const parts = body.split(boundaryDelimiter);
+
+  for (const part of parts) {
+    const trimmed = part.trim();
+    if (!trimmed || trimmed === "--") continue;
+
+    const headerEndIdx = part.indexOf("\r\n\r\n");
+    const lfEndIdx = part.indexOf("\n\n");
+    let headerStr = "";
+    let partBody = "";
+
+    if (headerEndIdx !== -1) {
+      headerStr = part.slice(0, headerEndIdx);
+      partBody = part.slice(headerEndIdx + 4);
+    } else if (lfEndIdx !== -1) {
+      headerStr = part.slice(0, lfEndIdx);
+      partBody = part.slice(lfEndIdx + 2);
+    } else {
+      continue;
+    }
+
+    if (partBody.endsWith("\r\n")) {
+      partBody = partBody.slice(0, -2);
+    } else if (partBody.endsWith("\n")) {
+      partBody = partBody.slice(0, -1);
+    }
+
+    let name = "";
+    let filename: string | null = null;
+    let contentType = "text/plain";
+
+    for (const line of headerStr.split(/\r?\n/)) {
+      const colonIdx = line.indexOf(":");
+      if (colonIdx === -1) continue;
+      const hName = line.slice(0, colonIdx).trim().toLowerCase();
+      const hVal = line.slice(colonIdx + 1).trim();
+
+      if (hName === "content-disposition") {
+        const nameMatch = hVal.match(/name="([^"]+)"/i);
+        if (nameMatch) name = nameMatch[1]!;
+        const fnMatch = hVal.match(/filename="([^"]+)"/i);
+        if (fnMatch) filename = fnMatch[1]!;
+      } else if (hName === "content-type") {
+        contentType = hVal;
+      }
+    }
+
+    if (!name) continue;
+
+    if (filename !== null) {
+      const fileMap = new Map<string, unknown>();
+      fileMap.set("__structName", "UploadedFile");
+      fileMap.set("filename", filename);
+      fileMap.set("content_type", contentType);
+      fileMap.set("size", Buffer.byteLength(partBody, "utf-8"));
+      fileMap.set("content", partBody);
+      files.set(name, fileMap);
+    } else {
+      fields.set(name, partBody);
+    }
+  }
+
+  return { fields, files };
+}
+
+function parseUrlEncodedBody(rawBody: string): Map<string, string> {
+  const fields = new Map<string, string>();
+  const params = new URLSearchParams(rawBody);
+  for (const [k, v] of params.entries()) {
+    fields.set(k, v);
+  }
+  return fields;
+}
+
 class FlexRequest {
   readonly [NATIVE_TAG] = "Request";
+  private formFields: Map<string, string> | null = null;
+  private formFiles: Map<string, Map<string, unknown>> | null = null;
 
   constructor(
     private params: Record<string, string>,
@@ -78,6 +172,21 @@ class FlexRequest {
     private readonly rawBody: string,
     private readonly rawHeaders: Record<string, string | string[] | undefined> = {},
   ) {}
+
+  private ensureFormParsed(): void {
+    if (this.formFields !== null) return;
+    this.formFields = new Map<string, string>();
+    this.formFiles = new Map<string, Map<string, unknown>>();
+
+    const ct = String(this.rawHeaders["content-type"] || "");
+    if (ct.includes("multipart/form-data")) {
+      const parsed = parseMultipartBuffer(this.rawBody, ct);
+      this.formFields = parsed.fields;
+      this.formFiles = parsed.files;
+    } else if (ct.includes("application/x-www-form-urlencoded")) {
+      this.formFields = parseUrlEncodedBody(this.rawBody);
+    }
+  }
 
   setParams(params: Record<string, string>): void {
     this.params = params;
@@ -101,6 +210,16 @@ class FlexRequest {
     return optionSome(String(raw));
   }
 
+  headers(): Map<string, string> {
+    const map = new Map<string, string>();
+    for (const [k, v] of Object.entries(this.rawHeaders)) {
+      if (v !== undefined) {
+        map.set(k.toLowerCase(), Array.isArray(v) ? v.join(", ") : String(v));
+      }
+    }
+    return map;
+  }
+
   query(name: string) {
     const v = this.queryParams.get(name);
     return v === null ? optionNone() : optionSome(v);
@@ -110,6 +229,18 @@ class FlexRequest {
     const v = this.queryParams.get(name);
     if (v === null || !INT_PATTERN.test(v)) return optionNone();
     return optionSome(parseInt(v, 10));
+  }
+
+  form_value(name: string) {
+    this.ensureFormParsed();
+    const val = this.formFields!.get(name);
+    return val !== undefined ? optionSome(val) : optionNone();
+  }
+
+  form_file(name: string) {
+    this.ensureFormParsed();
+    const file = this.formFiles!.get(name);
+    return file !== undefined ? optionSome(file) : optionNone();
   }
 
   json() {
@@ -154,6 +285,22 @@ class FlexResponse {
 
   json(data: unknown): null {
     this.write(this.statusCode, data);
+    return null;
+  }
+
+  send_string(data: string): null {
+    if (this.written) return null;
+    this.written = true;
+    const defaultHeaders: Record<string, string> = {
+      "Content-Type": "text/plain; charset=utf-8",
+      ...this.responseHeaders,
+    };
+    this.raw.writeHead(this.statusCode, defaultHeaders);
+    if (this.isHead) {
+      this.raw.end();
+    } else {
+      this.raw.end(String(data));
+    }
     return null;
   }
 
@@ -461,6 +608,93 @@ class FlexServer {
   }
 }
 
+class FlexMultipartForm {
+  readonly [NATIVE_TAG] = "MultipartForm";
+  public formData = new FormData();
+
+  add_field(name: string, value: string): null {
+    this.formData.append(name, value);
+    return null;
+  }
+
+  add_file(name: string, filename: string, content: string): null {
+    // Node 18+ nativo File/Blob support for fetch
+    const blob = new Blob([content], { type: "application/octet-stream" });
+    this.formData.append(name, blob, filename);
+    return null;
+  }
+}
+
+class FlexClientResponse {
+  readonly [NATIVE_TAG] = "ClientResponse";
+  constructor(
+    private readonly _status: number,
+    private readonly _body: string,
+    private readonly _headers: Map<string, string>
+  ) {}
+
+  status(): number { return this._status; }
+  body(): string { return this._body; }
+}
+
+class FlexHttpClient {
+  readonly [NATIVE_TAG] = "Client";
+  private timeoutMs: number;
+
+  constructor(config?: Map<string, unknown>) {
+    const t = config?.get("timeout_ms");
+    this.timeoutMs = typeof t === "number" && t > 0 ? t : 10000;
+  }
+
+  private async doFetch(url: string, init: RequestInit): Promise<any> {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const res = await fetch(url, { ...init, signal: controller.signal });
+      clearTimeout(id);
+      const body = await res.text();
+      const headers = new Map<string, string>();
+      res.headers.forEach((v, k) => headers.set(k, v));
+      return resultOk(new FlexClientResponse(res.status, body, headers));
+    } catch (e: any) {
+      clearTimeout(id);
+      if (e.name === "AbortError") return resultErr("timeout");
+      return resultErr(e.message || String(e));
+    }
+  }
+
+  async get(url: string): Promise<any> {
+    return this.doFetch(url, { method: "GET" });
+  }
+
+  async post(url: string, body: string): Promise<any> {
+    return this.doFetch(url, { method: "POST", body });
+  }
+
+  async post_json(url: string, data: Map<string, unknown>): Promise<any> {
+    return this.doFetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(Object.fromEntries(data)),
+    });
+  }
+
+  async put(url: string, body: string): Promise<any> {
+    return this.doFetch(url, { method: "PUT", body });
+  }
+
+  async delete(url: string): Promise<any> {
+    return this.doFetch(url, { method: "DELETE" });
+  }
+
+  async post_multipart(url: string, form: FlexMultipartForm): Promise<any> {
+    return this.doFetch(url, {
+      method: "POST",
+      body: form.formData, // O fetch gerencia automaticamente o Content-Type com o boundary
+    });
+  }
+}
+
 const GO_BOILERPLATE = [
   "// --- FlexLang HTTP Boilerplate (RFC-004 / RFC-011 / RFC-015) ---",
   "type ServerConfig struct {",
@@ -475,39 +709,57 @@ const GO_BOILERPLATE = [
   "  max_age       int",
   "}",
   "",
+  "type UploadedFile struct {",
+  "  filename     string",
+  "  content_type string",
+  "  size         int",
+  "  content      string",
+  "}",
+  "",
   "type Request struct {",
   "  params      map[string]string",
   "  queryParams url.Values",
-  "  headers     http.Header",
+  "  rawHeaders  http.Header",
   "  body        []byte",
+  "  rawRequest  *http.Request",
   "}",
   "",
   "func (r Request) param(name string) string { return r.params[name] }",
   "",
   "func (r Request) header(name string) Option {",
-  "  v := r.headers.Get(name)",
-  '  if v == "" {',
-  "    for k, vals := range r.headers {",
+  "  v := r.rawHeaders.Get(name)",
+  "  if v == \"\" {",
+  "    for k, vals := range r.rawHeaders {",
   "      if strings.EqualFold(k, name) && len(vals) > 0 {",
   "        v = vals[0]",
   "        break",
   "      }",
   "    }",
-  '    if v == "" {',
+  "    if v == \"\" {",
   "      return Option_None",
   "    }",
   "  }",
   "  return Option_Some_new(v)",
   "}",
   "",
+  "func (r Request) headers() map[string]any {",
+  "  res := make(map[string]any)",
+  "  for k, vals := range r.rawHeaders {",
+  "    if len(vals) > 0 {",
+  "      res[strings.ToLower(k)] = strings.Join(vals, \", \")",
+  "    }",
+  "  }",
+  "  return res",
+  "}",
+  "",
   "func (r Request) param_int(name string) Result {",
   "  raw, present := r.params[name]",
   "  if !present {",
-  '    return Result_Err_new("missing path parameter \'" + name + "\'")',
+  "    return Result_Err_new(\"missing path parameter '\" + name + \"'\")",
   "  }",
   "  n, err := strconv.Atoi(raw)",
   "  if err != nil {",
-  '    return Result_Err_new("path parameter \'" + name + "\' is not an Int")',
+  "    return Result_Err_new(\"path parameter '\" + name + \"' is not an Int\")",
   "  }",
   "  return Result_Ok_new(n)",
   "}",
@@ -524,16 +776,65 @@ const GO_BOILERPLATE = [
   "  return Option_Some_new(n)",
   "}",
   "",
+  "func (r Request) form_value(name string) Option {",
+  "  if r.rawRequest != nil {",
+  "    if val := r.rawRequest.FormValue(name); val != \"\" {",
+  "      return Option_Some_new(val)",
+  "    }",
+  "    if r.rawRequest.MultipartForm != nil && r.rawRequest.MultipartForm.Value != nil {",
+  "      if vals, ok := r.rawRequest.MultipartForm.Value[name]; ok && len(vals) > 0 {",
+  "        return Option_Some_new(vals[0])",
+  "      }",
+  "    }",
+  "  }",
+  "  if strings.Contains(r.rawHeaders.Get(\"Content-Type\"), \"application/x-www-form-urlencoded\") {",
+  "    vals, err := url.ParseQuery(string(r.body))",
+  "    if err == nil {",
+  "      if val := vals.Get(name); val != \"\" {",
+  "        return Option_Some_new(val)",
+  "      }",
+  "    }",
+  "  }",
+  "  return Option_None",
+  "}",
+  "",
+  "func (r Request) form_file(name string) Option {",
+  "  if r.rawRequest != nil {",
+  "    _ = r.rawRequest.ParseMultipartForm(32 << 20)",
+  "    if r.rawRequest.MultipartForm != nil && r.rawRequest.MultipartForm.File != nil {",
+  "      if files, ok := r.rawRequest.MultipartForm.File[name]; ok && len(files) > 0 {",
+  "        fh := files[0]",
+  "        f, err := fh.Open()",
+  "        if err == nil {",
+  "          defer f.Close()",
+  "          data, _ := io.ReadAll(f)",
+  "          ct := fh.Header.Get(\"Content-Type\")",
+  "          if ct == \"\" {",
+  "            ct = \"application/octet-stream\"",
+  "          }",
+  "          return Option_Some_new(UploadedFile{",
+  "            filename:     fh.Filename,",
+  "            content_type: ct,",
+  "            size:         int(fh.Size),",
+  "            content:      string(data),",
+  "          })",
+  "        }",
+  "      }",
+  "    }",
+  "  }",
+  "  return Option_None",
+  "}",
+  "",
   "// req.json() (sem argumentos): o tipo concreto vem do site de chamada, via o",
   "// tipo que o TypeChecker resolveu (RFC-004) — o transpiler emite DecodeJSON[T]",
   "// em vez de um método, porque Go nao tem metodos genericos.",
   "func DecodeJSON[T any](req Request) Result {",
-  '  if strings.TrimSpace(string(req.body)) == "" {',
-  '    return Result_Err_new("empty request body")',
+  "  if strings.TrimSpace(string(req.body)) == \"\" {",
+  "    return Result_Err_new(\"empty request body\")",
   "  }",
   "  var target T",
   "  if err := json.Unmarshal(req.body, &target); err != nil {",
-  '    return Result_Err_new("invalid JSON body")',
+  "    return Result_Err_new(\"invalid JSON body\")",
   "  }",
   "  return Result_Ok_new(target)",
   "}",
@@ -557,8 +858,23 @@ const GO_BOILERPLATE = [
   "",
   "func (r *Response) json(data any) { r.write(r.statusCode, data) }",
   "",
+  "func (r *Response) send_string(data string) {",
+  "  if r.written { return }",
+  "  r.written = true",
+  "  if r.headers == nil || r.headers[\"Content-Type\"] == \"\" {",
+  "    r.raw.Header().Set(\"Content-Type\", \"text/plain; charset=utf-8\")",
+  "  }",
+  "  for k, v := range r.headers {",
+  "    r.raw.Header().Set(k, v)",
+  "  }",
+  "  r.raw.WriteHeader(r.statusCode)",
+  "  if !r.isHead {",
+  "    r.raw.Write([]byte(data))",
+  "  }",
+  "}",
+  "",
   "func (r *Response) error(status int, message string) {",
-  '  r.write(status, map[string]string{"error": message})',
+  "  r.write(status, map[string]string{\"error\": message})",
   "}",
   "",
   "func (r *Response) write(status int, data any) {",
@@ -684,7 +1000,8 @@ const GO_BOILERPLATE = [
   '    json.NewEncoder(w).Encode(map[string]string{"error": "request body too large"})',
   "    return",
   "  }",
-  "  req := Request{params: map[string]string{}, queryParams: r.URL.Query(), headers: r.Header, body: body}",
+  "  r.Body = io.NopCloser(bytes.NewReader(body))",
+  "  req := Request{params: map[string]string{}, queryParams: r.URL.Query(), rawHeaders: r.Header, body: body, rawRequest: r}",
   '  res := &Response{raw: w, statusCode: 200, headers: map[string]string{}, isHead: r.Method == "HEAD"}',
   "",
   "  // CORS",
@@ -833,6 +1150,103 @@ const GO_BOILERPLATE = [
   '    fmt.Printf("HTTP server shutdown error: %v\\n", err)',
   "  }",
   "}",
+  "",
+  "type ClientConfig struct {",
+  "  timeout_ms int",
+  "}",
+  "",
+  "type ClientResponse struct {",
+  "  _status  int",
+  "  _body    string",
+  "  _headers map[string]string",
+  "}",
+  "",
+  "func ClientResponse_status(res any) int { return res.(*ClientResponse)._status }",
+  "func ClientResponse_body(res any) string { return res.(*ClientResponse)._body }",
+  "",
+  "type MultipartForm struct {",
+  "  buf    *bytes.Buffer",
+  "  writer *multipart.Writer",
+  "}",
+  "",
+  "func NewMultipartForm() *MultipartForm {",
+  "  b := &bytes.Buffer{}",
+  "  return &MultipartForm{buf: b, writer: multipart.NewWriter(b)}",
+  "}",
+  "",
+  "func (m *MultipartForm) add_field(name string, value string) {",
+  "  m.writer.WriteField(name, value)",
+  "}",
+  "",
+  "func (m *MultipartForm) add_file(name string, filename string, content string) {",
+  "  part, _ := m.writer.CreateFormFile(name, filename)",
+  "  part.Write([]byte(content))",
+  "}",
+  "",
+  "type Client struct {",
+  "  raw *http.Client",
+  "}",
+  "",
+  "func Client_default() *Client {",
+  "  return NewClient(nil)",
+  "}",
+  "",
+  "func NewClient(cfg *ClientConfig) *Client {",
+  "  t := 10000",
+  "  if cfg != nil && cfg.timeout_ms > 0 { t = cfg.timeout_ms }",
+  "  return &Client{",
+  "    raw: &http.Client{Timeout: time.Duration(t) * time.Millisecond},",
+  "  }",
+  "}",
+  "",
+  "func (c *Client) doFetch(req *http.Request) Result {",
+  "  res, err := c.raw.Do(req)",
+  "  if err != nil {",
+  "    if os.IsTimeout(err) { return Result_Err_new(\"timeout\") }",
+  "    return Result_Err_new(err.Error())",
+  "  }",
+  "  defer res.Body.Close()",
+  "  b, _ := io.ReadAll(res.Body)",
+  "  headers := map[string]string{}",
+  "  for k, v := range res.Header {",
+  "    if len(v) > 0 { headers[k] = v[0] }",
+  "  }",
+  "  return Result_Ok_new(&ClientResponse{_status: res.StatusCode, _body: string(b), _headers: headers})",
+  "}",
+  "",
+  "func (c *Client) get(url string) Result {",
+  "  req, _ := http.NewRequest(\"GET\", url, nil)",
+  "  return c.doFetch(req)",
+  "}",
+  "",
+  "func (c *Client) delete(url string) Result {",
+  "  req, _ := http.NewRequest(\"DELETE\", url, nil)",
+  "  return c.doFetch(req)",
+  "}",
+  "",
+  "func (c *Client) post(url string, body string) Result {",
+  "  req, _ := http.NewRequest(\"POST\", url, strings.NewReader(body))",
+  "  return c.doFetch(req)",
+  "}",
+  "",
+  "func (c *Client) put(url string, body string) Result {",
+  "  req, _ := http.NewRequest(\"PUT\", url, strings.NewReader(body))",
+  "  return c.doFetch(req)",
+  "}",
+  "",
+  "func (c *Client) post_json(url string, data any) Result {",
+  "  b, _ := json.Marshal(data)",
+  "  req, _ := http.NewRequest(\"POST\", url, bytes.NewReader(b))",
+  "  req.Header.Set(\"Content-Type\", \"application/json\")",
+  "  return c.doFetch(req)",
+  "}",
+  "",
+  "func (c *Client) post_multipart(url string, form *MultipartForm) Result {",
+  "  form.writer.Close()",
+  "  req, _ := http.NewRequest(\"POST\", url, form.buf)",
+  "  req.Header.Set(\"Content-Type\", form.writer.FormDataContentType())",
+  "  return c.doFetch(req)",
+  "}",
   "// ---------------------------------",
 ].join("\n");
 
@@ -882,10 +1296,38 @@ export const httpModule: NativeModule = {
           returns: { kind: "Enum", name: "Option", genericArgs: [{ kind: "Int" }] },
         },
         {
+          name: "form_value",
+          arity: 1,
+          returns: { kind: "Enum", name: "Option", genericArgs: [{ kind: "String" }] },
+        },
+        {
+          name: "form_file",
+          arity: 1,
+          returns: {
+            kind: "Enum",
+            name: "Option",
+            genericArgs: [{ kind: "Struct", name: "UploadedFile", genericArgs: [] }],
+          },
+        },
+        {
           name: "header",
           arity: 1,
           returns: { kind: "Enum", name: "Option", genericArgs: [{ kind: "String" }] },
         },
+        {
+          name: "headers",
+          arity: 0,
+          returns: { kind: "HashMap", keyType: { kind: "String" }, valueType: { kind: "String" } },
+        },
+      ],
+    },
+    {
+      name: "UploadedFile",
+      properties: [
+        { name: "filename", typeAnnotation: { kind: "NamedTypeNode", name: "String" } },
+        { name: "content_type", typeAnnotation: { kind: "NamedTypeNode", name: "String" } },
+        { name: "size", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
+        { name: "content", typeAnnotation: { kind: "NamedTypeNode", name: "String" } },
       ],
     },
     {
@@ -895,6 +1337,7 @@ export const httpModule: NativeModule = {
         { name: "status", arity: 1, returns: { kind: "Struct", name: "Response", genericArgs: [] } },
         { name: "header", arity: 2, returns: { kind: "Struct", name: "Response", genericArgs: [] } },
         { name: "json", arity: 1, returns: { kind: "Void" } },
+        { name: "send_string", arity: 1, returns: { kind: "Void" } },
         { name: "error", arity: 2, returns: { kind: "Void" } },
       ],
     },
@@ -912,6 +1355,48 @@ export const httpModule: NativeModule = {
         { name: "allow_methods", typeAnnotation: { kind: "ArrayTypeNode", elementType: { kind: "NamedTypeNode", name: "String" } } },
         { name: "allow_headers", typeAnnotation: { kind: "ArrayTypeNode", elementType: { kind: "NamedTypeNode", name: "String" } } },
         { name: "max_age", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
+      ],
+    },
+    {
+      name: "ClientConfig",
+      properties: [
+        { name: "timeout_ms", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
+      ],
+    },
+    {
+      name: "ClientResponse",
+      goPointer: true,
+      statics: [
+        { name: "status", arity: 1, returns: { kind: "Int" } },
+        { name: "body", arity: 1, returns: { kind: "String" } },
+      ],
+      methods: [],
+    },
+    {
+      name: "MultipartForm",
+      goPointer: true,
+      statics: [
+        { name: "new", arity: 0, returns: { kind: "Struct", name: "MultipartForm", genericArgs: [] } },
+      ],
+      methods: [
+        { name: "add_field", arity: 2, returns: { kind: "Void" } },
+        { name: "add_file", arity: 3, returns: { kind: "Void" } },
+      ],
+    },
+    {
+      name: "Client",
+      goPointer: true,
+      statics: [
+        { name: "default", arity: 0, returns: { kind: "Struct", name: "Client", genericArgs: [] } },
+        { name: "new", arity: 1, returns: { kind: "Struct", name: "Client", genericArgs: [] } },
+      ],
+      methods: [
+        { name: "get", arity: 1, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "Struct", name: "ClientResponse", genericArgs: [] }, { kind: "String" }] } },
+        { name: "delete", arity: 1, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "Struct", name: "ClientResponse", genericArgs: [] }, { kind: "String" }] } },
+        { name: "post", arity: 2, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "Struct", name: "ClientResponse", genericArgs: [] }, { kind: "String" }] } },
+        { name: "post_json", arity: 2, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "Struct", name: "ClientResponse", genericArgs: [] }, { kind: "String" }] } },
+        { name: "put", arity: 2, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "Struct", name: "ClientResponse", genericArgs: [] }, { kind: "String" }] } },
+        { name: "post_multipart", arity: 2, returns: { kind: "Enum", name: "Result", genericArgs: [{ kind: "Struct", name: "ClientResponse", genericArgs: [] }, { kind: "String" }] } },
       ],
     },
   ],
@@ -941,10 +1426,41 @@ export const httpModule: NativeModule = {
         { name: "max_age", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
       ],
     },
+    UploadedFile: {
+      kind: "StructDeclaration",
+      name: "UploadedFile",
+      properties: [
+        { name: "filename", typeAnnotation: { kind: "NamedTypeNode", name: "String" } },
+        { name: "content_type", typeAnnotation: { kind: "NamedTypeNode", name: "String" } },
+        { name: "size", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
+        { name: "content", typeAnnotation: { kind: "NamedTypeNode", name: "String" } },
+      ],
+    },
+    MultipartForm: {
+      [NATIVE_TAG]: "MultipartForm",
+      new: () => new FlexMultipartForm(),
+    },
+    Client: {
+      [NATIVE_TAG]: "Client",
+      default: () => new FlexHttpClient(),
+      new: (config?: Map<string, unknown>) => new FlexHttpClient(config),
+    },
+    ClientConfig: {
+      kind: "StructDeclaration",
+      name: "ClientConfig",
+      properties: [
+        { name: "timeout_ms", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
+      ],
+    },
+    ClientResponse: {
+      [NATIVE_TAG]: "ClientResponse",
+      status: (res: any) => res.status(),
+      body: (res: any) => res.body(),
+    },
   }),
 
   goCodegen: {
-    imports: ["net/http", "net/url", "encoding/json", "io", "strconv", "strings", "time", "context", "os", "os/signal", "syscall", "fmt"],
+    imports: ["net/http", "net/url", "encoding/json", "io", "strconv", "strings", "time", "context", "os", "os/signal", "syscall", "fmt", "bytes", "mime/multipart"],
     boilerplate: GO_BOILERPLATE,
   },
 };
