@@ -1,37 +1,39 @@
 <div align="center">
   <img src="https://raw.githubusercontent.com/pedro2s/flexlang/main/assets/octans-logo.svg" alt="FlexLang" width="96" height="96" />
   <h1>FlexLang para Visual Studio Code</h1>
-  <p><strong>A extensão oficial de desenvolvimento produtivo, dinâmico e inteligente para a linguagem FlexLang.</strong></p>
+  <p><strong>A extensão oficial de desenvolvimento produtivo, dinâmico e inteligente para a linguagem FlexLang (v0.4.0).</strong></p>
 </div>
 
 ---
 
 ## ⚡ Recursos Principais
 
-- 🎨 **Realce Sintático Completo (TextMate Grammar):** Destaque de palavras-chave (`func`, `struct`, `impl`, `enum`, `match`, `scope`, `spawn`), modificadores de mutabilidade (`let`, `mut`, `const`), interpolação de strings `${...}`, comentários JSDoc/Doc e operadores especiais (`->`, `=>`, `?`, `..`).
+- 🎨 **Realce Sintático Completo (TextMate Grammar):** Destaque avançado para palavras-chave (`func`, `struct`, `impl`, `enum`, `match`, `scope`, `spawn`, `catch`), atributos/anotações (`#[test]`, `#[derive]`), modificadores de mutabilidade (`let`, `mut`, `const`), interpolação de strings `${...}`, tipos da Standard Library e operadores especiais (`->`, `=>`, `?`, `..`).
 - 🧠 **Language Server Protocol (LSP) Integrado:**
   - **Diagnósticos em Tempo Real:** Verificação léxica, sintática e semântica de tipos com mensagens explicativas (`E1xxx` a `E5xxx`) e sugestões de correção acionáveis.
-  - **IntelliSense & Auto-complete:** Sugestões inteligentes de tipos, módulos da stdlib (`net/http`, `db/postgres`, `core/log`), métodos e palavras-chave.
-  - **Documentação em Hover:** Dicas dinâmicas com assinaturas de funções, tipos de structs e documentação da biblioteca padrão.
-  - **Go to Definition:** Navegação rápida para definições locais e arquivos importados (`import { ... } from "./modulo"`).
-  - **Símbolos e Outline:** Navegação hierárquica por funções, estruturas, enums e traits no Outline do editor e breadcrumbs.
-  - **Signature Help:** Guia de parâmetros durante a digitação de chamadas de funções.
-- 📐 **Formatador Automático de Código (Auto-Format):** Formatação determinística respeitando indentação, alinhamento de chaves, espaçamento de operadores e blocos de pattern matching.
-- 🚀 **Snippets de Alta Produtividade:** Blocos prontos para servidores HTTP REST, conexão PostgreSQL com queries parametrizadas `$1`, concorrência com `scope`/`spawn` e tratamento com `Result<T, E>` / `?`.
+  - **IntelliSense & Auto-complete:** Sugestões inteligentes para todos os módulos da Stdlib (`net/http`, `storage/redis`, `data/validator`, `core/resilience`, `mq/kafka`, `std/testing`, `std/fs`, etc.), palavras-chave, tipos e asserções.
+  - **Documentação em Hover:** Documentação interativa em Markdown para toda a Standard Library v0.4.0, funções locais e estruturas.
+  - **Go to Definition:** Navegação rápida para definições locais e módulos importados (`import { ... } from "./modulo"`).
+  - **Símbolos e Outline:** Navegação hierárquica por funções, testes, constantes, estruturas, enums e traits no Outline e breadcrumbs.
+  - **Signature Help:** Guia interativo de parâmetros durante chamadas de função.
+- 📐 **Formatador Automático de Código (Auto-Format):** Formatação determinística respeitando indentação, alinhamento de chaves, atributos `#[test]`, blocos `catch` e operadores.
+- 🚀 **Snippets de Alta Produtividade:** Blocos prontos para testes unitários com `#[test]` e `std/testing`, servidores REST, clientes HTTP, Redis com distributed locks, validações com `Validator`, Circuit Breakers, telemetria e Kafka.
 - 🕹️ **CodeLens Interativo & Comandos Rápidos:**
   - `▶ Executar (flex run)` diretamente acima da função `main()`.
   - `⚡ Watch Mode (flex run --watch)` para desenvolvimento com hot reload.
-  - `📦 Compilar Go (flex build)` para gerar binários nativos.
-  - `🧪 Executar Testes (flex test)` para rodar a suíte de testes do projeto.
+  - `📦 Compilar Go (flex build)` para gerar binários nativos de alta performance.
+  - `🛡️ Checar Tipos (flex check)` para validação estática instantânea.
+  - `🧪 Executar Teste (flex test)` diretamente acima de funções `#[test]`.
+  - `⚡ Teste Nativo (flex test --native)` para validar a paridade de execução compilada em Go.
 
 ---
 
 ## 🚀 Como Usar
 
 1. Abra qualquer arquivo com extensão `.flex` no VSCode.
-2. A extensão será ativada automaticamente e o servidor de linguagem iniciará a análise.
-3. Utilize o atalho padrão de formatação (`Shift + Alt + F` no Windows/Linux ou `Shift + Option + F` no macOS) para formatar seu código.
-4. Execute o arquivo clicando no CodeLens **"▶ Executar (flex run)"** ou através do Command Palette (`Ctrl+Shift+P` -> `FlexLang: Executar Arquivo Atual`).
+2. A extensão será ativada automaticamente e o servidor de linguagem iniciará a análise em tempo real.
+3. Utilize o atalho padrão de formatação (`Shift + Alt + F` no Linux/Windows ou `Shift + Option + F` no macOS) para formatar seu código.
+4. Execute o arquivo ou seus testes diretamente pelos botões de **CodeLens** ou pelo Command Palette (`Ctrl+Shift+P`).
 
 ---
 
@@ -43,7 +45,7 @@
 | `flexlang.format.enable` | `true` | Habilita a formatação automática de código. |
 | `flexlang.format.indentSize` | `4` | Quantidade de espaços por nível de indentação. |
 | `flexlang.diagnostics.onType` | `true` | Habilita análise e diagnósticos em tempo real durante a digitação. |
-| `flexlang.codeLens.enable` | `true` | Exibe botões interativos de CodeLens sobre pontos de entrada. |
+| `flexlang.codeLens.enable` | `true` | Exibe botões interativos de CodeLens sobre pontos de entrada e testes. |
 
 ---
 

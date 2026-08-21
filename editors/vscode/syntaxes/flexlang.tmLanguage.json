@@ -7,6 +7,9 @@
       "include": "#comments"
     },
     {
+      "include": "#attributes"
+    },
+    {
       "include": "#strings"
     },
     {
@@ -60,6 +63,25 @@
         {
           "name": "comment.line.double-slash.flex",
           "match": "//.*$"
+        }
+      ]
+    },
+    "attributes": {
+      "patterns": [
+        {
+          "name": "meta.attribute.flex",
+          "match": "#\\[\\s*([a-zA-Z_][a-zA-Z0-9_]*)(?:\\s*\\(([^\\)]*)\\))?\\s*\\]",
+          "captures": {
+            "0": {
+              "name": "entity.other.attribute-name.flex"
+            },
+            "1": {
+              "name": "keyword.other.attribute.flex"
+            },
+            "2": {
+              "name": "meta.attribute.arguments.flex"
+            }
+          }
         }
       ]
     },
@@ -154,7 +176,7 @@
         },
         {
           "name": "keyword.control.flow.flex",
-          "match": "\\b(if|else|match|for|in|while|break|continue|return)\\b"
+          "match": "\\b(if|else|match|for|in|while|break|continue|return|catch)\\b"
         },
         {
           "name": "keyword.control.import.flex",
@@ -170,7 +192,7 @@
         },
         {
           "name": "support.function.builtin.flex",
-          "match": "\\b(print)\\b"
+          "match": "\\b(print|parse_int|parse_float|to_string|assert_eq|assert_ne|assert_true|assert_false|assert_ok|assert_err|assert_some|assert_none)\\b"
         }
       ]
     },
@@ -178,7 +200,7 @@
       "patterns": [
         {
           "name": "support.type.primitive.flex",
-          "match": "\\b(Int|Float|String|Bool|Void|Any|Map)\\b"
+          "match": "\\b(Int|Float|String|Bool|Void|Any|Map|HashMap|Array|Decimal)\\b"
         },
         {
           "name": "support.type.builtin.flex",
@@ -186,7 +208,7 @@
         },
         {
           "name": "support.class.stdlib.flex",
-          "match": "\\b(Server|ServerConfig|CorsConfig|Request|Response|PathParams|Pool|PoolConfig|Client|QueryResult|Transaction|Decimal)\\b"
+          "match": "\\b(Server|ServerConfig|CorsConfig|Request|Response|Client|ClientResponse|PathParams|Pool|PoolConfig|QueryResult|Transaction|Redis|RedisConfig|RedisClient|RedisLock|Validator|ValidationRule|ValidationError|CircuitBreaker|CircuitBreakerConfig|Retry|RetryConfig|RateLimiter|RateLimiterConfig|Counter|Gauge|Histogram|Tracer|Span|Telemetry|Producer|Consumer|ProducerConfig|ConsumerConfig|Message|IdempotencyEngine|IdempotencyConfig|IdempotencyRecord|IdempotencyStatus|Regex|Scheduler|Job|JobConfig|Cron|Time|Duration)\\b"
         },
         {
           "name": "entity.name.type.flex",
