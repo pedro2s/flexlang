@@ -663,4 +663,34 @@ const rfc045Ast = new Parser(rfc045Tokens, "rfc045.flex").parse();
 new TypeChecker().check(rfc045Ast, "rfc045.flex");
 assert(true, "RFC-045: core/scheduler validado pelo TypeChecker");
 
+// 31. Testes RFC-046 (net/http Server Multipart & UploadedFile)
+console.log("\n--- 31. Testes RFC-046 (net/http Server Multipart & UploadedFile) ---");
+const rfc046Code = `
+import { Server, ServerConfig, Request, Response, UploadedFile } from "net/http";
+
+func test_multipart_server() {
+    let mut server = Server.new(":8080", ServerConfig { read_timeout: 5000, max_body_size: 5000000 });
+    server.post("/upload", |req, res| {
+        let user = req.form_value("user");
+        let file_opt = req.form_file("avatar");
+        match file_opt {
+            Option.Some(file) {
+                let name = file.filename;
+                let mime = file.content_type;
+                let s = file.size;
+                let c = file.content;
+                res.json({ "status": "ok", "filename": name, "bytes": s });
+            }
+            Option.None {
+                res.error(400, "Arquivo obrigatorio");
+            }
+        }
+    });
+}
+`;
+const rfc046Tokens = new Lexer(rfc046Code).tokenize();
+const rfc046Ast = new Parser(rfc046Tokens, "rfc046.flex").parse();
+new TypeChecker().check(rfc046Ast, "rfc046.flex");
+assert(true, "RFC-046: net/http Server Multipart (form_value, form_file, UploadedFile) validado pelo TypeChecker");
+
 console.log("\n✨ Todos os testes das Ferramentas VSCode passaram com 100% de sucesso!");

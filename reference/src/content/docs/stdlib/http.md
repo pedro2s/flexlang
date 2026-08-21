@@ -55,7 +55,47 @@ server.start();
 | `query` | `req.query(name: String)` | `Option<String>` | Obtém parâmetro de query string (`?page=2`). |
 | `query_int` | `req.query_int(name: String)` | `Option<Int>` | Obtém query param como `Int`. |
 | `header` | `req.header(name: String)` | `Option<String>` | Lê cabeçalho HTTP (case-insensitive). |
+| `form_value` | `req.form_value(name: String)` | `Option<String>` | Extrai valor de campo de formulário (`multipart/form-data` ou `application/x-www-form-urlencoded`). |
+| `form_file` | `req.form_file(name: String)` | `Option<UploadedFile>` | Extrai arquivo enviado via formulário multipart. |
 | `json` | `req.json()` | `Result<T, String>` | Realiza o parse do corpo como JSON estruturado. |
+
+### Estrutura `UploadedFile` (RFC-046)
+
+Quando um arquivo é enviado via `multipart/form-data`, o método `req.form_file("nome")` retorna `Option.Some(UploadedFile)` com os campos:
+
+```flexlang
+struct UploadedFile {
+    filename: String,     // Nome original do arquivo (ex: "contrato.pdf")
+    content_type: String, // Tipo MIME (ex: "application/pdf")
+    size: Int,            // Tamanho em bytes
+    content: String       // Conteúdo binário/string do arquivo
+}
+```
+
+#### Exemplo de Rota para Recebimento de Upload de Arquivos:
+
+```flexlang
+server.post("/api/v1/kyc/upload", |req, res| {
+    let user_id = req.form_value("user_id").unwrap_or("anon");
+
+    match req.form_file("document") {
+        Option.Some(file) {
+            print("Arquivo recebido: \${file.filename} (\${file.size} bytes)");
+            fs.write_file("uploads/\${file.filename}", file.content);
+
+            res.json({
+                "status": "success",
+                "user_id": user_id,
+                "filename": file.filename,
+                "bytes": file.size
+            });
+        }
+        Option.None {
+            res.status(400).json({ "error": "Campo 'document' obrigatorio" });
+        }
+    }
+});
+```
 
 ### Métodos do `Response`
 

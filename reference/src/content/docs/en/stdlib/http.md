@@ -38,12 +38,38 @@ server.get("/users/:id", get_user);
 server.put("/users/:id", update_user);
 server.delete("/users/:id", delete_user);
 
-// Inline Closures
-server.get("/healthz", |req: Request, mut res: Response| {
-    res.status(200).json({ status: "ok", uptime: "99.99%" });
+// File Upload Route (RFC-046)
+server.post("/api/v1/kyc/upload", |req: Request, mut res: Response| {
+    let user_id = req.form_value("user_id").unwrap_or("anon");
+
+    match req.form_file("document") {
+        Option.Some(file) {
+            print("Received file: \${file.filename} (\${file.size} bytes)");
+            res.json({
+                "status": "success",
+                "user_id": user_id,
+                "filename": file.filename,
+                "bytes": file.size
+            });
+        }
+        Option.None {
+            res.status(400).json({ "error": "Field 'document' is required" });
+        }
+    }
 });
 
 server.start();
+```
+
+### `UploadedFile` Structure (RFC-046)
+
+```flexlang
+struct UploadedFile {
+    filename: String,     // Original filename (e.g. "invoice.pdf")
+    content_type: String, // MIME type (e.g. "application/pdf")
+    size: Int,            // Size in bytes
+    content: String       // File payload string/bytes
+}
 ```
 
 ---

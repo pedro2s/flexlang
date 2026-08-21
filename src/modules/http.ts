@@ -69,8 +69,102 @@ interface FlexCorsConfig {
   max_age: number;
 }
 
+function parseMultipartBuffer(
+  body: string,
+  contentTypeHeader: string,
+): { fields: Map<string, string>; files: Map<string, Map<string, unknown>> } {
+  const fields = new Map<string, string>();
+  const files = new Map<string, Map<string, unknown>>();
+
+  const boundaryMatch = contentTypeHeader.match(/boundary=([^;]+)/i);
+  if (!boundaryMatch) {
+    return { fields, files };
+  }
+
+  let boundary = boundaryMatch[1]!.trim();
+  if ((boundary.startsWith('"') && boundary.endsWith('"')) || (boundary.startsWith("'") && boundary.endsWith("'"))) {
+    boundary = boundary.slice(1, -1);
+  }
+
+  const boundaryDelimiter = `--${boundary}`;
+  const parts = body.split(boundaryDelimiter);
+
+  for (const part of parts) {
+    const trimmed = part.trim();
+    if (!trimmed || trimmed === "--") continue;
+
+    const headerEndIdx = part.indexOf("\r\n\r\n");
+    const lfEndIdx = part.indexOf("\n\n");
+    let headerStr = "";
+    let partBody = "";
+
+    if (headerEndIdx !== -1) {
+      headerStr = part.slice(0, headerEndIdx);
+      partBody = part.slice(headerEndIdx + 4);
+    } else if (lfEndIdx !== -1) {
+      headerStr = part.slice(0, lfEndIdx);
+      partBody = part.slice(lfEndIdx + 2);
+    } else {
+      continue;
+    }
+
+    if (partBody.endsWith("\r\n")) {
+      partBody = partBody.slice(0, -2);
+    } else if (partBody.endsWith("\n")) {
+      partBody = partBody.slice(0, -1);
+    }
+
+    let name = "";
+    let filename: string | null = null;
+    let contentType = "text/plain";
+
+    for (const line of headerStr.split(/\r?\n/)) {
+      const colonIdx = line.indexOf(":");
+      if (colonIdx === -1) continue;
+      const hName = line.slice(0, colonIdx).trim().toLowerCase();
+      const hVal = line.slice(colonIdx + 1).trim();
+
+      if (hName === "content-disposition") {
+        const nameMatch = hVal.match(/name="([^"]+)"/i);
+        if (nameMatch) name = nameMatch[1]!;
+        const fnMatch = hVal.match(/filename="([^"]+)"/i);
+        if (fnMatch) filename = fnMatch[1]!;
+      } else if (hName === "content-type") {
+        contentType = hVal;
+      }
+    }
+
+    if (!name) continue;
+
+    if (filename !== null) {
+      const fileMap = new Map<string, unknown>();
+      fileMap.set("__structName", "UploadedFile");
+      fileMap.set("filename", filename);
+      fileMap.set("content_type", contentType);
+      fileMap.set("size", Buffer.byteLength(partBody, "utf-8"));
+      fileMap.set("content", partBody);
+      files.set(name, fileMap);
+    } else {
+      fields.set(name, partBody);
+    }
+  }
+
+  return { fields, files };
+}
+
+function parseUrlEncodedBody(rawBody: string): Map<string, string> {
+  const fields = new Map<string, string>();
+  const params = new URLSearchParams(rawBody);
+  for (const [k, v] of params.entries()) {
+    fields.set(k, v);
+  }
+  return fields;
+}
+
 class FlexRequest {
   readonly [NATIVE_TAG] = "Request";
+  private formFields: Map<string, string> | null = null;
+  private formFiles: Map<string, Map<string, unknown>> | null = null;
 
   constructor(
     private params: Record<string, string>,
@@ -78,6 +172,21 @@ class FlexRequest {
     private readonly rawBody: string,
     private readonly rawHeaders: Record<string, string | string[] | undefined> = {},
   ) {}
+
+  private ensureFormParsed(): void {
+    if (this.formFields !== null) return;
+    this.formFields = new Map<string, string>();
+    this.formFiles = new Map<string, Map<string, unknown>>();
+
+    const ct = String(this.rawHeaders["content-type"] || "");
+    if (ct.includes("multipart/form-data")) {
+      const parsed = parseMultipartBuffer(this.rawBody, ct);
+      this.formFields = parsed.fields;
+      this.formFiles = parsed.files;
+    } else if (ct.includes("application/x-www-form-urlencoded")) {
+      this.formFields = parseUrlEncodedBody(this.rawBody);
+    }
+  }
 
   setParams(params: Record<string, string>): void {
     this.params = params;
@@ -120,6 +229,18 @@ class FlexRequest {
     const v = this.queryParams.get(name);
     if (v === null || !INT_PATTERN.test(v)) return optionNone();
     return optionSome(parseInt(v, 10));
+  }
+
+  form_value(name: string) {
+    this.ensureFormParsed();
+    const val = this.formFields!.get(name);
+    return val !== undefined ? optionSome(val) : optionNone();
+  }
+
+  form_file(name: string) {
+    this.ensureFormParsed();
+    const file = this.formFiles!.get(name);
+    return file !== undefined ? optionSome(file) : optionNone();
   }
 
   json() {
@@ -588,11 +709,19 @@ const GO_BOILERPLATE = [
   "  max_age       int",
   "}",
   "",
+  "type UploadedFile struct {",
+  "  filename     string",
+  "  content_type string",
+  "  size         int",
+  "  content      string",
+  "}",
+  "",
   "type Request struct {",
   "  params      map[string]string",
   "  queryParams url.Values",
   "  rawHeaders  http.Header",
   "  body        []byte",
+  "  rawRequest  *http.Request",
   "}",
   "",
   "func (r Request) param(name string) string { return r.params[name] }",
@@ -645,6 +774,55 @@ const GO_BOILERPLATE = [
   "  n, err := strconv.Atoi(r.queryParams.Get(name))",
   "  if err != nil { return Option_None }",
   "  return Option_Some_new(n)",
+  "}",
+  "",
+  "func (r Request) form_value(name string) Option {",
+  "  if r.rawRequest != nil {",
+  "    if val := r.rawRequest.FormValue(name); val != \"\" {",
+  "      return Option_Some_new(val)",
+  "    }",
+  "    if r.rawRequest.MultipartForm != nil && r.rawRequest.MultipartForm.Value != nil {",
+  "      if vals, ok := r.rawRequest.MultipartForm.Value[name]; ok && len(vals) > 0 {",
+  "        return Option_Some_new(vals[0])",
+  "      }",
+  "    }",
+  "  }",
+  "  if strings.Contains(r.rawHeaders.Get(\"Content-Type\"), \"application/x-www-form-urlencoded\") {",
+  "    vals, err := url.ParseQuery(string(r.body))",
+  "    if err == nil {",
+  "      if val := vals.Get(name); val != \"\" {",
+  "        return Option_Some_new(val)",
+  "      }",
+  "    }",
+  "  }",
+  "  return Option_None",
+  "}",
+  "",
+  "func (r Request) form_file(name string) Option {",
+  "  if r.rawRequest != nil {",
+  "    _ = r.rawRequest.ParseMultipartForm(32 << 20)",
+  "    if r.rawRequest.MultipartForm != nil && r.rawRequest.MultipartForm.File != nil {",
+  "      if files, ok := r.rawRequest.MultipartForm.File[name]; ok && len(files) > 0 {",
+  "        fh := files[0]",
+  "        f, err := fh.Open()",
+  "        if err == nil {",
+  "          defer f.Close()",
+  "          data, _ := io.ReadAll(f)",
+  "          ct := fh.Header.Get(\"Content-Type\")",
+  "          if ct == \"\" {",
+  "            ct = \"application/octet-stream\"",
+  "          }",
+  "          return Option_Some_new(UploadedFile{",
+  "            filename:     fh.Filename,",
+  "            content_type: ct,",
+  "            size:         int(fh.Size),",
+  "            content:      string(data),",
+  "          })",
+  "        }",
+  "      }",
+  "    }",
+  "  }",
+  "  return Option_None",
   "}",
   "",
   "// req.json() (sem argumentos): o tipo concreto vem do site de chamada, via o",
@@ -822,7 +1000,8 @@ const GO_BOILERPLATE = [
   '    json.NewEncoder(w).Encode(map[string]string{"error": "request body too large"})',
   "    return",
   "  }",
-  "  req := Request{params: map[string]string{}, queryParams: r.URL.Query(), rawHeaders: r.Header, body: body}",
+  "  r.Body = io.NopCloser(bytes.NewReader(body))",
+  "  req := Request{params: map[string]string{}, queryParams: r.URL.Query(), rawHeaders: r.Header, body: body, rawRequest: r}",
   '  res := &Response{raw: w, statusCode: 200, headers: map[string]string{}, isHead: r.Method == "HEAD"}',
   "",
   "  // CORS",
@@ -1117,6 +1296,20 @@ export const httpModule: NativeModule = {
           returns: { kind: "Enum", name: "Option", genericArgs: [{ kind: "Int" }] },
         },
         {
+          name: "form_value",
+          arity: 1,
+          returns: { kind: "Enum", name: "Option", genericArgs: [{ kind: "String" }] },
+        },
+        {
+          name: "form_file",
+          arity: 1,
+          returns: {
+            kind: "Enum",
+            name: "Option",
+            genericArgs: [{ kind: "Struct", name: "UploadedFile", genericArgs: [] }],
+          },
+        },
+        {
           name: "header",
           arity: 1,
           returns: { kind: "Enum", name: "Option", genericArgs: [{ kind: "String" }] },
@@ -1126,6 +1319,15 @@ export const httpModule: NativeModule = {
           arity: 0,
           returns: { kind: "HashMap", keyType: { kind: "String" }, valueType: { kind: "String" } },
         },
+      ],
+    },
+    {
+      name: "UploadedFile",
+      properties: [
+        { name: "filename", typeAnnotation: { kind: "NamedTypeNode", name: "String" } },
+        { name: "content_type", typeAnnotation: { kind: "NamedTypeNode", name: "String" } },
+        { name: "size", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
+        { name: "content", typeAnnotation: { kind: "NamedTypeNode", name: "String" } },
       ],
     },
     {
@@ -1222,6 +1424,16 @@ export const httpModule: NativeModule = {
         { name: "allow_methods", typeAnnotation: { kind: "ArrayTypeNode", elementType: { kind: "NamedTypeNode", name: "String" } } },
         { name: "allow_headers", typeAnnotation: { kind: "ArrayTypeNode", elementType: { kind: "NamedTypeNode", name: "String" } } },
         { name: "max_age", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
+      ],
+    },
+    UploadedFile: {
+      kind: "StructDeclaration",
+      name: "UploadedFile",
+      properties: [
+        { name: "filename", typeAnnotation: { kind: "NamedTypeNode", name: "String" } },
+        { name: "content_type", typeAnnotation: { kind: "NamedTypeNode", name: "String" } },
+        { name: "size", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
+        { name: "content", typeAnnotation: { kind: "NamedTypeNode", name: "String" } },
       ],
     },
     MultipartForm: {

@@ -65,12 +65,14 @@ const formatter = new FlexFormatter();
 // --- Documentação embutida da biblioteca padrão (Stdlib) ---
 const STDLIB_DOCS: Record<string, string> = {
   // net/http
-  "Server": "### `Server (net/http)`\nServidor HTTP nativo de alto desempenho da FlexLang com suporte a middlewares e rotas dinâmicas.\n\n```flexlang\nlet mut server = Server.new(\":3000\", config);\nserver.get(\"/users/:id\", |req, res| {\n    res.json(200, { id: req.params.get(\"id\") });\n});\nserver.start();\n```",
+  "Server": "### `Server (net/http)`\nServidor HTTP nativo de alto desempenho da FlexLang com suporte a middlewares, rotas dinâmicas e uploads de arquivos.\n\n```flexlang\nlet mut server = Server.new(\":3000\", config);\nserver.get(\"/users/:id\", |req, res| {\n    res.json({ id: req.param(\"id\") });\n});\nserver.start();\n```",
   "ServerConfig": "### `ServerConfig (net/http)`\nConfiguração de execução do servidor HTTP.\n- `read_timeout`: Tempo limite em milissegundos para leitura de requests.\n- `max_body_size`: Tamanho máximo do corpo da requisição em bytes.",
   "CorsConfig": "### `CorsConfig (net/http)`\nConfiguração de Cross-Origin Resource Sharing (CORS).\n- `allow_origins`: Lista de origens autorizadas\n- `allow_methods`: Lista de verbos HTTP autorizados\n- `allow_headers`: Cabeçalhos HTTP permitidos\n- `max_age`: Tempo de cache do Preflight em segundos",
-  "Request": "### `Request (net/http)`\nObjeto que encapsula a requisição HTTP recebida.\n- `method`: Método HTTP (`GET`, `POST`, etc.)\n- `path`: Caminho requisitado\n- `params`: Parâmetros de rota dinâmicos (`:id`)\n- `header(name)`: Lê um cabeçalho de forma case-insensitive\n- `json()`: Faz o parsing seguro do payload JSON",
-  "Response": "### `Response (net/http)`\nObjeto para construção e envio da resposta HTTP.\n- `json(status, data)`: Envia payload JSON com cabeçalho `application/json`\n- `error(status, message)`: Envia resposta de erro padronizada\n- `header(name, value)`: Define cabeçalho HTTP customizado",
-  "Client": "### `Client (net/http)`\nCliente HTTP nativo com suporte a pooling de conexões, timeouts e TLS.\n\n```flexlang\nlet client = Client.new(ClientConfig { timeout_ms: 5000 });\nlet res = client.get(\"https://api.exemplo.com/dados\", headers)?;\nlet body = res.json()?;\n```",
+  "Request": "### `Request (net/http)`\nObjeto que encapsula a requisição HTTP recebida no servidor.\n- `param(name)`: Lê parâmetro de rota dinâmico (`:id`)\n- `param_int(name)`: Lê parâmetro de rota como inteiro\n- `query(name)`: Lê parâmetro de query string\n- `query_int(name)`: Lê query parameter como inteiro\n- `header(name)`: Lê cabeçalho HTTP case-insensitive\n- `headers()`: Retorna mapa de todos os cabeçalhos\n- `form_value(name)`: Extrai campo de texto multipart/urlencoded (RFC-046)\n- `form_file(name)`: Extrai arquivo `UploadedFile` recebido via multipart (RFC-046)\n- `json()`: Faz parsing seguro do payload JSON",
+  "UploadedFile": "### `UploadedFile (net/http)`\nRepresenta um arquivo binário/texto recebido via `multipart/form-data` (RFC-046).\n- `filename`: Nome original do arquivo\n- `content_type`: Tipo MIME do arquivo\n- `size`: Tamanho em bytes\n- `content`: Conteúdo do arquivo",
+  "Response": "### `Response (net/http)`\nObjeto para construção e envio da resposta HTTP.\n- `status(code)`: Define código de status HTTP\n- `json(data)`: Envia payload JSON com cabeçalho `application/json`\n- `send_string(text)`: Envia texto plano\n- `error(status, message)`: Envia resposta de erro padronizada\n- `header(name, value)`: Define cabeçalho HTTP customizado",
+  "MultipartForm": "### `MultipartForm (net/http)`\nEstrutura para montagem e envio de formulários multipart e arquivos binários no cliente HTTP.",
+  "Client": "### `Client (net/http)`\nCliente HTTP nativo com suporte a pooling de conexões, timeouts e TLS.\n\n```flexlang\nlet client = Client.new(ClientConfig { timeout_ms: 5000 });\nlet res = client.get(\"https://api.exemplo.com/dados\")?;\nlet body = res.json()?;\n```",
 
   // db/postgres
   "Pool": "### `Pool (db/postgres)`\nPool gerenciado de conexões com PostgreSQL de alta concorrência.\n\n```flexlang\nlet db = Pool.new(config);\nlet users = db.query(\"SELECT * FROM users WHERE id = $1\", [id])?;\n```",
@@ -458,6 +460,8 @@ connection.onCompletion((params): CompletionItem[] => {
       { label: "Server", detail: "Servidor REST HTTP (net/http)", kind: CompletionItemKind.Class },
       { label: "Request", detail: "Requisição HTTP (net/http)", kind: CompletionItemKind.Class },
       { label: "Response", detail: "Resposta HTTP (net/http)", kind: CompletionItemKind.Class },
+      { label: "UploadedFile", detail: "Arquivo recebido via upload multipart (net/http)", kind: CompletionItemKind.Class },
+      { label: "MultipartForm", detail: "Formulário de upload multipart (net/http)", kind: CompletionItemKind.Class },
       { label: "Client", detail: "Cliente HTTP (net/http)", kind: CompletionItemKind.Class },
       { label: "Pool", detail: "Pool de conexões PostgreSQL (db/postgres)", kind: CompletionItemKind.Class },
       { label: "RedisClient", detail: "Cliente de armazenamento Redis (storage/redis)", kind: CompletionItemKind.Class },

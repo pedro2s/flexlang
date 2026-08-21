@@ -172,10 +172,29 @@
     "body": [
       "server.${1|get,post,put,patch,delete|}(\"${2:/path}\", |req, res| {",
       "\t$0",
-      "\tres.json(200, { success: true });",
+      "\tres.json({ success: true });",
       "});"
     ],
     "description": "Registra uma rota HTTP em um servidor"
+  },
+  "HTTP Multipart Upload Handler": {
+    "prefix": "http-upload",
+    "body": [
+      "server.post(\"${1:/api/upload}\", |req, res| {",
+      "\tlet user_id = req.form_value(\"user_id\");",
+      "\tmatch req.form_file(\"${2:document}\") {",
+      "\t\tOption.Some(file) {",
+      "\t\t\tprint(\"Recebido: \\${file.filename} (\\${file.size} bytes)\");",
+      "\t\t\t$0",
+      "\t\t\tres.json({ status: \"ok\", filename: file.filename, bytes: file.size });",
+      "\t\t}",
+      "\t\tOption.None {",
+      "\t\t\tres.status(400).json({ error: \"Arquivo obrigatorio\" });",
+      "\t\t}",
+      "\t}",
+      "});"
+    ],
+    "description": "Registra uma rota de upload multipart/form-data no servidor (RFC-046)"
   },
   "HTTP Client Request": {
     "prefix": "http-client",

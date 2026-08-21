@@ -208,7 +208,7 @@
         },
         {
           "name": "support.class.stdlib.flex",
-          "match": "\\b(Server|ServerConfig|CorsConfig|Request|Response|Client|ClientResponse|PathParams|Pool|PoolConfig|QueryResult|Transaction|Redis|RedisConfig|RedisClient|RedisLock|Validator|ValidationRule|ValidationError|CircuitBreaker|CircuitBreakerConfig|Retry|RetryConfig|RateLimiter|RateLimiterConfig|Counter|Gauge|Histogram|Tracer|Span|Telemetry|Producer|Consumer|ProducerConfig|ConsumerConfig|Message|IdempotencyEngine|IdempotencyConfig|IdempotencyRecord|IdempotencyStatus|Regex|Scheduler|Job|JobConfig|Cron|Time|Duration)\\b"
+          "match": "\\b(Server|ServerConfig|CorsConfig|Request|Response|UploadedFile|Client|ClientResponse|MultipartForm|PathParams|Pool|PoolConfig|QueryResult|Transaction|Redis|RedisConfig|RedisClient|RedisLock|Validator|ValidationRule|ValidationError|CircuitBreaker|CircuitBreakerConfig|Retry|RetryConfig|RateLimiter|RateLimiterConfig|Counter|Gauge|Histogram|Tracer|Span|Telemetry|Producer|Consumer|ProducerConfig|ConsumerConfig|Message|IdempotencyEngine|IdempotencyConfig|IdempotencyRecord|IdempotencyStatus|Regex|Scheduler|Job|JobConfig|Cron|Time|Duration)\\b"
         },
         {
           "name": "entity.name.type.flex",
