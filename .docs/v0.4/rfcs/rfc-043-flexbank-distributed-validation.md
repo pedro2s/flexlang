@@ -1,6 +1,6 @@
 # RFC-043 — Projeto de Homologação "FlexBank Distributed Ecosystem"
 
-> **Status:** Proposto · **Prioridade:** P1 · **Depende de:** Todas as RFCs 031 a 042
+> **Status:** IMPLEMENTADO · **Prioridade:** P1 · **Depende de:** Todas as RFCs 031 a 042
 
 ---
 

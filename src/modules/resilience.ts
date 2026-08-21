@@ -417,7 +417,7 @@ func (rp *RetryPolicy) run(fn func() Result) Result {
 				delay = float64(maxD)
 			}
 			if rp.config != nil && rp.config.use_jitter {
-				delay = delay * (0.5 + rand.Float64()*0.5)
+				delay = delay * (0.5 + float64(time.Now().UnixNano()%500)/1000.0)
 			}
 			time.Sleep(time.Duration(delay))
 		}
@@ -439,8 +439,8 @@ type RateLimiter struct {
 }
 
 func RateLimiter_new(config *RateLimiterConfig) *RateLimiter {
-	rate := 1.0
-	burst := 1.0
+	rate := 100.0
+	burst := 100.0
 	if config != nil {
 		rate = float64(config.rate_per_second)
 		burst = float64(config.burst_capacity)
@@ -454,6 +454,10 @@ func RateLimiter_new(config *RateLimiterConfig) *RateLimiter {
 }
 
 func NewRateLimiter(config *RateLimiterConfig) *RateLimiter {
+	return RateLimiter_new(config)
+}
+
+func rate_limiter_new(config *RateLimiterConfig) *RateLimiter {
 	return RateLimiter_new(config)
 }
 
@@ -471,12 +475,16 @@ func (rl *RateLimiter) allow() bool {
 	return false
 }
 
-func (rl *RateLimiter) tokens() float64 {
+func (rl *RateLimiter) remaining_tokens() float64 {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 	now := time.Now()
 	elapsed := now.Sub(rl.lastRefillTime).Seconds()
 	return math.Min(rl.burstCapacity, rl.tokensVal+elapsed*rl.ratePerSecond)
+}
+
+func (rl *RateLimiter) tokens() float64 {
+	return rl.remaining_tokens()
 }
 
 func (rl *RateLimiter) reset() {
@@ -485,7 +493,7 @@ func (rl *RateLimiter) reset() {
 	rl.tokensVal = rl.burstCapacity
 	rl.lastRefillTime = time.Now()
 }
-// ---------------------------------------------`;
+// ------------------------------------------`;
 
 export const resilienceModule: NativeModule = {
   path: "core/resilience",
@@ -542,6 +550,21 @@ export const resilienceModule: NativeModule = {
           returns: { kind: "String" },
         },
         {
+          name: "is_open",
+          arity: 0,
+          returns: { kind: "Bool" },
+        },
+        {
+          name: "is_closed",
+          arity: 0,
+          returns: { kind: "Bool" },
+        },
+        {
+          name: "is_half_open",
+          arity: 0,
+          returns: { kind: "Bool" },
+        },
+        {
           name: "reset",
           arity: 0,
           returns: { kind: "Void" },
@@ -560,6 +583,16 @@ export const resilienceModule: NativeModule = {
       ],
     },
     {
+      name: "RetryPolicyConfig",
+      properties: [
+        { name: "max_attempts", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
+        { name: "initial_delay", typeAnnotation: { kind: "NamedTypeNode", name: "Duration" } },
+        { name: "max_delay", typeAnnotation: { kind: "NamedTypeNode", name: "Duration" } },
+        { name: "backoff_multiplier", typeAnnotation: { kind: "NamedTypeNode", name: "Float" } },
+        { name: "use_jitter", typeAnnotation: { kind: "NamedTypeNode", name: "Bool" } },
+      ],
+    },
+    {
       name: "RetryPolicy",
       statics: [
         {
@@ -569,6 +602,15 @@ export const resilienceModule: NativeModule = {
         },
       ],
       methods: [
+        {
+          name: "execute",
+          arity: 1,
+          returns: {
+            kind: "Enum",
+            name: "Result",
+            genericArgs: [{ kind: "Any" }, { kind: "String" }],
+          },
+        },
         {
           name: "run",
           arity: 1,
@@ -598,71 +640,123 @@ export const resilienceModule: NativeModule = {
         },
       ],
       methods: [
-        { name: "allow", arity: 0, returns: { kind: "Bool" } },
-        { name: "tokens", arity: 0, returns: { kind: "Float" } },
-        { name: "reset", arity: 0, returns: { kind: "Void" } },
+        {
+          name: "allow",
+          arity: 0,
+          returns: { kind: "Bool" },
+        },
+        {
+          name: "remaining_tokens",
+          arity: 0,
+          returns: { kind: "Float" },
+        },
+        {
+          name: "tokens",
+          arity: 0,
+          returns: { kind: "Float" },
+        },
+        {
+          name: "reset",
+          arity: 0,
+          returns: { kind: "Void" },
+        },
       ],
       goPointer: true,
+    },
+    {
+      name: "resilience",
+      statics: [
+        {
+          name: "circuit_breaker",
+          arity: 2,
+          returns: { kind: "Struct", name: "CircuitBreaker", genericArgs: [] },
+        },
+        {
+          name: "retry",
+          arity: 1,
+          returns: { kind: "Struct", name: "RetryPolicy", genericArgs: [] },
+        },
+        {
+          name: "rate_limiter",
+          arity: 1,
+          returns: { kind: "Struct", name: "RateLimiter", genericArgs: [] },
+        },
+      ],
     },
   ],
 
   usesBuiltins: ["Result", "Option"],
 
-  runtimeBinding: (interpreter: Interpreter) => ({
-    CircuitState: {
-      kind: "EnumDeclaration",
-      name: "CircuitState",
-      variants: [
-        { name: "Closed", payload: [] },
-        { name: "Open", payload: [] },
-        { name: "HalfOpen", payload: [] },
-      ],
-    },
-    CircuitBreakerConfig: {
-      kind: "StructDeclaration",
-      name: "CircuitBreakerConfig",
-      properties: [
-        { name: "failure_threshold", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
-        { name: "success_threshold", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
-        { name: "timeout", typeAnnotation: { kind: "NamedTypeNode", name: "Duration" } },
-        { name: "half_open_max_requests", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
-      ],
-    },
-    CircuitBreaker: {
-      [NATIVE_TAG]: "CircuitBreaker",
-      new: (name: string, config: any) => new FlexCircuitBreaker(name, config, interpreter),
-    },
-    RetryConfig: {
-      kind: "StructDeclaration",
-      name: "RetryConfig",
-      properties: [
-        { name: "max_attempts", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
-        { name: "initial_delay", typeAnnotation: { kind: "NamedTypeNode", name: "Duration" } },
-        { name: "max_delay", typeAnnotation: { kind: "NamedTypeNode", name: "Duration" } },
-        { name: "backoff_multiplier", typeAnnotation: { kind: "NamedTypeNode", name: "Float" } },
-        { name: "use_jitter", typeAnnotation: { kind: "NamedTypeNode", name: "Bool" } },
-      ],
-    },
-    RetryPolicy: {
-      [NATIVE_TAG]: "RetryPolicy",
-      new: (config: any) => new FlexRetryPolicy(config, interpreter),
-    },
-    RateLimiterConfig: {
-      kind: "StructDeclaration",
-      name: "RateLimiterConfig",
-      properties: [
-        { name: "rate_per_second", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
-        { name: "burst_capacity", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
-      ],
-    },
-    RateLimiter: {
-      [NATIVE_TAG]: "RateLimiter",
-      new: (config: any) => new FlexRateLimiter(config),
-    },
-  }),
+  runtimeBinding: (interpreter: Interpreter) => {
+    return {
+      CircuitState: {
+        Closed: "Closed",
+        Open: "Open",
+        HalfOpen: "HalfOpen",
+      },
+      CircuitBreakerConfig: {
+        kind: "StructDeclaration",
+        name: "CircuitBreakerConfig",
+        properties: [
+          { name: "failure_threshold", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
+          { name: "success_threshold", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
+          { name: "timeout", typeAnnotation: { kind: "NamedTypeNode", name: "Duration" } },
+          { name: "half_open_max_requests", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
+        ],
+      },
+      CircuitBreaker: {
+        [NATIVE_TAG]: "CircuitBreaker",
+        new: (name: string, config: any) => new FlexCircuitBreaker(name, config, interpreter),
+      },
+      RetryConfig: {
+        kind: "StructDeclaration",
+        name: "RetryConfig",
+        properties: [
+          { name: "max_attempts", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
+          { name: "initial_delay", typeAnnotation: { kind: "NamedTypeNode", name: "Duration" } },
+          { name: "max_delay", typeAnnotation: { kind: "NamedTypeNode", name: "Duration" } },
+          { name: "backoff_multiplier", typeAnnotation: { kind: "NamedTypeNode", name: "Float" } },
+          { name: "use_jitter", typeAnnotation: { kind: "NamedTypeNode", name: "Bool" } },
+        ],
+      },
+      RetryPolicyConfig: {
+        kind: "StructDeclaration",
+        name: "RetryPolicyConfig",
+        properties: [
+          { name: "max_attempts", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
+          { name: "initial_delay", typeAnnotation: { kind: "NamedTypeNode", name: "Duration" } },
+          { name: "max_delay", typeAnnotation: { kind: "NamedTypeNode", name: "Duration" } },
+          { name: "backoff_multiplier", typeAnnotation: { kind: "NamedTypeNode", name: "Float" } },
+          { name: "use_jitter", typeAnnotation: { kind: "NamedTypeNode", name: "Bool" } },
+        ],
+      },
+      RetryPolicy: {
+        [NATIVE_TAG]: "RetryPolicy",
+        new: (config: any) => new FlexRetryPolicy(config, interpreter),
+      },
+      RateLimiterConfig: {
+        kind: "StructDeclaration",
+        name: "RateLimiterConfig",
+        properties: [
+          { name: "rate_per_second", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
+          { name: "burst_capacity", typeAnnotation: { kind: "NamedTypeNode", name: "Int" } },
+        ],
+      },
+      RateLimiter: {
+        [NATIVE_TAG]: "RateLimiter",
+        new: (config: any) => new FlexRateLimiter(config),
+      },
+      resilience: {
+        [NATIVE_TAG]: "resilience",
+        circuit_breaker: (name: string, config: any) => new FlexCircuitBreaker(name, config, interpreter),
+        retry: (config: any) => new FlexRetryPolicy(config, interpreter),
+        rate_limiter: (config: any) => new FlexRateLimiter(config),
+      },
+    };
+  },
 
   goCodegen: {
-    imports: ["math", "math/rand", "sync", "time"],
+    imports: ["math", "sync", "time"],
     boilerplate: GO_BOILERPLATE,
   },
 };

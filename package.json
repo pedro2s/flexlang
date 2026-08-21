@@ -37,6 +37,7 @@
     "test:watch": "npx tsx tests/watch_integration.ts",
     "test:vscode": "npx tsx editors/vscode/tests/syntax.test.ts",
     "test:flexbank": "npx tsx tests/flexbank_integration.ts",
+    "test:flexbank-distributed": "npx tsx tests/flexbank_distributed_integration.ts",
     "docs:dev": "npm --prefix reference run dev",
     "docs:build": "npm --prefix reference run build"
   },
