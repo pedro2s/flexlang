@@ -1,6 +1,6 @@
 # RFC-039 — Módulo de Telemetria, Métricas Prometheus e Tracing W3C (`core/telemetry`)
 
-> **Status:** Proposto · **Prioridade:** P1 · **Depende de:** RFC-008 (`core/log`), RFC-027 (`core/time`)
+> **Status:** IMPLEMENTADO · **Prioridade:** P1 · **Depende de:** RFC-008 (`core/log`), RFC-027 (`core/time`)
 
 ---
 

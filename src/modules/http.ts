@@ -101,6 +101,16 @@ class FlexRequest {
     return optionSome(String(raw));
   }
 
+  headers(): Map<string, string> {
+    const map = new Map<string, string>();
+    for (const [k, v] of Object.entries(this.rawHeaders)) {
+      if (v !== undefined) {
+        map.set(k.toLowerCase(), Array.isArray(v) ? v.join(", ") : String(v));
+      }
+    }
+    return map;
+  }
+
   query(name: string) {
     const v = this.queryParams.get(name);
     return v === null ? optionNone() : optionSome(v);
@@ -154,6 +164,22 @@ class FlexResponse {
 
   json(data: unknown): null {
     this.write(this.statusCode, data);
+    return null;
+  }
+
+  send_string(data: string): null {
+    if (this.written) return null;
+    this.written = true;
+    const defaultHeaders: Record<string, string> = {
+      "Content-Type": "text/plain; charset=utf-8",
+      ...this.responseHeaders,
+    };
+    this.raw.writeHead(this.statusCode, defaultHeaders);
+    if (this.isHead) {
+      this.raw.end();
+    } else {
+      this.raw.end(String(data));
+    }
     return null;
   }
 
@@ -565,36 +591,46 @@ const GO_BOILERPLATE = [
   "type Request struct {",
   "  params      map[string]string",
   "  queryParams url.Values",
-  "  headers     http.Header",
+  "  rawHeaders  http.Header",
   "  body        []byte",
   "}",
   "",
   "func (r Request) param(name string) string { return r.params[name] }",
   "",
   "func (r Request) header(name string) Option {",
-  "  v := r.headers.Get(name)",
-  '  if v == "" {',
-  "    for k, vals := range r.headers {",
+  "  v := r.rawHeaders.Get(name)",
+  "  if v == \"\" {",
+  "    for k, vals := range r.rawHeaders {",
   "      if strings.EqualFold(k, name) && len(vals) > 0 {",
   "        v = vals[0]",
   "        break",
   "      }",
   "    }",
-  '    if v == "" {',
+  "    if v == \"\" {",
   "      return Option_None",
   "    }",
   "  }",
   "  return Option_Some_new(v)",
   "}",
   "",
+  "func (r Request) headers() map[string]any {",
+  "  res := make(map[string]any)",
+  "  for k, vals := range r.rawHeaders {",
+  "    if len(vals) > 0 {",
+  "      res[strings.ToLower(k)] = strings.Join(vals, \", \")",
+  "    }",
+  "  }",
+  "  return res",
+  "}",
+  "",
   "func (r Request) param_int(name string) Result {",
   "  raw, present := r.params[name]",
   "  if !present {",
-  '    return Result_Err_new("missing path parameter \'" + name + "\'")',
+  "    return Result_Err_new(\"missing path parameter '\" + name + \"'\")",
   "  }",
   "  n, err := strconv.Atoi(raw)",
   "  if err != nil {",
-  '    return Result_Err_new("path parameter \'" + name + "\' is not an Int")',
+  "    return Result_Err_new(\"path parameter '\" + name + \"' is not an Int\")",
   "  }",
   "  return Result_Ok_new(n)",
   "}",
@@ -615,12 +651,12 @@ const GO_BOILERPLATE = [
   "// tipo que o TypeChecker resolveu (RFC-004) — o transpiler emite DecodeJSON[T]",
   "// em vez de um método, porque Go nao tem metodos genericos.",
   "func DecodeJSON[T any](req Request) Result {",
-  '  if strings.TrimSpace(string(req.body)) == "" {',
-  '    return Result_Err_new("empty request body")',
+  "  if strings.TrimSpace(string(req.body)) == \"\" {",
+  "    return Result_Err_new(\"empty request body\")",
   "  }",
   "  var target T",
   "  if err := json.Unmarshal(req.body, &target); err != nil {",
-  '    return Result_Err_new("invalid JSON body")',
+  "    return Result_Err_new(\"invalid JSON body\")",
   "  }",
   "  return Result_Ok_new(target)",
   "}",
@@ -644,8 +680,23 @@ const GO_BOILERPLATE = [
   "",
   "func (r *Response) json(data any) { r.write(r.statusCode, data) }",
   "",
+  "func (r *Response) send_string(data string) {",
+  "  if r.written { return }",
+  "  r.written = true",
+  "  if r.headers == nil || r.headers[\"Content-Type\"] == \"\" {",
+  "    r.raw.Header().Set(\"Content-Type\", \"text/plain; charset=utf-8\")",
+  "  }",
+  "  for k, v := range r.headers {",
+  "    r.raw.Header().Set(k, v)",
+  "  }",
+  "  r.raw.WriteHeader(r.statusCode)",
+  "  if !r.isHead {",
+  "    r.raw.Write([]byte(data))",
+  "  }",
+  "}",
+  "",
   "func (r *Response) error(status int, message string) {",
-  '  r.write(status, map[string]string{"error": message})',
+  "  r.write(status, map[string]string{\"error\": message})",
   "}",
   "",
   "func (r *Response) write(status int, data any) {",
@@ -771,7 +822,7 @@ const GO_BOILERPLATE = [
   '    json.NewEncoder(w).Encode(map[string]string{"error": "request body too large"})',
   "    return",
   "  }",
-  "  req := Request{params: map[string]string{}, queryParams: r.URL.Query(), headers: r.Header, body: body}",
+  "  req := Request{params: map[string]string{}, queryParams: r.URL.Query(), rawHeaders: r.Header, body: body}",
   '  res := &Response{raw: w, statusCode: 200, headers: map[string]string{}, isHead: r.Method == "HEAD"}',
   "",
   "  // CORS",
@@ -1070,6 +1121,11 @@ export const httpModule: NativeModule = {
           arity: 1,
           returns: { kind: "Enum", name: "Option", genericArgs: [{ kind: "String" }] },
         },
+        {
+          name: "headers",
+          arity: 0,
+          returns: { kind: "HashMap", keyType: { kind: "String" }, valueType: { kind: "String" } },
+        },
       ],
     },
     {
@@ -1079,6 +1135,7 @@ export const httpModule: NativeModule = {
         { name: "status", arity: 1, returns: { kind: "Struct", name: "Response", genericArgs: [] } },
         { name: "header", arity: 2, returns: { kind: "Struct", name: "Response", genericArgs: [] } },
         { name: "json", arity: 1, returns: { kind: "Void" } },
+        { name: "send_string", arity: 1, returns: { kind: "Void" } },
         { name: "error", arity: 2, returns: { kind: "Void" } },
       ],
     },
